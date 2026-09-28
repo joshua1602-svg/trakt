@@ -363,7 +363,11 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
     region = forecast_dimension_breakdown(funded_df, pipeline_df, "geographic_region_obligor")
     ltv = forecast_dimension_breakdown(funded_df, pipeline_df, "ltv_bucket")
     # Completion-month: pipeline contributes weighted by month; funded is "now".
-    month = _dim_sum(pipeline_df, "expected_completion_month", "weighted_expected_funded_amount")
+    # Only cases carrying forecast weight have an expected completion month —
+    # settled, lapsed and not-forecast cases would show as £0 months.
+    from .pipeline_contract import forecast_rows
+    month = _dim_sum(forecast_rows(pipeline_df), "expected_completion_month",
+                     "weighted_expected_funded_amount")
     by_month = [{"month": k, "weightedExpectedFundedAmount": round(v, 2)}
                 for k, v in sorted(month.items())]
     # Re-cap region/ltv to top 10 for the visual, keyed on forecastAmount.

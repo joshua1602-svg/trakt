@@ -80,7 +80,15 @@
     client_name: ERM Capital Mgt
     jurisdiction: GB
     asset_class: equity_release
-    products: [esma_annex2]
+    # The sentence names TWO products, and both are kept. This expectation
+    # read [esma_annex2] until a multi-valued field mentioned twice stopped
+    # overwriting itself: "MI" was read first and then silently discarded by
+    # "Annex 2". Nothing about the sentence changed — only whether the first
+    # of the two survived it. MI is `always_applies` (derived for every
+    # delivery, see config/regime/onboarding_standing_fields.yaml), so its
+    # presence here changes no outcome; its ABSENCE was the interpreter
+    # dropping a value the operator typed.
+    products: [mi, esma_annex2]
     streams: [pipeline]
     cadence: monthly
     stream_cadence: {pipeline: weekly}

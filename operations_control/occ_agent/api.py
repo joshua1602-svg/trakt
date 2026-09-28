@@ -31,7 +31,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from apps.blob_trigger_app.path_parser import PathParseError, canonical_period
+
 from ..api.auth import Principal, authenticate
+from ..contracts import BATCH_DATASETS
 from ..engine import OpsError
 from . import adapters as _adapters
 from . import fixtures as _fixtures
@@ -108,6 +111,13 @@ class CreateCase(BaseModel):
     #: switched on — a case that turns out to be real by accident is the thing
     #: the whole isolation boundary exists to prevent.
     live: bool = False
+    #: Amend this client's active configuration instead of onboarding a new
+    #: one. The case opens pre-populated from the version in force, and the
+    #: version it started from is recorded on it. This is how a reporting
+    #: product is added after a client is live: the source registry is
+    #: rewritten at re-activation, which editing a live case in conversation
+    #: never reaches.
+    amend_client: str = ""
 
 
 class Instruct(BaseModel):
@@ -145,6 +155,68 @@ class DecisionAnswer(BaseModel):
     tenant: Optional[str] = None
 
 
+class MappingApproval(BaseModel):
+    """One act over everything staged, plus every untouched proposal."""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
+class MappingStage(BaseModel):
+    """What the operator says one column is. A draft, not an act.
+
+    ``action`` is one of ``confirm`` (what Trakt read it as is right),
+    ``amend`` (it is ``target_field`` instead), ``not_used`` (it feeds
+    nothing) or ``clear`` (take the staged answer back). Nothing is resolved,
+    promoted or rerun until the set is confirmed.
+    """
+    source_file: str
+    source_column: str
+    action: str
+    target_field: str = ""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
+class SourceUnitBody(BaseModel):
+    """Which scale the lender writes a percentage field on.
+
+    ``unit`` is ``percentage_points``, ``fraction``, or empty to withdraw the
+    declaration and let Trakt reconcile the scale again.
+    """
+
+    field: str
+    unit: str = ""
+    tenant: Optional[str] = None
+    reason: str = ""
+
+
+class UnmappedColumn(BaseModel):
+    """What to do about a column nothing in the registry resembled.
+
+    ``action`` is one of:
+
+    ``use_existing``
+        The operator names the canonical field the column feeds. Staged, not
+        applied. ``target_field`` is required and must be a field this book
+        reports on.
+    ``request_field``
+        The operator asks for a canonical field the platform does not have.
+        ``field_name`` is required; the column stays unmapped.
+    ``withdraw_request``
+        Take back an ask made in error.
+    """
+    source_file: str
+    source_column: str
+    action: str = "use_existing"
+    target_field: str = ""
+    field_name: str = ""
+    label: str = ""
+    description: str = ""
+    data_type: str = ""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
 class RunTarget(BaseModel):
     """Which delivery a practice run is for.
 
@@ -154,6 +226,34 @@ class RunTarget(BaseModel):
     portfolio_id: str = ""
     dataset: str = ""
     reporting_period: str = ""
+    tenant: Optional[str] = None
+
+
+class ConcentrationOutcome(BaseModel):
+    """The operator's decision on the concentration-test request.
+
+    One call for the whole decision — the status, the client's response and the
+    reason — because they are one decision. Splitting them across the
+    conversation and the client form is what made an operator set a status in
+    one place and paste the limits in another, with nothing checking that the
+    two agreed.
+    """
+
+    status: str
+    response_text: str = ""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
+class RemoveArtefact(BaseModel):
+    """One file to take back out of the case's pack, by its own identifier.
+
+    Keyed on ``artefact_id`` rather than the filename deliberately: a filename
+    is not unique in this list — the same name uploaded twice appends twice —
+    and removing "the one called X" would be ambiguous exactly when it matters.
+    """
+
+    artefact_id: str
     tenant: Optional[str] = None
 
 
@@ -269,7 +369,8 @@ def create_case(body: CreateCase,
                                initiating_user=principal.name,
                                instruction=body.instruction,
                                fixture_id=body.fixture_id,
-                               live=body.live)
+                               live=body.live,
+                               amend_client=body.amend_client)
     return {"ok": True, **service.status(case)}
 
 
@@ -436,20 +537,31 @@ def request_changes(case_ref: str, body: TenantBody,
 @router.post("/cases/{case_ref}/target")
 def set_run_target(case_ref: str, body: RunTarget,
                    principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
-    """Name which delivery this practice run is for."""
+    """Name which delivery this practice run is for.
+
+    Both values are checked here rather than taken as typed. Until now nothing
+    reached this endpoint from a screen, so whatever a caller sent was stored
+    verbatim; a period is a path segment and part of the pack key, and
+    "April 2026" written into one is not a validation failure anybody sees — it
+    is a folder with that name.
+    """
     _require_feature()
     service = get_service()
     agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
-    run = agent_case.run
-    if body.portfolio_id:
-        run.portfolio_id = body.portfolio_id
-    if body.dataset:
-        run.dataset = body.dataset
-    if body.reporting_period:
-        run.reporting_period = body.reporting_period
-    run.facts = service.facts(agent_case).to_dict()
-    service.store.save(run)
-    return {"ok": True, **service.status(agent_case)}
+    if body.dataset and body.dataset not in BATCH_DATASETS:
+        raise OpsError(
+            "OCC_AGENT_BAD_DATASET",
+            f"{body.dataset!r} is not a book Trakt reports on "
+            f"({', '.join(BATCH_DATASETS)}).", 400)
+    try:
+        period = canonical_period(body.reporting_period)
+    except PathParseError as exc:
+        raise OpsError("OCC_AGENT_BAD_PERIOD", str(exc), 400) from exc
+    return {"ok": True,
+            **service.status(service.set_run_target(
+                agent_case, actor=principal.name,
+                portfolio_id=body.portfolio_id, dataset=body.dataset,
+                reporting_period=period))}
 
 
 @router.post("/cases/{case_ref}/artefacts")
@@ -475,6 +587,27 @@ async def upload_artefacts(case_ref: str,
     return {"ok": True,
             **service.status(service.classify_artefacts(
                 agent_case, actor=principal.name))}
+
+
+@router.post("/cases/{case_ref}/artefacts/remove")
+def remove_artefact(case_ref: str, body: RemoveArtefact,
+                    principal: Principal = Depends(authenticate)
+                    ) -> Dict[str, Any]:
+    """Take one uploaded file back out of the pack.
+
+    The counterpart to ``POST /artefacts``, which had none: the pack could be
+    added to and never corrected. What is removed is the case's RECORD of the
+    file — which is what the activation intent, the payloads and readiness are
+    all built from. The bytes stay in this case's sandbox; see
+    ``OccAgentService.remove_synthetic_artefact``.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.remove_synthetic_artefact(
+                agent_case, artefact_id=body.artefact_id,
+                actor=principal.name))}
 
 
 @router.post("/cases/{case_ref}/artefacts/fixture")
@@ -549,6 +682,121 @@ def answer_decision(case_ref: str, body: DecisionAnswer,
             **service.status(service.resolve_decision(
                 agent_case, decision_id=body.decision_id, action=body.action,
                 value=body.value, reason=body.reason, actor=principal.name))}
+
+
+@router.post("/cases/{case_ref}/mappings/stage")
+def stage_mapping(case_ref: str, body: MappingStage,
+                  principal: Principal = Depends(authenticate)
+                  ) -> Dict[str, Any]:
+    """Record what this operator says one column is, without applying it.
+
+    Reading the table is the work and it is not done in one sitting. A staged
+    answer survives a refresh, can be replaced or withdrawn, and resolves
+    nothing until ``/mappings/approve`` commits the set.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.stage_mapping(
+                agent_case, source_file=body.source_file,
+                source_column=body.source_column, action=body.action,
+                target_field=body.target_field, actor=principal.name,
+                reason=body.reason))}
+
+
+@router.post("/cases/{case_ref}/mappings/approve")
+def approve_mappings(case_ref: str, body: MappingApproval,
+                     principal: Principal = Depends(authenticate)
+                     ) -> Dict[str, Any]:
+    """Commit the mapping table: everything staged, plus every proposal left
+    as Trakt read it.
+
+    One act for the operator; one resolved decision per column on the record,
+    because that is what promotion turns into governed rules and what an
+    auditor reads back. Refused while a genuine question has no answer.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.confirm_mappings(
+                agent_case, actor=principal.name, reason=body.reason))}
+
+
+@router.get("/cases/{case_ref}/field-registry")
+def field_registry(case_ref: str, tenant: Optional[str] = None,
+                   principal: Principal = Depends(authenticate)
+                   ) -> Dict[str, Any]:
+    """Every canonical field this book may map an unmapped column to.
+
+    The mapper's own selection, so a field an operator can pick on the screen
+    is a field the run will accept.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, tenant), case_ref)
+    return {"ok": True, "fields": service.field_catalogue(agent_case)}
+
+
+@router.post("/cases/{case_ref}/mappings/unmapped")
+def resolve_unmapped_column(case_ref: str, body: UnmappedColumn,
+                            principal: Principal = Depends(authenticate)
+                            ) -> Dict[str, Any]:
+    """Give a column that matched nothing somewhere to go.
+
+    Either it feeds a field Trakt already has — an alias, STAGED like every
+    other answer on the mapping table and applied when the set is confirmed —
+    or it needs a field Trakt does not have, which is a versioned change to the
+    platform's canonical vocabulary and is recorded as a request rather than
+    made here.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    action = (body.action or "use_existing").strip()
+    if action == "use_existing":
+        updated = service.map_unmapped_column(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, target_field=body.target_field,
+            actor=principal.name, reason=body.reason)
+    elif action == "request_field":
+        updated = service.request_registry_field(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, field_name=body.field_name,
+            label=body.label, description=body.description,
+            data_type=body.data_type, actor=principal.name,
+            reason=body.reason)
+    elif action == "withdraw_request":
+        updated = service.withdraw_registry_field_request(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, actor=principal.name,
+            reason=body.reason)
+    else:
+        raise OpsError("OCC_AGENT_UNKNOWN_MAPPING_ACTION",
+                       "That is not something Trakt can do with an unmapped "
+                       "column.", http_status=400)
+    return {"ok": True, **service.status(updated)}
+
+
+@router.post("/cases/{case_ref}/mappings/source-unit")
+def declare_source_unit(case_ref: str, body: SourceUnitBody,
+                        principal: Principal = Depends(authenticate)
+                        ) -> Dict[str, Any]:
+    """Say whether the lender writes a percentage as points or as a fraction.
+
+    THE REMEDY A BLOCKER HAD NO ROUTE TO. A lender stating loan-to-value as
+    0.35 where the platform means 35 fails every consistency check on the
+    field, and nothing on that screen let an operator say which was meant.
+    Trakt reconciles the two where there is a balance and a valuation to
+    reconcile against; this is the answer where there is not.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    updated = service.declare_source_unit(
+        agent_case, field=body.field, unit=body.unit, actor=principal.name)
+    return {"ok": True, **service.status(updated)}
 
 
 @router.post("/cases/{case_ref}/plan")
@@ -763,6 +1011,27 @@ def submit_client_form(case_ref: str, body: ClientResponse,
                 request_id=body.request_id, strict=body.strict))}
 
 
+@router.post("/cases/{case_ref}/concentration")
+def record_concentration(case_ref: str, body: ConcentrationOutcome,
+                         principal: Principal = Depends(authenticate)
+                         ) -> Dict[str, Any]:
+    """Record the operator's decision on the concentration-test request.
+
+    ``OccAgentService.record_concentration_outcome`` has existed, with its own
+    controls — a blank answer can never be recorded as supplied, and only the
+    four declared statuses are accepted — and nothing reached it. The status
+    was set through the conversation and the limits pasted into the client
+    form, two acts with nothing tying them together.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.record_concentration_outcome(
+                agent_case, actor=principal.name, status=body.status,
+                response_text=body.response_text, reason=body.reason))}
+
+
 @router.get("/cases/{case_ref}/classification")
 def get_classification(case_ref: str, tenant: Optional[str] = None,
                        principal: Principal = Depends(authenticate)
@@ -839,6 +1108,19 @@ def confirm_activation(case_ref: str, body: ConfirmActivation,
             **service.status(service.confirm_activation(
                 agent_case, actor=principal.name,
                 confirmation=body.confirmation))}
+
+
+@router.post("/cases/{case_ref}/mappings/carry-forward")
+def carry_mappings_forward(case_ref: str, body: TenantBody,
+                           principal: Principal = Depends(authenticate)
+                           ) -> Dict[str, Any]:
+    """Write an activated case's settled mappings — set-asides included —
+    into the governed rules again. See ``carry_mappings_forward``."""
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    written = service.carry_mappings_forward(agent_case, actor=principal.name)
+    return {"ok": True, "rules": written}
 
 
 @router.post("/cases/{case_ref}/cancel")

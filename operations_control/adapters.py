@@ -299,8 +299,16 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
                        "confidence": advisory.get("confidence"),
                        "checked": True}
             elif d.get("recommended_action"):
-                rec = {"source": "deterministic",
-                       "value": str(d.get("recommended_action")), "checked": True}
+                # A decision that says on its own face where its proposal came
+                # from is believed. The OCC Agent raises one for a column its
+                # deterministic tiers could not place, carrying a model's
+                # suggestion and ``basis: llm_suggestion``; labelling that
+                # "deterministic" would tell an operator a model's guess was a
+                # contract-backed match, which is the one thing the human
+                # confirmation step exists to prevent.
+                rec = {"source": str(d.get("basis") or "deterministic"),
+                       "value": str(d.get("recommended_action")),
+                       "confidence": d.get("confidence"), "checked": True}
             friendly = _friendly(target)
             if dtype == "missing_required_target":
                 title = f"The report needs '{friendly}'"
@@ -309,18 +317,40 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
             else:
                 title = (f"Decide how to treat '{friendly}'" if target
                          else "A data decision needs your confirmation")
-                question = (f"The field '{friendly}' could not be filled "
-                            "automatically. How should Trakt treat it?"
-                            if target else
-                            "Trakt needs your decision on how to treat part "
-                            "of this data.")
+                # SAY WHICH COLUMN OF WHICH FILE, AND ASK THE REAL QUESTION.
+                #
+                # The engine already writes a question that fits the decision:
+                # for overlapping sources it asks "Which source column is the
+                # authoritative source for X?", which is exactly right. It was
+                # discarded here and replaced with "could not be filled
+                # automatically" for every decision that is not a missing
+                # field — and for an overlap that sentence is simply untrue.
+                # `erm_product_type` WAS filled, from `Product Category`, and
+                # the operator was told it could not be.
+                #
+                # Worse, nothing named the file. An operator looking at eleven
+                # of these cannot say which of three workbooks a field came
+                # from, so there is no way to answer them — the one thing the
+                # question exists to obtain. The decision carries the chosen
+                # file and column; both are the lender's own vocabulary, which
+                # `language` admits by design.
+                question = str(d.get("operator_question") or "").strip()
+                if not question:
+                    question = (f"The field '{friendly}' could not be filled "
+                                "automatically. How should Trakt treat it?"
+                                if target else
+                                "Trakt needs your decision on how to treat part "
+                                "of this data.")
+                chosen = _chosen_source_sentence(d)
+                if chosen:
+                    question = f"{chosen} {question}"
             evidence: List[Dict[str, Any]] = []
             if d.get("issue") or d.get("evidence_summary"):
                 evidence.append({"label": "What Trakt found", "kind": "text",
                                  "data": {"issue": d.get("issue", ""),
                                           "detail": d.get("evidence_summary", "")}})
             out.append(DecisionRequired(
-                decision_id=f"{workflow.workflow_id}_{did}",
+                decision_id=f"{workflow.workflow_id}_{did}_{_content_key(d)}",
                 kind=(KIND_FIELD_MAPPING if "mapping" in dtype
                       else KIND_TRANSFORMATION),
                 title=title,
@@ -534,6 +564,22 @@ NEEDS_CONFIGURATION_SENTENCE = (
     "Trakt administrator.")
 
 
+def _content_key(d: Dict[str, Any]) -> str:
+    """A short, stable fingerprint of WHAT a Gate 4 decision is about.
+
+    The engine numbers its questions in order — ``DQ-mi_only-001`` — so when
+    Gate 1 runs again with fewer questions the numbers move: yesterday's 001
+    about the interest rate is today's 001 about the product type. Keyed on the
+    number alone, a stored answer about one field was matched to a different
+    field's question, and a question already answered could hide a new one.
+    """
+    import hashlib
+    basis = "|".join(str(d.get(k) or "") for k in (
+        "decision_type", "target_field", "source_file", "source_column",
+        "source_value"))
+    return hashlib.sha1(basis.encode("utf-8")).hexdigest()[:10]
+
+
 def _slug(s: str) -> str:
     import re
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:48]
@@ -562,6 +608,32 @@ def _regime_code_names() -> Dict[str, str]:
         pass
     _REGIME_CODE_NAMES = out
     return out
+
+
+def _chosen_source_sentence(decision: Dict[str, Any]) -> str:
+    """"Trakt is reading this from 'Column' in 'File'." — or nothing.
+
+    A decision about which of several sources should fill a field is
+    unanswerable without knowing which one Trakt picked. ERE's pack is three
+    workbooks that overlap: an interest rate appears in all three, a balance in
+    two. Eleven questions arrived naming only the target field, and the
+    operator said the obvious thing — "I don't know which tape these fields
+    emanate from".
+
+    The file and the column are the LENDER'S OWN WORDS, which
+    ``language.is_operator_safe`` admits through its ``allow`` mechanism for
+    exactly this reason: their data is their vocabulary rather than ours.
+
+    Returns "" when the decision names no source — a genuinely missing field
+    has none, and inventing one would be worse than the silence.
+    """
+    column = str(decision.get("source_column") or "").strip()
+    source_file = str(decision.get("source_file") or "").strip()
+    if not column:
+        return ""
+    if not source_file:
+        return f"Trakt is reading this from '{column}'."
+    return f"Trakt is reading this from '{column}' in '{source_file}'."
 
 
 def _friendly(field: str) -> str:

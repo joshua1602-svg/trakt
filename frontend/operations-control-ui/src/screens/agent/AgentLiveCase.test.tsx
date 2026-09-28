@@ -119,3 +119,75 @@ describe("starting a real onboarding", () => {
     expect(screen.getByRole("button", { name: copy.agent.createButton })).toBeDisabled();
   });
 });
+
+/**
+ * A real client onboarding must never be labelled practice.
+ *
+ * Reported, in those words, from a live case: "Why do you keep referring to
+ * this as a Rehearsal when this is a live onboarding?" The heading beside the
+ * case status read "Practice run" on every case, rehearsal and real alike,
+ * because the string was fixed rather than chosen. It sits directly next to
+ * what the case has got to, so an operator reads it as a statement about the
+ * case in front of them — and on a real onboarding it was untrue.
+ *
+ * The same defect had already been found once on this screen and fixed for the
+ * case-list heading. This proves it for every remaining place the word appears.
+ */
+describe("a real onboarding is not called practice", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+    mockAgentLive.available = true;
+    mockAgentLive.lastCreateLive = undefined;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    mockAgentLive.available = false;
+  });
+
+  async function openARealCase(user: ReturnType<typeof userEvent.setup>) {
+    renderAgent();
+    await typeInstruction(user);
+    await user.click(await screen.findByRole("radio", { name: /Real onboarding/ }));
+    await user.type(
+      screen.getByLabelText(copy.agent.modeLiveConfirmLabel),
+      copy.agent.modeLiveConfirmWord,
+    );
+    const button = screen.getByRole("button", { name: /Start/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+    await screen.findByText(copy.agent.conversationHeading);
+  }
+
+  it("says onboarding run, not practice run, beside the case status", async () => {
+    const user = userEvent.setup();
+    await openARealCase(user);
+    expect(await screen.findByText(copy.agent.stageHeading(true))).toBeInTheDocument();
+    expect(screen.queryByText(copy.agent.stageHeading(false))).not.toBeInTheDocument();
+  });
+
+  it("uses no practice wording anywhere on the open case", async () => {
+    const user = userEvent.setup();
+    await openARealCase(user);
+    await screen.findByText(copy.agent.stageHeading(true));
+
+    // Deliberately a sweep of the rendered page rather than a list of the
+    // strings known to be wrong today: the defect was a fixed string nobody
+    // had thought about, and the next one will be too.
+    const body = document.body.textContent ?? "";
+    for (const word of ["Practice run", "practice run", "practice boundary"]) {
+      expect(body, `a real onboarding is described as "${word}"`).not.toContain(word);
+    }
+  });
+
+  it("still says practice on a rehearsal", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+    await typeInstruction(user);
+    await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
+    await screen.findByText(copy.agent.conversationHeading);
+
+    expect(await screen.findByText(copy.agent.stageHeading(false))).toBeInTheDocument();
+  });
+});

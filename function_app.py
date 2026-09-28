@@ -53,17 +53,28 @@ _OUT_DIR = resolve_output_root()
 
 
 def _log_startup() -> None:
-    """One-time startup diagnostics: storage backend decision + resolved URIs."""
+    """One-time startup diagnostics: storage backend decision + resolved URIs.
+
+    The two client-scoped URIs used to be logged for a hardcoded ``ERE``. The
+    line is diagnostic only, but it is read during exactly the situation where
+    it misleads most: an operator checking where a client's data lands sees a
+    concrete path for a lender this deployment may no longer host, or never
+    did. It now names the deployment's own client where one is configured, and
+    shows the TEMPLATE otherwise, so the log either states a fact or declares
+    the shape — never asserts a client that isn't there.
+    """
     try:
         layout = Layout.from_env()
         d = decide_backend()                      # pure decision, never raises
+        client = (os.environ.get("MI_AGENT_CLIENT_ID") or "").strip() or "{client}"
         logging.info(
             "TRAKT STARTUP: selected_backend=%s reason=%s azure_connection_detected=%s "
-            "(source=%s) registry_uri=%s processed_container=%s platform_latest(ERE)=%s "
-            "regime_prefix(ERE)=%s scratch_out=%s",
+            "(source=%s) registry_uri=%s processed_container=%s platform_latest(%s)=%s "
+            "regime_prefix(%s)=%s scratch_out=%s",
             d["backend"], d["reason"], d["connection_detected"], d["connection_source"],
             layout.registry_uri, f"blob://{layout.processed_container}/",
-            layout.platform_latest_uri("ERE"), layout.regime_prefix("ERE", "{period}"),
+            client, layout.platform_latest_uri(client),
+            client, layout.regime_prefix(client, "{period}"),
             _OUT_DIR)
     except Exception:  # noqa: BLE001 — never let diagnostics break startup
         logging.exception("TRAKT STARTUP diagnostics failed")

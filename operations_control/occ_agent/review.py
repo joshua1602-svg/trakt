@@ -41,13 +41,43 @@ from .pack import MAPPING_STATEMENT
 from .run import SyntheticRun
 
 #: What the approver is told about mappings, in as many words.
-MAPPING_NOTE = (
-    "Field mappings are NOT part of this configuration and were not collected. "
-    "They are proposed by Trakt from the first representative delivery, "
-    "reviewed and approved by an operator during that first ingestion, and "
-    "then fingerprinted and fixed. Approving this activation does not approve "
-    "any mapping."
+#:
+#: This used to end "Approving this activation does not approve any mapping",
+#: which was true when a mapping was first proposed during the first live
+#: ingestion — and became false when the rehearsal started settling them and
+#: :meth:`~operations_control.occ_agent.service.OccAgentService.confirm_activation`
+#: started carrying those decisions into the governed store. It then told an
+#: approver they were signing a SMALLER thing than they were signing, which is
+#: the one direction a consent record must never be wrong in.
+MAPPING_NOTE_SETTLED = (
+    "Field mappings ARE part of this approval. The mappings confirmed during "
+    "the practice run are carried into {client}'s governed rules when this "
+    "activation is confirmed, and from then on they are how Trakt reads every "
+    "delivery for this client until they are formally amended. Review them "
+    "before confirming."
 )
+
+#: And where no practice run has settled any, which is the case this note was
+#: originally written for.
+MAPPING_NOTE_NONE = (
+    "No field mappings have been settled on this case, so none are approved "
+    "here. They are proposed by Trakt from the first representative delivery, "
+    "reviewed and approved by an operator during that ingestion, and then "
+    "fingerprinted and fixed."
+)
+
+
+def mapping_note(settled: int, client: str = "") -> str:
+    """What the approver is told about mappings — which depends on whether any
+    exist. A fixed sentence cannot describe both cases truthfully."""
+    if settled <= 0:
+        return MAPPING_NOTE_NONE
+    return MAPPING_NOTE_SETTLED.format(client=client or "this client")
+
+
+#: Kept for readers that import the old name. It states the no-mappings case,
+#: which is what it always described correctly.
+MAPPING_NOTE = MAPPING_NOTE_NONE
 
 #: What the approver is told about user access.
 ACCESS_NOTE = (
@@ -160,8 +190,7 @@ class ReviewPackage:
             lines += ["## User access", "", self.access_note, ""]
             for row in self.access_requirements:
                 lines.append(f"- {row.get('user_name') or 'unnamed'} "
-                             f"<{row.get('user_email') or 'no email'}> — "
-                             f"{row.get('user_role') or 'no role'}")
+                             f"<{row.get('user_email') or 'no email'}>")
             lines.append("")
         if self.operator_actions:
             lines += ["## Actions for an administrator", ""]
@@ -180,6 +209,30 @@ class ReviewPackage:
 # --------------------------------------------------------------------------- #
 # Building it
 # --------------------------------------------------------------------------- #
+
+#: The one row whose stored value can fall behind the pack it describes.
+_PACK_FIELD = "expected_files"
+
+
+def _state_the_pack(sections: List[Dict[str, Any]], pack: List[str]) -> None:
+    """Say what the delivery is, from the files the case is holding.
+
+    Only the funded delivery carries ``expected_files`` — a pipeline book
+    carries different files and this pack does not speak for it — so matching
+    the field name is enough to reach the right row.
+    """
+    for section in sections:
+        for row in section.get("rows") or []:
+            if row.get("field") != _PACK_FIELD:
+                continue
+            if list(row.get("value") or []) == pack:
+                continue
+            row["value"] = list(pack)
+            row["provenance"] = "artefact_derived"
+            row["provenance_label"] = (
+                f"{PROVENANCE_LABELS['artefact_derived']} — the "
+                f"{len(pack)} file(s) this case is holding")
+
 
 def build(case: OnboardingCase, run: SyntheticRun, facts: ExecutionFacts, *,
           cat: Catalogue, readiness: Optional[Dict[str, Any]] = None,
@@ -200,6 +253,23 @@ def build(case: OnboardingCase, run: SyntheticRun, facts: ExecutionFacts, *,
             package.sections.append({
                 "key": section.key, "label": section.label,
                 "rows": [r.to_dict() for r in rows]})
+
+    # THE PACK ON THE CASE, NOT A COPY OF IT MADE EARLIER.
+    #
+    # `expected_files` is derived from the sample and then stored, and every
+    # way of bringing the store back into step runs somewhere an approver
+    # cannot reach: a file action, or the start of a practice run, neither of
+    # which any state past the rehearsal permits. So an approver was shown a
+    # delivery of one file three lines above an activation that places three,
+    # in the same document, and asked to sign it.
+    #
+    # The document reports the artefacts the case actually holds — the same
+    # list the activation intent enumerates — so the two cannot disagree.
+    # Nothing is written here: this is the read that produces the document, and
+    # `approve_activation` persists the same fact when a human acts on it.
+    pack = [a.source_file for a in run.artefacts() if a.source_file]
+    if pack:
+        _state_the_pack(package.sections, pack)
 
     package.outstanding = list(onboarding.get("client_checklist") or [])
     package.data_definitions = [dict(i) for i in case.items("data_definitions")]
@@ -242,6 +312,11 @@ def build(case: OnboardingCase, run: SyntheticRun, facts: ExecutionFacts, *,
     }
     package.readiness = dict(readiness or {})
     package.activation = dict(intent or {})
+    # WHAT THIS APPROVAL ACTUALLY SETTLES ABOUT THE MAPPINGS. Counted from the
+    # intent, which is built by the same call that activation performs, so the
+    # note and the action list cannot say different numbers.
+    package.mapping_note = mapping_note(
+        int((intent or {}).get("mappings") or 0), package.client_name)
     package.approvals = {
         "onboarding": {"status": case.status,
                        "status_label": STATUS_LABELS.get(case.status,
@@ -319,38 +394,28 @@ def access_actions(rows: List[Dict[str, Any]]) -> List[OperatorAction]:
     has to do — each marked ``not_provisioned`` — rather than a claim that
     somebody now has access.
     """
+    # ONE ACTION PER PERSON: create the account.
+    #
+    # This used to fan a single row into up to four actions, from a role enum,
+    # a scope note and three booleans the client was asked to set — OCC access,
+    # dashboard access, report distribution. Under a managed service none of
+    # those are the client's to decide: the Operations Control Centre is
+    # operated by Trakt, reports reach people through the platform, and
+    # everyone named needs the same thing. The questions are gone from the
+    # catalogue, so the actions derived from them go too rather than quietly
+    # reading keys nobody is asked for any more.
     out: List[OperatorAction] = []
     for row in rows or []:
         who = str(row.get("user_name") or "").strip()
         email = str(row.get("user_email") or "").strip()
-        role = str(row.get("user_role") or "").strip()
         subject = f"{who or 'Unnamed user'}" + (f" <{email}>" if email else "")
-        scope = str(row.get("scope_note") or "").strip()
-        if row.get("occ_access_required"):
-            out.append(OperatorAction(
-                kind="occ_access", subject=subject,
-                detail=("Add to the OCC operator list for this environment "
-                        f"as {role or 'a role that has not been stated'}"
-                        + (f", scoped to {scope}" if scope else "")
-                        + ". Trakt reads operators from environment "
-                          "configuration; this is not done by activating the "
-                          "client.")))
-        if row.get("dashboard_access_required"):
-            out.append(OperatorAction(
-                kind="dashboard_access", subject=subject,
-                detail="Grant dashboard access" + (f" for {scope}" if scope
-                                                   else "")
-                       + ". Not provisioned by Trakt."))
-        if row.get("report_recipient"):
-            out.append(OperatorAction(
-                kind="report_distribution", subject=subject,
-                detail="Add to the report distribution list. Trakt sends no "
-                       "email in this environment; distribution is manual."))
-        if role == "approver":
-            out.append(OperatorAction(
-                kind="approval_role", subject=subject,
-                detail="Confirm this person is permitted to approve "
-                       "configuration changes for this client."))
+        out.append(OperatorAction(
+            kind="user_account", subject=subject,
+            detail=("Create the account for "
+                    + (email or "an address that has not been given")
+                    + ". Trakt records who needs access; the account itself is "
+                      "created in the identity provider and is not provisioned "
+                      "by activating the client.")))
     return out
 
 

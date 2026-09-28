@@ -27,7 +27,17 @@ mapping:
 # converted to user gap questions instead of unbounded token spend.
 # ---------------------------------------------------------------------------
 llm_policy:
-  enabled: false                       # opt-in only (CLI/config)
+  # ON. The mapper's own contract is "the LLM only reviews unresolved ambiguity
+  # and never writes final mappings", and every guard that makes that true sits
+  # below: zero_cost_first, the skip threshold, the per-run budget, redacted
+  # samples only, and no frontier escalation. Switched off, a real client's
+  # tape produced thirty columns reported as unreadable with no proposal
+  # against any of them, and an operator naming each canonical field from
+  # memory — which is the work the model exists to do.
+  #
+  # Nothing it suggests is applied. A suggestion arrives as a decision that
+  # says a model proposed it, and a person confirms it or does not.
+  enabled: true                        # governed by the budget below
   provider: anthropic
   model: claude-haiku-4-5-20251001     # cheap default
   zero_cost_first: true                # never call LLM where deterministic is decisive

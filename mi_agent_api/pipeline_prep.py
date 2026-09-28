@@ -53,6 +53,10 @@ _STAGE_CANON = {
     "kfi": "KFI", "kfi issued": "KFI", "illustration": "KFI", "quote": "KFI",
     "application": "APPLICATION", "applied": "APPLICATION", "app": "APPLICATION",
     "offer": "OFFER", "offered": "OFFER", "offer issued": "OFFER",
+    # Live cases between the steps above, spelled as ERE's pipeline report
+    # spells them. Unmapped they read UNKNOWN and fall out of the forecast —
+    # and "funds requested" is the case nearest to completing.
+    "decision refer": "APPLICATION", "funds requested": "OFFER",
     "completed": "COMPLETED", "complete": "COMPLETED", "completion": "COMPLETED",
     "funds released": "COMPLETED", "funded": "COMPLETED", "drawn": "COMPLETED",
     "drawdown": "COMPLETED", "live": "COMPLETED",
@@ -75,6 +79,25 @@ _STAGE_BUCKET = {
     "KFI": "early", "APPLICATION": "mid", "OFFER": "late",
     "COMPLETED": "completed", "WITHDRAWN": "withdrawn",
 }
+
+#: The OPEN pipeline: stages a case can still progress from. Completed and
+#: withdrawn cases stay in the weekly extract with their balance, and an
+#: unmapped (UNKNOWN) stage is not evidence of a live case, so the pipeline
+#: totals, profile, breakdowns, weekly series and movement drill-down all read
+#: these stages only. Derived from the one bucket map above.
+OPEN_STAGES = tuple(s for s, b in _STAGE_BUCKET.items() if b in ("early", "mid", "late"))
+
+
+def open_stage_mask(df: pd.DataFrame) -> pd.Series:
+    """True for rows at an open pipeline stage (all False without a stage)."""
+    if "pipeline_stage" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["pipeline_stage"].astype(str).str.strip().str.upper().isin(OPEN_STAGES)
+
+
+def open_pipeline(df: pd.DataFrame) -> pd.DataFrame:
+    """The open-pipeline rows of a prepared frame (see :data:`OPEN_STAGES`)."""
+    return df[open_stage_mask(df)]
 
 # Pipeline status (reuses funded-status semantics): funded / pipeline / withdrawn.
 _OPEN_PIPELINE_STAGES = {"KFI", "APPLICATION", "OFFER"}
@@ -155,6 +178,26 @@ def _excluded_stages() -> frozenset:
     if raw is None:
         raw = ["WITHDRAWN", "COMPLETED"]
     return frozenset(str(s).strip().upper() for s in raw if str(s).strip())
+
+
+def _forecast_stages() -> Optional[frozenset]:
+    """Stages the forward forecast weights (``forecast_stages`` in config).
+
+    An open stage outside this set is still pipeline — counted, charted,
+    stratified — but carries no expected-funding weight: the run-off method
+    treats KFIs as top-of-funnel reference, not funding pipeline. ``None``
+    (key absent) keeps every open stage weighted.
+    """
+    raw = _forecast_config().get("forecast_stages")
+    if raw is None:
+        return None
+    return frozenset(str(s).strip().upper() for s in raw if str(s).strip())
+
+
+def runoff_settings() -> Dict[str, Any]:
+    """The ``runoff`` block of the forecast config (see pipeline_runoff)."""
+    raw = _forecast_config().get("runoff") or {}
+    return dict(raw) if isinstance(raw, dict) else {}
 
 
 def _stage_days_to_fund() -> Dict[str, int]:
@@ -341,13 +384,18 @@ def prepare_pipeline_mi_dataset(
     # 6. Timing fields (dates) + derived expected completion.
     days_to_fund = _stage_days_to_fund()
     _parse_pipeline_dates(out, derived)
+    explicit_completion = (out["expected_completion_date"].notna()
+                           if "expected_completion_date" in out.columns
+                           else pd.Series(False, index=out.index))
     _derive_expected_completion(out, rep_ts, days_to_fund, derived)
 
     # 7. Completion probability (governed hierarchy) + weighted funded amount.
     stage_probs = _stage_probabilities()
     historical_rates = dict((historical_model or {}).get("stage_rates", {}) or {})
     prob_basis = _derive_probabilities_and_amounts(
-        out, stage_probs, historical_rates, derived)
+        out, stage_probs, historical_rates, derived,
+        runoff=(historical_model or {}).get("runoff"), rep_ts=rep_ts,
+        explicit_completion=explicit_completion, days_to_fund=days_to_fund)
 
     # 8. Case-age / days-to-completion.
     _derive_durations(out, rep_ts, derived)
@@ -442,7 +490,8 @@ ACTIVE_STAGES = ("KFI", "APPLICATION", "OFFER")
 
 
 def case_stage_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Resolve ``[case_id, application_id, stage, completion_date]`` from a raw
+    """Resolve ``[case_id, application_id, stage, completion_date]`` (plus the
+    ``kfi_date`` / ``application_date`` / ``offer_date`` stage entry dates) from a raw
     weekly pipeline extract, reusing the contract aliases + stage normalisation.
 
     Used by the historical completion-rate model to track a case across weekly
@@ -462,6 +511,11 @@ def case_stage_frame(df: pd.DataFrame) -> pd.DataFrame:
                     else pd.Series("UNKNOWN", index=df.index))
     out["completion_date"] = (_parse_date(df[comp_col]) if comp_col
                               else pd.Series(pd.NaT, index=df.index))
+    # Stage entry dates, for the run-off model's time-in-stage (additive).
+    for fld in ("kfi_date", "application_date", "offer_date"):
+        col = mapping.get(fld)
+        out[fld] = (_parse_date(df[col]) if col
+                    else pd.Series(pd.NaT, index=df.index))
     return out
 
 
@@ -536,17 +590,29 @@ def _derive_expected_completion(out: pd.DataFrame, rep_ts: Optional[pd.Timestamp
 
 def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, float],
                                       historical_rates: Dict[str, float],
-                                      derived: List[str]) -> str:
+                                      derived: List[str], *,
+                                      runoff: Optional[Dict[str, Any]] = None,
+                                      rep_ts: Optional[pd.Timestamp] = None,
+                                      explicit_completion: Optional[pd.Series] = None,
+                                      days_to_fund: Optional[Dict[str, int]] = None
+                                      ) -> str:
     """Assign ``completion_probability`` per the governed hierarchy and record the
     row-level ``completion_probability_source``. Returns the overall basis.
 
     Hierarchy (highest first):
       1. row-level explicit probability (a real source value)  -> ``row_level``
-      2. empirical historical stage rate (sufficient history)  -> ``historical_stage_rate``
-      3. configured stage probability                          -> ``configured_stage_rate``
-      4. a stage the governed config EXCLUDES  -> not weighted   -> ``excluded_<stage>``
-      5. UNKNOWN / unmapped stage -> no probability             -> ``missing_stage``
-      6. otherwise no probability                               -> ``unavailable``
+      2. a stage the governed config EXCLUDES  -> not weighted   -> ``excluded_<stage>``
+      3. an open stage outside ``forecast_stages`` -> weight 0   -> ``not_forecast_<stage>``
+      4. past the stage's validity window -> lapsed, weight 0    -> ``expired_<stage>``
+      5. run-off model: P(complete | weeks in stage)            -> ``historical_runoff``
+      6. empirical historical stage rate (sufficient history)  -> ``historical_stage_rate``
+      7. configured stage probability                          -> ``configured_stage_rate``
+      8. UNKNOWN / unmapped stage -> no probability             -> ``missing_stage``
+      9. otherwise no probability                               -> ``unavailable``
+
+    Tiers 3-5 are the stage run-off method (see ``pipeline_runoff``); the
+    validity window is measured from history where there is enough of it and
+    otherwise the configured fallback.
     """
     explicit = (coerce_numeric(out["completion_probability"])
                 if "completion_probability" in out.columns
@@ -579,6 +645,51 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
     tier_excluded = remaining & stage.isin(excluded)
     source[tier_excluded] = ("excluded_" + stage[tier_excluded].str.lower())
     remaining &= ~tier_excluded
+
+    # 3. Open stages the forecast does not weight (KFI: top of funnel).
+    forecast = _forecast_stages()
+    if forecast is not None:
+        tier_not_forecast = remaining & stage.isin(ACTIVE_STAGES) & ~stage.isin(forecast)
+        prob[tier_not_forecast] = 0.0
+        source[tier_not_forecast] = "not_forecast_" + stage[tier_not_forecast].str.lower()
+        remaining &= ~tier_not_forecast
+
+    # 4-5. Validity windows and the run-off model.
+    dwell = _stage_dwell_days(out, stage, rep_ts)
+    windows = _stage_windows(runoff)
+    if dwell is not None:
+        out["pipeline_stage_dwell_days"] = dwell
+        out["pipeline_stage_validity_days"] = stage.map(windows)
+        past_window = (stage.isin(list(windows)) & dwell.notna()
+                       & (dwell > stage.map(windows)))
+        out["pipeline_stage_expired"] = past_window
+        expired = remaining & past_window
+        prob[expired] = 0.0
+        source[expired] = "expired_" + stage[expired].str.lower()
+        remaining &= ~expired
+        for f in ("pipeline_stage_dwell_days", "pipeline_stage_validity_days",
+                  "pipeline_stage_expired"):
+            if f not in derived:
+                derived.append(f)
+    if runoff and runoff.get("available") and rep_ts is not None:
+        from . import pipeline_runoff as _runoff
+        config_offer = (stage_probs.get("OFFER"), (days_to_fund or {}).get("OFFER"))
+        candidates = remaining & stage.isin(_runoff.FORECAST_STAGES)
+        for idx in out.index[candidates]:
+            d = dwell.at[idx] if dwell is not None else None
+            p, days = _runoff.complete_from(
+                runoff, stage.at[idx], 0.0 if d is None or pd.isna(d) else float(d),
+                config_offer)
+            if p is None:
+                continue
+            prob.at[idx] = p
+            source.at[idx] = "historical_runoff"
+            remaining.at[idx] = False
+            if (days is not None and "expected_completion_date" in out.columns
+                    and not (explicit_completion is not None
+                             and bool(explicit_completion.get(idx, False)))):
+                out.at[idx, "expected_completion_date"] = (
+                    rep_ts + pd.to_timedelta(round(days), unit="D"))
 
     tier_historical = remaining & stage.isin(list(historical_rates))
     if tier_historical.any():
@@ -614,7 +725,7 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
                 derived.append(f)
 
     used = set(source.unique())
-    has_hist = "historical_stage_rate" in used
+    has_hist = bool(used & {"historical_stage_rate", "historical_runoff"})
     has_cfg = "configured_stage_rate" in used or "row_level" in used
     if has_hist and has_cfg:
         return "mixed_historical_and_config"
@@ -623,6 +734,42 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
     if has_cfg:
         return "stage_config"
     return "unavailable"
+
+
+_STAGE_ENTRY_FIELD = {"KFI": "kfi_date", "APPLICATION": "application_date",
+                      "OFFER": "offer_date"}
+
+
+def _stage_dwell_days(out: pd.DataFrame, stage: pd.Series,
+                      rep_ts: Optional[pd.Timestamp]) -> Optional[pd.Series]:
+    """Days each open case has sat in its current stage at the as-of date,
+    from the stage's own entry date (NaN where that date is absent)."""
+    if rep_ts is None:
+        return None
+    dwell = pd.Series(np.nan, index=out.index, dtype="float64")
+    found = False
+    for st, fld in _STAGE_ENTRY_FIELD.items():
+        if fld not in out.columns:
+            continue
+        found = True
+        mask = stage == st
+        if mask.any():
+            entry = pd.to_datetime(out.loc[mask, fld], errors="coerce")
+            dwell[mask] = (rep_ts - entry).dt.days.astype("float64")
+    return dwell if found else None
+
+
+def _stage_windows(runoff: Optional[Dict[str, Any]]) -> Dict[str, int]:
+    """Validity window (days) per stage: the run-off model's measured window
+    where history supports it, else the configured fallback."""
+    from . import pipeline_runoff as _runoff
+    fallback = dict(_runoff.DEFAULTS["fallback_validity_days"])
+    fallback.update((runoff_settings().get("fallback_validity_days") or {}))
+    windows = {str(k).upper(): int(v) for k, v in fallback.items()}
+    for st, sm in ((runoff or {}).get("stages") or {}).items():
+        if sm.get("windowDays") is not None:
+            windows[str(st).upper()] = int(sm["windowDays"])
+    return windows
 
 
 def _derive_durations(out: pd.DataFrame, rep_ts: Optional[pd.Timestamp],
@@ -713,8 +860,12 @@ _METRIC_FIELDS = [
 
 
 def _has_values(out: pd.DataFrame, col: str) -> bool:
-    return col in out.columns and out[col].notna().any() and (
-        out[col].astype(str).str.strip() != "").any()
+    if col not in out.columns or not out[col].notna().any():
+        return False
+    if not (pd.api.types.is_object_dtype(out[col])
+            or pd.api.types.is_string_dtype(out[col])):
+        return True  # a non-null number or date never renders as blank text
+    return bool((out[col].astype(str).str.strip() != "").any())
 
 
 def _numeric_coverage(out: pd.DataFrame, col: str) -> Tuple[int, int]:
@@ -779,7 +930,12 @@ def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
     # Any governed exclusion, whichever stage produced it, plus the two
     # no-probability outcomes. Matching on the prefix keeps this in step with
     # the config: adding a stage to exclude_stages needs no change here.
+    # Not-forecast (KFI) and lapsed cases carry no weight either, so they are
+    # outside the forecast population too: counted here, the blended
+    # conversion would be diluted by them and the forward case count inflated.
     excluded_mask = (src.str.startswith("excluded_")
+                     | src.str.startswith("not_forecast_")
+                     | src.str.startswith("expired_")
                      | src.isin({"missing_stage", "unavailable"}))
     gross = float(amount.sum())
     excluded_amount = float(amount[excluded_mask].sum())
@@ -792,7 +948,14 @@ def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
         "active_gross_amount": round(active_gross, 2),
         "weighted_expected_funded_amount": round(weighted_total, 2),
         "amount_weighted_historical": round(float(
-            amount[src == "historical_stage_rate"].sum()), 2),
+            amount[src.isin({"historical_stage_rate", "historical_runoff"})].sum()), 2),
+        "amount_weighted_runoff": round(float(
+            amount[src == "historical_runoff"].sum()), 2),
+        "expired_count": int(src.str.startswith("expired_").sum()),
+        "expired_amount": round(float(amount[src.str.startswith("expired_")].sum()), 2),
+        "not_forecast_count": int(src.str.startswith("not_forecast_").sum()),
+        "not_forecast_amount": round(float(
+            amount[src.str.startswith("not_forecast_")].sum()), 2),
         "amount_weighted_config": round(float(
             amount[src.isin({"configured_stage_rate", "row_level"})].sum()), 2),
         "blended_weighted_conversion": (round(weighted_total / active_gross, 4)

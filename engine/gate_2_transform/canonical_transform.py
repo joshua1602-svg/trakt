@@ -25,7 +25,7 @@ import re
 import calendar
 import warnings
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Sequence
 from datetime import datetime
 
 import numpy as np
@@ -153,9 +153,31 @@ def select_fields_for_portfolio(registry: dict, portfolio_type: str) -> dict:
             out[fname] = meta
     return out
 
+def _is_text(series: pd.Series) -> bool:
+    """Whether a column holds text — whatever pandas is calling that today.
+
+    Every text branch in this module used to ask ``dtype == object``. pandas 3
+    reads a text column as the new ``str`` dtype instead, so those branches
+    stopped running against real data and the values fell straight through to
+    a numeric coercion:
+
+      * ``"0.00%"`` never had its per-cent sign stripped, so it coerced to
+        null. Zero protected equity — a real, known value — became absent.
+      * a blank second-borrower date of birth was never recognised as blank,
+        so an absent value was counted as a failed parse.
+
+    Both were reported from the ERE acquired tape as parse failures, and both
+    are this one predicate. Asked through ``pandas.api.types`` so the next
+    dtype pandas introduces for text is covered without another defect first.
+    """
+    return bool(series.dtype == object
+                or str(series.dtype) in ("string", "str")
+                or pd.api.types.is_string_dtype(series))
+
+
 def _strip_nd(series: pd.Series) -> pd.Series:
     """Treat ND codes as missing in transform step."""
-    if series.dtype == object:
+    if _is_text(series):
         return series.where(~series.astype(str).str.match(ND_PATTERN), other=pd.NA)
     return series
 
@@ -192,7 +214,7 @@ def is_blank_token(value: Any) -> bool:
 
 def _blank_token_mask(series: pd.Series) -> pd.Series:
     """Boolean mask of cells that carry no value (see :func:`is_blank_token`)."""
-    if series.dtype == object or str(series.dtype) == "string":
+    if _is_text(series):
         s = series.astype("string").str.strip().str.lower()
         return s.isna() | s.isin(_BLANK_TOKENS)
     return series.isna()
@@ -417,7 +439,7 @@ def to_percentage(series: pd.Series) -> pd.Series:
     stays NA and is reported as a controlled numeric parse failure.
     """
     s = _void_blanks(_strip_nd(series))
-    if s.dtype == object or str(s.dtype) == "string":
+    if _is_text(s):
         cleaned = (
             s.astype("string")
             .str.strip()
@@ -431,7 +453,7 @@ def to_percentage(series: pd.Series) -> pd.Series:
 
 def to_decimal(series: pd.Series) -> pd.Series:
     s = _void_blanks(_strip_nd(series))
-    if s.dtype == object:
+    if _is_text(s):
         cleaned = (
             s.astype(str)
             .str.replace(r"[^\d\-\.,]", "", regex=True)
@@ -448,7 +470,7 @@ def to_integer(series: pd.Series) -> pd.Series:
 
 def to_bool_yn(series: pd.Series) -> pd.Series:
     s = _void_blanks(_strip_nd(series))
-    if s.dtype != object:
+    if not _is_text(s):
         return s.map(lambda v: "Y" if v == 1 else ("N" if v == 0 else pd.NA))
     t = s.astype(str).str.strip().str.lower()
     truthy = {"y", "yes", "true", "t", "1"}
@@ -462,7 +484,7 @@ def to_bool_yn(series: pd.Series) -> pd.Series:
 
 def to_currency(series: pd.Series, synonym_map: dict | None = None) -> pd.Series:
     s = _strip_nd(series)
-    if s.dtype != object:
+    if not _is_text(s):
         return s.astype("string")
     t = s.astype(str).str.strip().str.upper()
     if synonym_map:
@@ -498,7 +520,7 @@ def apply_types(df: pd.DataFrame, fields_meta: dict, currency_synonyms: dict | N
             out = to_currency(df[col], synonym_map=currency_synonyms)
         else:
             out = _void_blanks(_strip_nd(df[col]))
-            if out.dtype == object:
+            if _is_text(out):
                 out = out.astype("string").str.strip()
 
         df[col] = out
@@ -849,6 +871,69 @@ def _resolve_ltv(df: pd.DataFrame, ltv_col: str, bal_cols: tuple, val_col: str,
                       or report["unresolved_rows"]) else None
 
 
+#: Where the asset class states what a closed account carries. Read rather than
+#: restated here, because "which statuses mean repaid in full" is a property of
+#: the product and belongs with the rest of the product's standing answers.
+CLOSED_ACCOUNT_KEY = "closed_account"
+
+
+def zero_balances_on_closed_accounts(
+        df: pd.DataFrame, *, statuses: Sequence[str],
+        zero_fields: Sequence[str],
+        status_field: str = "account_status") -> Dict[str, Any]:
+    """A repaid loan's balance is nought, not missing.
+
+    A lender's balances extract carries the loans that still have a balance, so
+    a loan redeemed during the period is simply absent from it. The loan
+    extract still lists it, the consolidated tape shows a blank, and validation
+    refuses the blank as a missing mandatory value — CORE002, BLOCKING, on a
+    delivery where nothing is actually missing.
+
+    THIS IS NOT A DEFAULT FOR AN ABSENT VALUE, and the distinction is the whole
+    safety argument. It fires on POSITIVE EVIDENCE that the account has closed:
+
+      * a blank or unrecognised status derives nothing, so a balances extract
+        that arrives truncated still refuses — every live loan it dropped stays
+        blank and still blocks, which is the behaviour that makes a silent
+        understatement impossible;
+      * a stated balance always wins. A closed account carrying a non-zero
+        balance is a contradiction worth someone's attention, so it is counted
+        and reported rather than quietly overwritten.
+
+    Partial repayments never reach this: a loan that repays part of its balance
+    stays open and keeps its status. A lender whose status says otherwise must
+    not be configured into ``statuses`` — see the asset pack's own note.
+
+    Returns a report naming what was filled and what contradicted, because a
+    value the platform wrote rather than read has to be visible as such.
+    """
+    wanted = {str(s).strip().upper() for s in (statuses or []) if str(s).strip()}
+    report: Dict[str, Any] = {"closed_rows": 0, "filled": {}, "contradicted": {}}
+    if not wanted or status_field not in df.columns:
+        return report
+    status = df[status_field].map(
+        lambda v: "" if v is None else str(v).strip().upper())
+    closed = status.isin(wanted)
+    if not bool(closed.any()):
+        return report
+    report["closed_rows"] = int(closed.sum())
+    report["statuses"] = sorted(wanted)
+    for field in zero_fields or []:
+        if field not in df.columns:
+            continue
+        stated = pd.to_numeric(df[field], errors="coerce")
+        blank = closed & stated.isna()
+        if bool(blank.any()):
+            df.loc[blank, field] = 0.0
+            report["filled"][field] = int(blank.sum())
+        # A closed account that still states a balance. Left exactly as the
+        # lender wrote it; named so it can be asked about.
+        odd = closed & stated.notna() & (stated != 0)
+        if bool(odd.any()):
+            report["contradicted"][field] = int(odd.sum())
+    return report
+
+
 def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
                  dayfirst: bool, infer_year: bool, derive_month: bool,
                  default_year: Optional[int], config: dict) -> Dict[str, Any]:
@@ -857,14 +942,43 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
     pt = (portfolio_type or "").strip().lower()
     is_erm = pt in {"equity_release", "erm", "rre"}
 
+    # 0. A CLOSED ACCOUNT CARRIES NOUGHT, and it has to be said before balance
+    #    coherence runs: coherence derives one balance from another, and a
+    #    redeemed loan has neither to derive from. The statuses that mean
+    #    "repaid in full" come from the asset pack, never from here.
+    closed = (config.get(CLOSED_ACCOUNT_KEY) or {})
+    if closed.get("statuses"):
+        outcome = zero_balances_on_closed_accounts(
+            df, statuses=closed.get("statuses") or [],
+            zero_fields=closed.get("zero_fields") or [])
+        if outcome.get("filled") or outcome.get("contradicted"):
+            deriv_report.setdefault("derived", {})["closed_account"] = outcome
+
     # 1. ERM Balance Coherence
     if is_erm:
-        for col in ["current_outstanding_balance", "current_principal_balance", "accrued_interest"]:
+        for col in ["current_outstanding_balance", "current_principal_balance"]:
             if col not in df.columns: df[col] = pd.NA
+
+        # THE ROLLED-UP INTEREST, BY A NAME THE CANONICAL ACTUALLY USES. This
+        # read ``accrued_interest``, which is not a field: the registry calls
+        # the cumulative figure ``cumulative_accrued_interest`` and the period
+        # figure ``accrued_interest_in_period``. The column was therefore
+        # created empty on every run and the addition was always of nought — so
+        # this step, whose whole purpose is that an equity release balance is
+        # principal PLUS the interest that rolled up on it, silently copied one
+        # balance to the other instead. A lender who sent only a principal
+        # balance got an outstanding balance that was not outstanding, and its
+        # LTV came out short by exactly the interest this was meant to add.
+        #
+        # The cumulative figure is the one that belongs here. A single period's
+        # accrual is not the amount owed.
+        accrued = _first_present(df, ("cumulative_accrued_interest",
+                                      "accrued_interest"))
 
         o = pd.to_numeric(df["current_outstanding_balance"], errors="coerce")
         p = pd.to_numeric(df["current_principal_balance"], errors="coerce")
-        i = pd.to_numeric(df["accrued_interest"], errors="coerce").fillna(0.0)
+        i = (pd.to_numeric(df[accrued], errors="coerce").fillna(0.0)
+             if accrued else pd.Series(0.0, index=df.index))
 
         # Outstanding = Principal + Accrued
         mask_out = o.isna() & p.notna()
@@ -890,10 +1004,23 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
     # balance is preferred and an outstanding balance is the fallback: an
     # acquired tape carries only the latter, so requiring principal silently
     # skipped LTV for the whole acquired book — and with it both LTV validators.
+    #
+    # EQUITY RELEASE INVERTS THAT ORDER, because the product inverts the
+    # assumption behind it. On an amortising mortgage the two balances are the
+    # same number and the precedence never shows. On a lifetime mortgage the
+    # interest is never paid — it rolls up and is secured on the same property —
+    # so the amount actually lent against the house is the OUTSTANDING balance,
+    # and the principal balance is only the part of it that was advanced. A
+    # lender's own LTV is quoted on the rolled-up figure. Measuring it against
+    # principal understates LTV by the whole accrued interest, which on a
+    # seasoned book is the larger share, so every loan past its first months
+    # disagrees with its own stated LTV — a disagreement created here, not
+    # found in the data.
+    current_balances = (("current_outstanding_balance", "current_principal_balance")
+                        if is_erm else
+                        ("current_principal_balance", "current_outstanding_balance"))
     for ltv_col, bal_cols, val_col in [
-        ("current_loan_to_value",
-         ("current_principal_balance", "current_outstanding_balance"),
-         "current_valuation_amount"),
+        ("current_loan_to_value", current_balances, "current_valuation_amount"),
         ("original_loan_to_value",
          ("original_principal_balance",),
          "original_valuation_amount"),

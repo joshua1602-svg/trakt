@@ -84,9 +84,22 @@ describe("ConversionContext", () => {
     expect(el.textContent).toContain("£4.1MM");      // numerator value
     expect(el.textContent).toContain("512 KFIs");    // denominator count
     expect(el.textContent).toContain("6w lag applied");
-    expect(el.textContent).toContain("5 of 4+ weeks");
+    expect(el.textContent).toContain("5 weeks (minimum 4)");
     expect(el.textContent).toContain("2026-06-26");  // denominator week
     expect(el.textContent).toContain("2026-08-07");  // latest extract
+  });
+
+  it("reproduces the headline from the cohort's own numerator and denominator", () => {
+    render(<ConversionContext stage="COMPLETED" conversion={CONVERSION}
+      cohortPct={9.4} cohortSize={2000} />);
+    const cohort = screen.getByTestId("conversion-context-cohort-COMPLETED");
+    expect(cohort.textContent).toContain("188 cases");     // 9.4% of 2,000
+    expect(cohort.textContent).toContain("2,000 cases");
+    expect(cohort.textContent).toContain("9.4%");
+    // The velocity inputs sit in their own block, not under the headline.
+    expect(cohort.textContent).not.toContain("KFIs");
+    expect(screen.getByTestId("conversion-context-velocity-COMPLETED").textContent)
+      .toContain("avg_weekly_flow_over_lagged_kfi_stock");
   });
 
   it("declines to invent a prior-period comparison", () => {
@@ -151,8 +164,16 @@ describe("InsightDetailDrawer", () => {
     render(<InsightDetailDrawer detail={detail} onClose={() => {}} />);
     const el = screen.getByTestId("insight-drawer-components");
     expect(el.textContent).toContain("New cases");
-    expect(el.textContent).toContain("Left active pipeline");
+    expect(el.textContent).toContain("Completed / withdrawn");
     expect(el.textContent).toContain("Removed cases");
+  });
+
+  it("states the comparison it made, not an assumed week", () => {
+    render(<InsightDetailDrawer detail={detail} onClose={() => {}} />);
+    expect(screen.getByText(/vs 2026-07-31 \(7 days\)/)).toBeTruthy();
+    render(<InsightDetailDrawer onClose={() => {}}
+      detail={{ ...detail, as_of_date: "2026-08-31", comparison_date: "2026-08-27" }} />);
+    expect(screen.getByText(/vs 2026-08-27 \(4 days\)/)).toBeTruthy();
   });
 
   it("discloses a dimension reassignment rather than hiding the convention", () => {

@@ -14,6 +14,7 @@ import type {
   AgentTurn,
   CaseSummary,
   MailIngestOutcome,
+  RegistryField,
 } from "./agentTypes";
 import type {
   AuditTrail,
@@ -119,6 +120,9 @@ export interface OpsClient {
     note?: string,
     client?: string,
   ): Promise<void>;
+  /** Withdraw a standing rule, with a reason. Not a delete: the rule keeps
+   *  its versions and its history and is marked withdrawn. */
+  retireRule(ruleId: string, reason: string, clientId?: string): Promise<Rule>;
   getRuleHistory(ruleId: string): Promise<Rule[]>;
   getHistory(client?: string): Promise<Publication[]>;
 
@@ -135,6 +139,13 @@ export interface OpsClient {
   createConfigDraft(
     layer: ConfigLayer,
     input?: CreateDraftInput,
+  ): Promise<{ version: number; status: string }>;
+  /** Draft a version holding the files this deployment carries. A DRAFT: it
+   *  still has to be validated and activated, because adopting whatever was
+   *  last deployed automatically is what the version model exists to prevent. */
+  createConfigDraftFromDeployment(
+    layer: ConfigLayer,
+    notes?: string,
   ): Promise<{ version: number; status: string }>;
   validateConfigVersion(
     layer: ConfigLayer,
@@ -191,12 +202,68 @@ export interface OpsClient {
   listAgentCases(state?: string): Promise<CaseSummary[]>;
   /** `live` opens a REAL onboarding rather than a rehearsal. Defaults to a
    *  rehearsal; the backend refuses live where it is not switched on. */
-  createAgentCase(instruction: string, fixtureId?: string, live?: boolean): Promise<AgentStatus>;
+  /** Open an Agent case. `amendClient` opens an AMENDMENT to that client's
+   *  active configuration instead of a new onboarding — the supported way to
+   *  add a reporting product once a client is live, because the source
+   *  registry is only rewritten at (re-)activation. */
+  createAgentCase(
+    instruction: string,
+    fixtureId?: string,
+    live?: boolean,
+    amendClient?: string,
+  ): Promise<AgentStatus>;
   getAgentCase(caseRef: string): Promise<AgentStatus>;
   instructAgent(caseRef: string, text: string, confirm?: boolean): Promise<AgentTurn>;
   answerAgentDecision(
     caseRef: string,
     input: { decision_id: string; action: string; value?: string; reason?: string },
+  ): Promise<AgentStatus>;
+  /** Approve every mapping this delivery still has proposed.
+   *
+   *  One act for the operator; one resolved decision per column on the record,
+   *  because that is what promotion turns into governed rules. */
+  /** Commit the mapping table: everything staged, plus every proposal left as
+   *  Trakt read it. Refused while a genuine question has no answer. */
+  approveAgentMappings(caseRef: string, reason?: string): Promise<AgentStatus>;
+  /** Record what the operator says one column is, WITHOUT applying it.
+   *  Reversible until the set is committed — see the staging module. */
+  stageAgentMapping(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "confirm" | "amend" | "not_used" | "clear";
+      target_field?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus>;
+  /** Every canonical field an unmapped column may be pointed at — the
+   *  mapper's own selection, so a field offered on the screen is one the run
+   *  will accept. */
+  agentFieldRegistry(caseRef: string): Promise<RegistryField[]>;
+  /** Give a column that matched nothing somewhere to go: an existing field
+   *  (an alias, settled here and promoted at activation), or an ask for a
+   *  field the platform does not have (recorded, never created here). */
+  /** Say whether the lender writes a percentage field as points or a
+   *  fraction. An empty unit withdraws the declaration. */
+  declareSourceUnit(
+    caseRef: string,
+    input: { field: string; unit: string; reason?: string },
+  ): Promise<AgentStatus>;
+
+  resolveUnmappedColumn(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "use_existing" | "request_field" | "withdraw_request";
+      target_field?: string;
+      field_name?: string;
+      label?: string;
+      description?: string;
+      data_type?: string;
+      reason?: string;
+    },
   ): Promise<AgentStatus>;
   /** Named lifecycle steps, for the operator controls beside the conversation. */
   runAgentStep(
@@ -229,6 +296,15 @@ export interface OpsClient {
     input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
   ): Promise<AgentStatus>;
   uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus>;
+  /** Take one file back out of the pack. Removes the RECORD, not the bytes. */
+  removeAgentArtefact(caseRef: string, artefactId: string): Promise<AgentStatus>;
+  /** The whole concentration-test decision in one act: the status, the
+   *  client's response and the reason. A blank answer cannot be recorded as
+   *  supplied — the server refuses it. */
+  recordAgentConcentration(
+    caseRef: string,
+    input: { status: string; response_text?: string; reason?: string },
+  ): Promise<AgentStatus>;
   /** Generate a client response from the delivery outcome the case implies. */
   generateAgentResponse(caseRef: string): Promise<AgentStatus>;
   /** Answers the outstanding CLIENT QUESTIONS. Distinct from

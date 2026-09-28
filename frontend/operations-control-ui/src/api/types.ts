@@ -217,6 +217,9 @@ export interface Batch {
   workflow_type: WorkflowOutcome;
   dataset: BatchDataset;
   dataset_label: string;
+  /** How often this delivery arrives — a path segment, so the server echoes
+   *  what it stored rather than what was asked for. */
+  frequency: string;
   status: BatchStatus;
   status_label: string;
   status_sentence: string;
@@ -239,6 +242,10 @@ export interface CreateBatchInput {
   reporting_date: string;
   workflow_type: WorkflowOutcome;
   dataset: BatchDataset;
+  /** How often this delivery arrives. Part of where Trakt files it, so a
+   *  pipeline tape sent every few days is "adhoc", not "weekly". Omitted
+   *  means monthly, which is what every caller got before it could be sent. */
+  frequency?: string;
   auto_start_when_ready: boolean;
 }
 

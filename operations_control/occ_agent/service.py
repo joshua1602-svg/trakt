@@ -50,11 +50,13 @@ from apps.blob_trigger_app.storage import Storage
 from ..contracts import new_id, now_iso
 from ..engine import OpsError
 from ..onboarding.case import (
+    ACTIVATED,
     APPROVED,
     CHANGES_REQUIRED,
     DRAFT,
     IN_REVIEW,
     INFORMATION_REQUESTED,
+    KIND_NEW_CLIENT,
     NO_ACTIVE_CONFIGURATION,
     READY_FOR_APPROVAL,
     STATUS_LABELS,
@@ -68,12 +70,18 @@ from . import classification as _classification
 from . import client_form as _client_form
 from . import communication as _comms
 from . import derive as _derive
+from . import execution as _execution
+from . import field_registry as _field_registry
+from . import mapping_promotion as _mapping_promotion
+from . import mapping_view as _mapping_view
 from . import pack as _pack
 from . import planning as _planning
 from . import promotion as _promotion
 from . import readiness as _readiness
 from . import review as _review
+from . import staging as _staging
 from . import states as _states
+from . import workbook as _workbook
 from .adapters import (
     ActivationPreconditions,
     ExecutionAdapter,
@@ -82,7 +90,13 @@ from .adapters import (
 )
 from .artefacts import ArtefactService, RoleReadiness, sample_manifest
 from .derive import ExecutionFacts
-from .execution import SyntheticOnboardingAdapters, run_synthetic_orchestration
+from .execution import (
+    DECISION_MAPPING_PROPOSAL,
+    MATERIALITY_MARK,
+    SyntheticOnboardingAdapters,
+    run_synthetic_orchestration,
+)
+from .execution import mapping_key as _mapping_key
 from .input_roles import artefact_vocabulary
 from .interpretation import (
     PROV_AGENT,
@@ -156,6 +170,17 @@ ACTION_PHRASES: Dict[str, str] = {
 #: they undo or abandon, and offering them as the way forward is noise.
 _NOT_A_WAY_FORWARD = (_states.ACTION_CANCEL, _states.ACTION_WITHDRAW,
                       _states.ACTION_REQUEST_CHANGES)
+
+#: A decision a human has ANSWERED, and which a rerun must therefore keep
+#: rather than ask again. Written deliberately by the three paths that settle
+#: one: ``resolve_decision`` sets approved or rejected, ``acknowledge_exception``
+#: sets acknowledged, and the mapping commit sets approved.
+#:
+#: Everything else is re-raisable. That is deliberate and it is the safe
+#: direction — the worst case is a question asked twice, against a decision
+#: nobody can answer and no deploy can dislodge, because the value that froze
+#: it lives in the case's own document rather than in the code.
+_SETTLED_STATUSES = ("approved", "rejected", "acknowledged")
 
 
 def action_phrase(action: str) -> str:
@@ -352,8 +377,15 @@ class OccAgentService:
     # ------------------------------------------------------------------ #
     def create_case(self, *, tenant: str, initiating_user: str,
                     instruction: str = "",
-                    fixture_id: str = "", live: bool = False) -> AgentCase:
+                    fixture_id: str = "", live: bool = False,
+                    amend_client: str = "") -> AgentCase:
         """Open a case — a rehearsal unless ``live`` is asked for explicitly.
+
+        ``amend_client`` opens an AMENDMENT to that client's active
+        configuration instead of a new onboarding. Everything downstream is
+        identical: the same rehearsal, the same controls, the same two
+        approvals, the same one doorway. Only the starting answers differ, and
+        where they came from is recorded on the case.
 
         The onboarding case is opened by Client Onboarding itself — same
         reference series, same blank start, same event history — and the run
@@ -373,7 +405,24 @@ class OccAgentService:
                 "OPS_LIVE_NOT_ENABLED",
                 "Live execution is not switched on in this environment, so a "
                 "live case cannot be opened here.", 409)
-        case = self.onboarding.start_new_client(by=initiating_user)
+        if amend_client:
+            # A CHANGE TO A CLIENT ALREADY LIVE, not a second onboarding of
+            # them. Client Onboarding opens it pre-populated from the version
+            # in force and records which version it started from, so the
+            # change is reviewable as a difference rather than as a fresh set
+            # of answers that happen to mostly match.
+            #
+            # This is the supported way to add a reporting product after
+            # activation. Editing a live case in conversation does not reach
+            # the source registry, where `regime_required` is written at
+            # activation — so the book stays registered as it was, and the
+            # engine refuses the delivery rather than splitting it across two
+            # incomplete ones. An amendment re-activates, and the registry is
+            # rewritten with it.
+            case = self.onboarding.start_amendment(client_id=amend_client,
+                                                   by=initiating_user)
+        else:
+            case = self.onboarding.start_new_client(by=initiating_user)
         run = SyntheticRun(case_ref=case.case_id, tenant=tenant,
                            initiating_user=initiating_user,
                            fixture_id=fixture_id,
@@ -447,7 +496,8 @@ class OccAgentService:
             agent_case.case, self.onboarding.catalogue,
             steps=interpretation.steps,
             provenance=interpretation.provenance,
-            confidence=interpretation.confidence)
+            confidence=interpretation.confidence,
+            set_changes=interpretation.set_changes)
         plan.unrecognised.extend(interpretation.unrecognised)
         plan.reporting_period = interpretation.reporting_period
         plan.streams = list(interpretation.streams)
@@ -1209,6 +1259,109 @@ class OccAgentService:
                             "sha256": artefact.sha256})
         return agent_case
 
+    def set_run_target(self, agent_case: AgentCase, *, actor: str,
+                       portfolio_id: str = "", dataset: str = "",
+                       reporting_period: str = "") -> AgentCase:
+        """Name which delivery this run is for, and re-derive what follows.
+
+        ``intended_live_uri`` is computed once, when a file is registered, from
+        the client, the portfolio and the reporting period. The period is
+        normally the last of the three to be known — and nothing recomputed the
+        URI when it arrived, so a file uploaded first kept the empty string it
+        was given and the card read "Where this would be filed: —" for the life
+        of the case, however many times the target was set afterwards.
+
+        Upload-then-name is the ordinary order of work, not a mistake, so the
+        destinations are re-derived here rather than the operator being
+        expected to remove every file and attach it again.
+
+        Refused once the run is finished. Nothing had ever reached this from a
+        screen, so it was ungated; now that it can be typed into, renaming the
+        period of a delivery that has already started would leave the record
+        describing a period the files did not go to.
+        """
+        run = agent_case.run
+        if run.state in _states.TERMINAL_STATES:
+            raise OpsError(
+                "OCC_AGENT_RUN_FINISHED",
+                "This case is finished, so the delivery it was for cannot be "
+                "changed.", 409)
+        if portfolio_id:
+            run.portfolio_id = portfolio_id
+        if dataset:
+            run.dataset = dataset
+        if reporting_period:
+            run.reporting_period = reporting_period
+        facts = self.facts(agent_case)
+        for doc in run.received_artefacts:
+            doc["intended_live_uri"] = self.artefacts.intended_uri(
+                run, facts, str(doc.get("source_file") or ""))
+        run.facts = facts.to_dict()
+        self.store.save(run)
+        self._audit(run, "run_target_set", actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_DETERMINISTIC,
+                    decision_basis="an operator named the delivery this run "
+                                   "is for",
+                    detail={"portfolio_id": run.portfolio_id,
+                            "dataset": run.dataset,
+                            "reporting_period": run.reporting_period,
+                            "artefacts_retargeted":
+                                len(run.received_artefacts)})
+        return agent_case
+
+    def remove_synthetic_artefact(self, agent_case: AgentCase, *,
+                                  artefact_id: str, actor: str) -> AgentCase:
+        """Take a file back out of the case's pack.
+
+        WHY THIS EXISTS. Uploading was a one-way door: ``received_artefacts``
+        was appended to and never read back out, and the wrong file — an
+        encrypted workbook, a draft, last month's tape — stayed in the pack for
+        the life of the case. Re-uploading under the same name overwrites the
+        BYTES (:meth:`SyntheticRunStore.write_artefact_bytes` writes a
+        sanitised leaf with no uniquifier) but appends a second ROW, so the
+        only way to correct a mistake was to make the record say two files had
+        arrived when one had. Cancelling the case was the alternative.
+
+        WHAT IT REMOVES, EXACTLY. The record, not the bytes. Everything that
+        decides what activation does reads ``run.artefacts()`` — the intent's
+        file list, :meth:`_payloads`, classification, and role readiness — so
+        dropping the row removes the file from all of them. The uploaded bytes
+        stay where they were written, in this case's own sandbox under
+        ``{tenant}/agent-runs/{case_ref}/artefacts/``, and are not written
+        anywhere else. ``Storage`` has no delete at all, and this is not the
+        change that should introduce one: a governed store that can be told to
+        forget is a much larger decision than an operator undoing an upload.
+
+        Allowed wherever uploading is allowed, and for the same reason — if an
+        operator may add a file at this state, they may take one back.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_REGISTER_ARTEFACT)
+        removed = next((a for a in run.received_artefacts
+                        if a.get("artefact_id") == artefact_id), None)
+        if removed is None:
+            raise OpsError("OCC_AGENT_ARTEFACT_NOT_FOUND",
+                           "That file is not in this case's pack.", 404)
+        run.received_artefacts = [a for a in run.received_artefacts
+                                  if a.get("artefact_id") != artefact_id]
+        self.store.save(run)
+        self._audit(run, "synthetic_artefact_removed",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_SYNTHETICALLY_EXECUTED,
+                    input_reference=str(removed.get("source_file") or ""),
+                    output_reference=str(removed.get("synthetic_location")
+                                         or ""),
+                    decision_basis="an operator removed the file from the "
+                                   "pack; its bytes remain in the case "
+                                   "sandbox and were never written elsewhere",
+                    detail={"artefact_id": artefact_id,
+                            "sha256": str(removed.get("sha256") or ""),
+                            "bytes_deleted": False})
+        # Readiness, recognition and the onboarding case's sample all follow
+        # from the pack, so they are recomputed rather than left describing a
+        # file the case no longer holds.
+        return self.classify_artefacts(agent_case, actor=actor)
+
     def generate_synthetic_answers(self, agent_case: AgentCase, *,
                                    actor: str) -> AgentCase:
         """Answer THIS case's own outstanding client questions, synthetically.
@@ -1315,7 +1468,15 @@ class OccAgentService:
                     decision_basis="apps.blob_trigger_app.file_roles",
                     detail=readiness.to_dict())
 
-        if agent_case.case.status not in (APPROVED,) + TERMINAL:
+        # AN APPROVED CASE IS THE ONLY KIND THAT CAN REHEARSE, so excluding one
+        # here excluded every pack the rehearsal exists to read.
+        # `run_synthetic_onboarding` refuses to start unless the onboarding is
+        # APPROVED; this refused to record the sample once it was. The two
+        # conditions never overlap, so the files uploaded FOR the practice run
+        # could not reach the sample, and the expected delivery stayed at
+        # whatever was registered before approval — one file, where a client
+        # sends three, with no operator action able to correct it.
+        if agent_case.case.status not in TERMINAL:
             agent_case.case = self.onboarding.register_sample(
                 case_id=agent_case.case_ref,
                 files=sample_manifest(classified), by=actor)
@@ -1390,6 +1551,20 @@ class OccAgentService:
                                actor=actor,
                                reason="required input roles not satisfied")
 
+        # THE PACK ABOUT TO BE READ IS THE PACK TO BE EXPECTED. Registering the
+        # sample otherwise happens only on a FILE action — an upload, a
+        # removal, a fixture — so an operator whose expected delivery was
+        # recorded wrongly had nothing they could press to correct it. Starting
+        # the run is the act that says "use what I have given you", and it
+        # reads every artefact on the case, so it states the same thing to the
+        # onboarding record. Recorded, never fatal: a sample that cannot be
+        # registered must not take the practice run down with it.
+        self._record_sample_from_pack(agent_case, actor=actor)
+        # THIS run's obstacles, not the last one's. run.blockers was written by
+        # _block and cleared by nothing, so a case that recovered kept showing
+        # what used to be wrong.
+        run.blockers = []
+
         prior = self._move(run, _states.SYNTHETIC_ONBOARDING_RUNNING)
         run.facts = facts.to_dict()
         self.store.save(run)
@@ -1406,8 +1581,22 @@ class OccAgentService:
             artefact_paths=self._artefact_paths(run), policy=self.policy,
             sandbox=self.store.case_dir(run.tenant, run.case_ref),
             asset_type=facts.asset_class,
+            confirmed_product_profile=run.confirmed_product_profile,
             regime=facts.regime,
             approved_mappings=self._approved_mappings(run),
+            # A new client's columns have never been read by anyone. An
+            # amendment's have, and are already governed — see
+            # `SyntheticOnboardingAdapters.confirm_every_mapping`.
+            confirm_every_mapping=(agent_case.case.kind == KIND_NEW_CLIENT),
+            # THE CLIENT'S OWN STANDING ANSWERS. The originator's name, LEI and
+            # country of establishment are captured once on the entity holding
+            # the originator role and reach the regime defaults from there —
+            # `onboarding.artefacts` already derives exactly this, and an
+            # operator is never asked for the same legal name twice. Read here
+            # so a field the client configuration already holds is not reported
+            # as something the regulator is still waiting for.
+            client_defaults=self._standing_client_defaults(agent_case),
+            source_units=dict(run.source_units or {}),
             case_id=run.case_ref, tenant=run.tenant)
         run_root = self.store.run_dir(run.tenant, run.case_ref)
         self._purge_stale_decisions(run_root)
@@ -1426,13 +1615,51 @@ class OccAgentService:
             self._record_control(run, "validation",
                                  {"findings": adapters.validation_report})
         run.mapping_report = adapters.mapping_report
+        run.cross_file = adapters.cross_file
+        run.excused_findings = adapters.excused_findings
+        # A finding that did not block still belongs on the operator's screen.
+        # It used to be a count on a stage that had gone green, which was
+        # survivable only while REVIEW was the quiet outcome — and it is not
+        # any more, now that volume alone cannot promote a warning-severity
+        # check into a refusal.
+        #
+        # THIS RUN'S FINDINGS REPLACE THE LAST RUN'S. Observations otherwise
+        # only ever accumulate, which is right for the artefact notes they were
+        # built for — a file was recognised, and it stays recognised — and
+        # exactly wrong for a count that a rerun is meant to change. An
+        # operator who fixes a mapping and reruns would be shown the figure
+        # they just fixed sitting underneath the figure they fixed it to.
+        run.observations = [o for o in run.observations
+                            if MATERIALITY_MARK not in o]
+        run.observations.extend(adapters.review_findings)
+        run.llm = adapters.llm
 
         # Resolved decisions are kept (they are the record of what the human
         # settled); a decision the rerun raises again replaces its open twin
         # rather than being appended beside it.
         decisions = self._decisions_from_run(run, facts, run_root)
+        # The product question, raised beside the blockers it would clear.
+        # Answering it is what lets the profile excuse anything, so it belongs
+        # in the same list an operator works through rather than in a panel of
+        # its own.
+        if adapters.product_profile_decision is not None:
+            decisions = [adapters.product_profile_decision, *decisions]
+        # WHAT A HUMAN ACTUALLY SETTLED, rather than everything that is not the
+        # word "open". The distinction was invisible while every card carried
+        # an explicit `"status": "open"` and every settled one carried
+        # "approved" — and then one decision was raised carrying "pending",
+        # which is neither. It counted as settled, `setdefault` below refused to
+        # replace it, and it was stuck on the run for good: a rerun could not
+        # dislodge it and a deploy could not fix it, because the broken value
+        # was in the case's own document rather than in the code.
+        #
+        # A status nobody wrote deliberately is not an answer. These three are
+        # the ones the writers use — `resolve_decision` sets approved/rejected,
+        # `acknowledge_exception` sets acknowledged — and anything else is
+        # re-raisable, which is the safe direction: the worst case is a
+        # question asked twice, not an answer that cannot be given.
         settled = {d["decision_id"]: d for d in run.open_decisions
-                   if d.get("status") != "open"}
+                   if str(d.get("status") or "").lower() in _SETTLED_STATUSES}
         for decision in decisions:
             settled.setdefault(decision["decision_id"], decision)
         run.open_decisions = list(settled.values())
@@ -1493,6 +1720,14 @@ class OccAgentService:
         target["resolved_by"] = actor
         target["resolved_at"] = now_iso()
         target["reason"] = reason
+        # Confirming the product is not just an answered question: it is what
+        # lets the product profile excuse a field, so the confirmation is
+        # recorded on the run and every later run reads it. Approving it takes
+        # the proposed profile; amending it takes the one the operator named.
+        if str(target.get("decision_type")) == "product_confirmation" \
+                and action != "reject":
+            run.confirmed_product_profile = str(
+                value or target.get("profile_id") or "")
         self.store.save(run)
         self._audit(run, "human_decision_recorded", actor_type=ACTOR_HUMAN,
                     actor=actor, classification=EXEC_HUMAN_CONFIRMED,
@@ -1505,6 +1740,666 @@ class OccAgentService:
                     run.state, _states.SYNTHETIC_ONBOARDING_RUNNING):
                 return self.run_synthetic_onboarding(agent_case, actor=actor)
         return agent_case
+
+    # ------------------------------------------------------------------ #
+    # The mapping table: read it, then commit it
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _standing_client_defaults(agent_case: AgentCase) -> Dict[str, Any]:
+        """The regime's standing CLIENT fields, from the entity that holds the
+        role rather than from the loan tape.
+
+        ``config/regime/onboarding_standing_fields.yaml`` declares the
+        originator's name (RREL82), LEI (RREL83) and country of establishment
+        (RREL84) as ``standing_client``, ``source: derived``, ``derives_from:
+        the entity holding the originator role``. They are not columns in a
+        monthly extract, and a delivery stopped for want of them is asking the
+        client to restate per loan what they told us once at onboarding.
+        """
+        try:
+            originators = agent_case.case.entities_with_role("originator")
+        except Exception:                    # noqa: BLE001 — a case guard
+            return {}
+        if not originators:
+            return {}
+        entity = originators[0]
+        out: Dict[str, Any] = {}
+        for key, field_name in (
+                ("legal_name", "originator_name"),
+                ("lei", "originator_legal_entity_identifier"),
+                ("country_of_establishment",
+                 "originator_establishment_country")):
+            value = str(entity.get(key) or "").strip()
+            if value:
+                out[field_name] = value
+        return out
+
+    def _require_mapping_change(self, run: SyntheticRun) -> None:
+        """A mapping may be answered while the run is at the mapping stage,
+        and RE-answered at any point until the case activates.
+
+        Two permissions rather than one, because they are two different acts.
+        ``resolve_decision`` answers a question that is still open.
+        ``reopen_mapping`` takes back a reading the run has already settled,
+        which sends the run backwards and withdraws what rested on it — see
+        :meth:`_reopen_for_mapping_change`.
+        """
+        if _states.action_allowed(run.state, _states.ACTION_RESOLVE_DECISION):
+            return
+        if _states.action_allowed(run.state, _states.ACTION_REOPEN_MAPPING):
+            return
+        raise ActionNotAllowed(_states.ACTION_REOPEN_MAPPING, run.state)
+
+    def _reopen_for_mapping_change(self, run: SyntheticRun, *, actor: str,
+                                   columns: List[str]) -> bool:
+        """Put the run back at the mapping stage, and withdraw what rested on
+        the reading being changed.
+
+        A COMMITTED MAPPING IS NOT A PERMANENT ONE. It becomes permanent at
+        activation, when promotion writes it into the client's governed rules;
+        until then the whole rehearsal is provisional, and an operator who
+        reads a settled row and sees it is wrong must be able to say so. A
+        screen that says "You confirmed it" with nothing to click is telling
+        them their mistake is final when it is not.
+
+        WHAT IT COSTS, SAID OUT LOUD. Readiness was evaluated against the old
+        reading and activation may have been approved against it. Those
+        approvals were about a delivery that no longer exists, so they are
+        withdrawn here rather than left standing over a changed mapping — the
+        one outcome worse than not being able to go back is going back
+        silently and activating on an approval nobody would give again.
+        """
+        if run.state == _states.EXCEPTIONS_REQUIRE_INPUT:
+            return False
+        prior = run.state
+        withdrawn = [a["subject"] for a in run.approvals
+                     if a.get("decision") == "approved"
+                     and a.get("subject") in ("execution_readiness",
+                                              "configuration")]
+        for subject in withdrawn:
+            run.approvals.append({
+                "approval_id": new_id("appr"), "subject": subject,
+                "decision": "withdrawn", "actor": actor, "at": now_iso(),
+                "reason": "a mapping this approval rested on was re-opened"})
+        run.readiness_status = "not_evaluated"
+        run.readiness = {}
+        run.review_package_ref = ""
+        run.readiness_package_ref = ""
+        run.activation_intent = {}
+        self._move(run, _states.EXCEPTIONS_REQUIRE_INPUT)
+        self._audit(run, "mapping_reopened", actor_type=ACTOR_HUMAN,
+                    actor=actor, prior_state=prior,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis="an operator took back a mapping the "
+                                   "rehearsal had already settled",
+                    detail={"columns": columns,
+                            "approvals_withdrawn": withdrawn})
+        return True
+
+    def stage_mapping(self, agent_case: AgentCase, *, source_file: str,
+                      source_column: str, action: str, actor: str,
+                      target_field: str = "", reason: str = "",
+                      origin: str = _staging.ORIGIN_OPERATOR) -> AgentCase:
+        """What this operator says one column is. A draft, not an act.
+
+        Nothing is resolved, nothing is promoted and nothing reruns: the answer
+        is held on the run so it survives a refresh, and it can be replaced or
+        withdrawn until the set is committed. See :mod:`.staging`.
+        """
+        run = agent_case.run
+        self._require_mapping_change(run)
+        column = str(source_column or "").strip()
+        file_name = str(source_file or "").strip()
+        what = str(action or "").strip()
+        if what not in _staging.ACTIONS:
+            raise OpsError("OCC_AGENT_UNKNOWN_MAPPING_ACTION",
+                           "That is not something Trakt can record about a "
+                           "column.", http_status=400)
+        row = self._mapping_row(run, file_name, column)
+        if row is None:
+            raise OpsError("OCC_AGENT_COLUMN_NOT_FOUND",
+                           f"'{column}' is not a column Trakt read in "
+                           f"{file_name}.", http_status=404)
+        previous = _staging.find(run.staged_mappings, file_name, column)
+        run.staged_mappings = [
+            e for e in run.staged_mappings
+            if _staging.key(e.get("source_file"), e.get("source_column"))
+            != _staging.key(file_name, column)]
+        if what == _staging.ACTION_CLEAR:
+            # Undoing a set-aside a field request wrote takes the REQUEST back
+            # too. Leaving the ask standing over a column that has gone back to
+            # being proposed is the mapped-and-requested state this path exists
+            # to prevent, reached from the other end.
+            if _staging.is_request_driven(previous):
+                self._withdraw_field_request(
+                    run, file_name, column, actor=actor, at=now_iso(),
+                    why="the operator undid the set-aside the request made")
+            self.store.save(run)
+            return agent_case
+
+        field_name = str(target_field or "").strip()
+        if what == _staging.ACTION_CONFIRM:
+            # Confirming means "what is on the row is right", so the field is
+            # the row's own — taking one from the request would let a caller
+            # confirm a column onto a field the operator never saw.
+            field_name = str(row.get("canonical_field") or "")
+            if not field_name:
+                raise OpsError(
+                    "OCC_AGENT_NOTHING_TO_CONFIRM",
+                    f"Trakt has not read '{column}' as anything, so there is "
+                    "nothing to confirm. Name the field instead.",
+                    http_status=409)
+        elif what == _staging.ACTION_AMEND:
+            self._require_registry_field(agent_case, field_name)
+        else:
+            field_name = ""
+
+        # Answering a column the run has already SETTLED is a different act
+        # from answering one that is still open: it sends the run back to the
+        # mapping stage and withdraws the approvals that rested on the old
+        # reading. Done here, at the moment the operator says so, rather than
+        # at the commit — so the screen tells them immediately what their
+        # change costs instead of after they press the button.
+        if str(row.get("tier") or "") == "operator_approved":
+            self._reopen_for_mapping_change(run, actor=actor,
+                                            columns=[column])
+        decision_id, _, _ = _mapping_view.decision_for_column(
+            run.open_decisions, file_name, column)
+        run.staged_mappings.append(_staging.entry(
+            source_file=file_name, source_column=column, action=what,
+            target_field=field_name, decision_id=decision_id, actor=actor,
+            at=now_iso(), reason=reason, origin=origin))
+        # An ask for a new field and a decision about the column are two
+        # answers to one question; recording either withdraws the other.
+        if field_name:
+            self._withdraw_field_request(
+                run, file_name, column, actor=actor, at=now_iso(),
+                why="the column was given a field instead")
+        self.store.save(run)
+        return agent_case
+
+    def confirm_mappings(self, agent_case: AgentCase, *, actor: str,
+                         reason: str = "") -> AgentCase:
+        """THE act. Everything the operator staged, plus every untouched
+        proposal, applied in one go.
+
+        One act for them; one resolved decision per column on the record,
+        because that is what promotion turns into governed rules and what an
+        auditor asking "who said 'Month Run' was the cut-off date?" reads back.
+        Each column keeps the approver who STAGED it — the reading is the
+        judgement, and a second operator pressing the button has not done it.
+
+        Refused while a genuine question is unanswered. A proposal carries a
+        field and "confirm" means accepting it; a weak match or an ambiguity
+        carries no answer at all, and committing the set around one would be
+        the button inventing an answer nobody gave.
+        """
+        run = agent_case.run
+        self._require_mapping_change(run)
+        overview = _mapping_view.overview(run)
+        unanswered = overview["unanswered_questions"]
+        if unanswered:
+            raise OpsError(
+                "OCC_AGENT_QUESTIONS_UNANSWERED",
+                f"{unanswered} column{'s' if unanswered != 1 else ''} still "
+                f"need{'' if unanswered != 1 else 's'} an answer before the "
+                "mappings can be confirmed.", http_status=409)
+        staged = _staging.by_column(run.staged_mappings)
+        untouched = [d for d in run.open_decisions
+                     if _decision_type_of(d) == DECISION_MAPPING_PROPOSAL
+                     and str(d.get("status", "open")) in ("open", "pending")
+                     and _staging.key(
+                         (d.get("subject") or {}).get("source_file"),
+                         (d.get("subject") or {}).get("source_column"))
+                     not in staged]
+        if not staged and not untouched:
+            raise OpsError(
+                "OCC_AGENT_NOTHING_TO_CONFIRM",
+                "There are no mappings waiting to be confirmed.",
+                http_status=409)
+
+        at = now_iso()
+        applied: Dict[str, str] = {}
+        # ONE RESOLVED DECISION PER COLUMN, always.
+        #
+        # An ambiguity is one decision about SEVERAL columns, and the operator
+        # answers per column. Writing each of their answers onto that shared
+        # decision made the last one overwrite the rest: setting the losing
+        # column aside stamped "not used" on the decision, and
+        # `_approved_mappings` reads that as BOTH columns unused — including
+        # the one they had just confirmed. So each answer gets a record of its
+        # own, and the shared decision is settled separately, below, from the
+        # whole set of answers rather than from whichever came last.
+        for item in run.staged_mappings:
+            file_name = str(item.get("source_file") or "")
+            column = str(item.get("source_column") or "")
+            value = _staging.resolved_value(item)
+            decision = self._own_decision_for(run, file_name, column)
+            if decision is None:
+                decision = _field_registry.alias_decision(
+                    source_file=file_name, source_column=column,
+                    target_field=item.get("target_field") or "",
+                    actor=str(item.get("staged_by") or actor),
+                    reason=str(item.get("reason") or ""),
+                    at=str(item.get("staged_at") or at))
+                run.open_decisions.append(decision)
+            decision["status"] = "approved"
+            decision["resolution"] = _staging.RESOLUTION[item["action"]]
+            decision["resolved_value"] = value
+            decision["resolved_by"] = str(item.get("staged_by") or actor)
+            decision["resolved_at"] = str(item.get("staged_at") or at)
+            decision["reason"] = (str(item.get("reason") or "")
+                                  or reason or "confirmed with the mapping set")
+            applied[_mapping_key(file_name, column)] = value
+        self._settle_shared_decisions(run, actor=actor, at=at, reason=reason)
+        for decision in untouched:
+            subject = decision.get("subject") or {}
+            value = str(subject.get("target_field")
+                        or decision.get("target_field") or "")
+            decision["status"] = "approved"
+            decision["resolution"] = "approve"
+            decision["resolved_value"] = value
+            decision["resolved_by"] = actor
+            decision["resolved_at"] = at
+            decision["reason"] = reason or "confirmed as proposed"
+            applied[_mapping_key(str(subject.get("source_file") or ""),
+                                 str(subject.get("source_column") or ""))] = value
+
+        counts = _staging.summary(run.staged_mappings)
+        run.staged_mappings = []
+        self.store.save(run)
+        self._audit(run, "mappings_confirmed", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis=(reason or "the operator confirmed the "
+                                    "mappings for this delivery"),
+                    # Keyed by FILE and column, because every file in a pack
+                    # carries a loan identifier: keyed on the name alone, one
+                    # confirmation of three columns left one line in the record
+                    # and an auditor asking which file could not be answered.
+                    detail={"columns": len(applied),
+                            "as_proposed": len(untouched),
+                            "changed": counts[_staging.ACTION_AMEND],
+                            "set_aside": counts[_staging.ACTION_NOT_USED],
+                            "mappings": applied})
+        if not run.blocking_decisions():
+            if _states.is_transition_allowed(
+                    run.state, _states.SYNTHETIC_ONBOARDING_RUNNING):
+                return self.run_synthetic_onboarding(agent_case, actor=actor)
+        return agent_case
+
+    @staticmethod
+    def _own_decision_for(run: SyntheticRun, source_file: str,
+                          source_column: str) -> Optional[Dict[str, Any]]:
+        """The open decision about THIS column and no other, if there is one.
+
+        A decision naming several columns is deliberately not returned: it is
+        one question about the set and is settled from the whole set, not from
+        whichever of its columns the operator answered last.
+
+        Matched on the pair, falling back to the bare column name for a
+        decision recorded before decisions carried their file.
+        """
+        fallback = None
+        for decision in run.open_decisions:
+            # An ALREADY-RESOLVED decision about this column counts: the
+            # operator is re-answering it. Skipping it created a SECOND
+            # decision for the same column, and the rerun collapses decisions
+            # by id — so one of the two answers was silently dropped.
+            if str(decision.get("status", "open")) not in ("open", "approved",
+                                                           "pending"):
+                continue
+            subject = decision.get("subject") or {}
+            if len(subject.get("source_columns") or []) > 1:
+                continue
+            if str(subject.get("source_column") or "") != source_column:
+                continue
+            if str(subject.get("source_file") or "") == source_file:
+                return decision
+            if not subject.get("source_file"):
+                fallback = decision
+        return fallback
+
+    @staticmethod
+    def _settle_shared_decisions(run: SyntheticRun, *, actor: str, at: str,
+                                 reason: str) -> None:
+        """Close an ambiguity from the answers its columns were given.
+
+        "Which of these two is the balance?" is answered by the operator
+        keeping one and setting the other aside, and the decision records the
+        COLUMN that won — which is the shape ``_approved_mappings`` and
+        ``mapping_promotion`` both read for an ambiguity, and the opposite of
+        the shape a confirmation uses. If they set all of them aside, that is
+        an answer too: none of these is it.
+        """
+        staged = _staging.by_column(run.staged_mappings)
+        for decision in run.open_decisions:
+            if str(decision.get("status", "open")) not in ("open", "approved",
+                                                           "pending"):
+                continue
+            subject = decision.get("subject") or {}
+            columns = [str(c or "") for c in
+                       (subject.get("source_columns") or [])]
+            if len(columns) < 2:
+                continue
+            source_file = str(subject.get("source_file") or "")
+            answers = [staged.get(_staging.key(source_file, c))
+                       for c in columns]
+            if not all(answers):
+                continue          # still a question; the commit refused above
+            target = str(subject.get("target_field") or "")
+            winner = next((a for a in answers
+                           if a["action"] != _staging.ACTION_NOT_USED
+                           and a["target_field"] == target), None)
+            decision["status"] = "approved"
+            decision["resolution"] = "amend" if winner else "approve"
+            decision["resolved_value"] = (winner["source_column"] if winner
+                                          else _staging.NOT_USED_VALUE)
+            decision["resolved_by"] = str(
+                (winner or answers[0]).get("staged_by") or actor)
+            decision["resolved_at"] = str(
+                (winner or answers[0]).get("staged_at") or at)
+            decision["reason"] = (reason
+                                  or "settled with the mapping set")
+
+    def _require_registry_field(self, agent_case: AgentCase,
+                                field_name: str) -> None:
+        """A field an operator names has to be one this book reports on.
+
+        Said as two different sentences, because the remedies differ: a name
+        nothing in the registry has is a request, and a name this book cannot
+        use is a configuration question about the book.
+        """
+        name = str(field_name or "").strip()
+        if not name:
+            raise OpsError("OCC_AGENT_FIELD_REQUIRED",
+                           "Name the field this column feeds.",
+                           http_status=400)
+        facts = self.facts(agent_case)
+        if _field_registry.known_field(name, facts.asset_class):
+            return
+        if _field_registry.registered_anywhere(name):
+            raise OpsError(
+                "OCC_AGENT_FIELD_NOT_FOR_THIS_BOOK",
+                f"'{name}' is a Trakt field, but not one this asset class "
+                "reports on.", http_status=409)
+        raise OpsError(
+            "OCC_AGENT_FIELD_NOT_REGISTERED",
+            f"Trakt has no field called '{name}'. If it genuinely does not "
+            "exist, request it as a new field instead.", http_status=409)
+
+    # ------------------------------------------------------------------ #
+    # Columns that matched nothing
+    # ------------------------------------------------------------------ #
+    def field_catalogue(self, agent_case: AgentCase) -> List[Dict[str, Any]]:
+        """Every canonical field this book may map an unmapped column to."""
+        facts = self.facts(agent_case)
+        return _field_registry.catalogue(facts.asset_class,
+                                         regime=facts.regime or "")
+
+    def map_unmapped_column(self, agent_case: AgentCase, *, source_file: str,
+                            source_column: str, target_field: str, actor: str,
+                            reason: str = "") -> AgentCase:
+        """An operator naming the existing field a column feeds.
+
+        The column matched nothing, so nothing asked about it and there is no
+        decision to answer — the operator is volunteering knowledge the
+        platform did not have. It STAGES like every other answer on this table,
+        and ``confirm_mappings`` turns it into a resolved decision: that is the
+        shape promotion reads, so this client's name for the field becomes a
+        governed rule at activation and the next delivery matches it without
+        asking.
+        """
+        return self.stage_mapping(
+            agent_case, source_file=source_file, source_column=source_column,
+            action=_staging.ACTION_AMEND, target_field=target_field,
+            actor=actor,
+            reason=reason or "an operator named the field this column feeds")
+
+    def request_registry_field(self, agent_case: AgentCase, *,
+                               source_file: str, source_column: str,
+                               field_name: str, actor: str, label: str = "",
+                               description: str = "", data_type: str = "",
+                               reason: str = "") -> AgentCase:
+        """An ask for a canonical field the platform does not have.
+
+        Recorded, not created. Adding a field changes the vocabulary every
+        client's report is written in, and it has its own governed route — a
+        versioned system config package an administrator drafts and activates.
+        The column stays unmapped in this delivery, visibly, so nobody reads a
+        request as a mapping.
+
+        THE COLUMN IS SET ASIDE HERE, which is what makes the sentence above
+        true. It used to record the ask and touch nothing else, and that was
+        only harmless while a request could only come from a column that
+        matched nothing. It cannot: "Change" opens the same dialog on ANY row,
+        so a column with a live proposal could be requested as a new field and
+        keep its proposal — and the commit approves every untouched proposal.
+        One column would be mapped and requested at once. That is how
+        'ERCs Paid in the period' — a money column — came to sit on a standing
+        request for ``early_repayment_charge_amount_in_period`` while still
+        proposed onto ``early_repayment_charge``, which is a Y/N field: a
+        decimal heading into a boolean parser, with a governed rule promoted
+        for it at activation.
+
+        Asking for a new field IS saying Trakt has no field for this column, so
+        it is staged like any other answer — as a draft, reversible until the
+        set is committed, and released again if the ask is withdrawn.
+        """
+        run = agent_case.run
+        # The same permission a mapping change needs, rather than
+        # `resolve_decision` alone: this now stages an answer, and answering a
+        # column the run has already settled is the act `reopen_mapping`
+        # governs.
+        self._require_mapping_change(run)
+        column = str(source_column or "").strip()
+        file_name = str(source_file or "").strip()
+        if not column or not file_name:
+            raise OpsError("OCC_AGENT_COLUMN_REQUIRED",
+                           "Name the file and the column this request is "
+                           "about.", http_status=400)
+        row = self._mapping_row(run, file_name, column)
+        if row is None:
+            raise OpsError("OCC_AGENT_COLUMN_NOT_FOUND",
+                           f"'{column}' is not a column Trakt read in "
+                           f"{file_name}.", http_status=404)
+        name = _field_registry.validate_field_name(field_name)
+        facts = self.facts(agent_case)
+        if _field_registry.known_field(name, facts.asset_class):
+            raise OpsError(
+                "OCC_AGENT_FIELD_ALREADY_REGISTERED",
+                f"Trakt already reports on '{name}'. Map the column to it "
+                "instead of requesting it again.", http_status=409)
+        at = now_iso()
+        request = _field_registry.field_request(
+            source_file=file_name, source_column=column, field_name=name,
+            label=label, description=description, data_type=data_type,
+            actor=actor, at=at,
+            samples=self._sample_values(run, file_name, column))
+        # SUPERSEDED BY WHAT IT IS ABOUT, not by its id. A request IS its
+        # (file, column): asking twice about one column is one ask, restated.
+        # Keying on the id made that true only while the id scheme held still,
+        # and it has since changed — so a request made under the old scheme
+        # would not have been replaced by the same ask under the new one, and
+        # the case would carry the column twice.
+        run.field_requests = [
+            r for r in run.field_requests
+            if _staging.key(r.get("source_file"), r.get("source_column"))
+            != _staging.key(file_name, column)] + [request]
+        # SET THE COLUMN ASIDE, so the commit leaves it out. An answer the
+        # operator has already given by hand is left exactly as it is: they
+        # have read this column and said what it is, and a request about it
+        # does not overrule that — nor should withdrawing the request later
+        # release a set-aside they meant.
+        existing = _staging.find(run.staged_mappings, file_name, column)
+        if existing is None or str(existing.get("action") or "") != \
+                _staging.ACTION_NOT_USED:
+            self.stage_mapping(
+                agent_case, source_file=file_name, source_column=column,
+                action=_staging.ACTION_NOT_USED, actor=actor,
+                origin=_staging.ORIGIN_REQUEST,
+                reason=f"an operator asked for a new field, '{name}', for "
+                       f"this column")
+        self.store.save(run)
+        self._audit(run, "field_registry_requested", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=request["request_id"],
+                    decision_basis=(reason or description
+                                    or "an operator asked for a canonical "
+                                       "field the registry does not have"),
+                    detail={"field_name": name, "source_file": file_name,
+                            "source_column": column,
+                            "route": request["route"]})
+        return agent_case
+
+    def declare_source_unit(self, agent_case: AgentCase, *,
+                            field: str, unit: str, actor: str) -> AgentCase:
+        """Say which scale the lender writes a percentage on.
+
+        THE REMEDY A BLOCKER HAD NO ROUTE TO. A lender stating loan-to-value as
+        ``0.35`` where the platform means ``35`` fails every consistency check
+        on the field, at an error rate the policy escalates to BLOCKING — and
+        nothing on that screen let an operator say which scale was meant. The
+        transform reconciles the two where it can see a balance and a valuation
+        to reconcile against; where it cannot, this is the answer.
+
+        NEVER INFERRED FROM MAGNITUDE. "Small numbers must be fractions" is
+        wrong for a genuinely small ratio and the mistake is invisible
+        afterwards, so the platform declines to guess and asks instead.
+
+        An empty ``unit`` withdraws the declaration and puts the field back to
+        reconciliation, which is the default and is usually right.
+        """
+        run = agent_case.run
+        # The same permission a mapping change needs: this changes how a
+        # confirmed column is READ, which is the act `reopen_mapping` governs.
+        self._require_mapping_change(run)
+        name = str(field or "").strip()
+        said = str(unit or "").strip().lower()
+        allowed = _execution.percentage_scaled_fields()
+        if name not in allowed:
+            raise OpsError(
+                "OCC_AGENT_NOT_A_PERCENTAGE_FIELD",
+                f"'{name}' is not a field Trakt holds on a percentage scale, "
+                "so there is no unit to declare for it.", http_status=400)
+        if said and said not in _execution.SOURCE_UNITS:
+            raise OpsError(
+                "OCC_AGENT_UNKNOWN_SOURCE_UNIT",
+                f"'{unit}' is not a scale Trakt reads. Use "
+                f"{' or '.join(_execution.SOURCE_UNITS)}.", http_status=400)
+        units = dict(run.source_units or {})
+        if said:
+            units[name] = said
+        else:
+            units.pop(name, None)
+        run.source_units = units
+        self.store.save(run)
+        self._audit(run, "source_unit_declared", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=name,
+                    decision_basis=(f"the lender writes {name} as {said}"
+                                    if said else
+                                    f"the declared scale for {name} was "
+                                    "withdrawn; Trakt reconciles it again"),
+                    detail={"field": name, "source_unit": said})
+        return agent_case
+
+    def withdraw_registry_field_request(self, agent_case: AgentCase, *,
+                                        source_file: str, source_column: str,
+                                        actor: str, reason: str = ""
+                                        ) -> AgentCase:
+        """Take back an ask, and with it the set-aside the ask imposed.
+
+        The request is what put this column out of the delivery, so withdrawing
+        it has to put the column back — otherwise taking back a mistaken ask
+        would silently leave the column unused, which is the opposite of what
+        the operator meant and invisible until the report came back short.
+
+        Only a set-aside THIS request wrote is released. One the operator
+        staged by hand stands: they said the column feeds nothing, and an
+        unrelated ask being withdrawn is not them changing their mind.
+        """
+        run = agent_case.run
+        self._require_mapping_change(run)
+        file_name = str(source_file or "").strip()
+        column = str(source_column or "").strip()
+        withdrawn = self._withdraw_field_request(
+            run, file_name, column, actor=actor, at=now_iso(),
+            why=reason or "withdrawn by the operator")
+        if not withdrawn:
+            raise OpsError("OCC_AGENT_FIELD_REQUEST_NOT_FOUND",
+                           "There is no open field request for that column.",
+                           http_status=404)
+        if _staging.is_request_driven(
+                _staging.find(run.staged_mappings, file_name, column)):
+            run.staged_mappings = [
+                e for e in run.staged_mappings
+                if _staging.key(e.get("source_file"), e.get("source_column"))
+                != _staging.key(file_name, column)]
+        self.store.save(run)
+        self._audit(run, "field_registry_request_withdrawn",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=withdrawn["request_id"],
+                    decision_basis=reason or "withdrawn by the operator")
+        return agent_case
+
+    @staticmethod
+    def _withdraw_field_request(run: SyntheticRun, source_file: str,
+                                source_column: str, *, actor: str, at: str,
+                                why: str) -> Optional[Dict[str, Any]]:
+        """Mark an open request withdrawn. Kept, never deleted: an ask that was
+        made and taken back is part of the record of what happened."""
+        for request in run.field_requests:
+            if (request.get("source_file") == source_file
+                    and request.get("source_column") == source_column
+                    and request.get("status") == _field_registry.REQUEST_OPEN):
+                request["status"] = _field_registry.REQUEST_WITHDRAWN
+                request["withdrawn_by"] = actor
+                request["withdrawn_at"] = at
+                request["withdrawn_because"] = why
+                return request
+        return None
+
+    @staticmethod
+    def _mapping_row(run: SyntheticRun, source_file: str,
+                     source_column: str) -> Optional[Dict[str, Any]]:
+        """The report row for one column of one file, or None if Trakt never
+        read it. Stops a mapping being recorded against a column that is not
+        in the delivery — a typo would otherwise promote into a governed rule
+        that silently matches nothing every month."""
+        for row in run.mapping_report or []:
+            if (str(row.get("source_file") or "") == source_file
+                    and str(row.get("source_column") or "") == source_column):
+                return row
+        return None
+
+    def _sample_values(self, run: SyntheticRun, source_file: str,
+                       source_column: str) -> List[str]:
+        """A few real values from the column, for whoever reads the request.
+
+        Best effort: the files are rebuilt from durable storage and may not be
+        present on this instance, and a request with no samples is still a
+        request worth recording.
+        """
+        try:
+            for path in self._artefact_paths(run):
+                if path.name != source_file:
+                    continue
+                table = _workbook.read_table(path)
+                if table.frame is None or source_column not in table.frame:
+                    return []
+                series = table.frame[source_column].dropna().astype(str)
+                seen: List[str] = []
+                for value in series:
+                    text = value.strip()
+                    if text and text not in seen:
+                        seen.append(text)
+                    if len(seen) >= 5:
+                        break
+                return seen
+        except Exception:                  # noqa: BLE001 — never a crash here
+            return []
+        return []
 
     def acknowledge_exception(self, agent_case: AgentCase, *, decision_id: str,
                               actor: str, reason: str = "") -> AgentCase:
@@ -1748,6 +2643,41 @@ class OccAgentService:
                             "operator_actions": len(package.operator_actions)})
         return agent_case
 
+    def _record_sample_from_pack(self, agent_case: AgentCase, *,
+                                 actor: str) -> None:
+        """Tell the onboarding case what the pack on this run actually is.
+
+        Recorded, never fatal — a sample that cannot be registered must not
+        stop an approval.
+        """
+        if agent_case.case.status in TERMINAL:
+            return
+        try:
+            agent_case.case = self.onboarding.register_sample(
+                case_id=agent_case.case_ref,
+                files=sample_manifest(
+                    self.artefacts.classify(agent_case.run.artefacts())[0]),
+                by=actor)
+        except OpsError as exc:
+            logger.warning("occ_agent: sample not registered for %s: %s",
+                           agent_case.run.case_ref, exc)
+
+    def _clear_settled_blockers(self, agent_case: AgentCase) -> None:
+        """``run.blockers`` is the CURRENT obstacle, not a history of them.
+
+        It was written by :meth:`_block` and by an activation failure, and
+        cleared by nothing. So a case that recovered went on showing what used
+        to be wrong: a readiness panel reading "13 of 13 criteria passed,
+        blocking exceptions cleared" beside a "What's in the way" naming a
+        check that no longer blocks — and, once volume stopped promoting a
+        warning to BLOCKING, naming a materiality the platform can no longer
+        produce. The history is in the audit trail, which is where a history
+        belongs.
+        """
+        run = agent_case.run
+        if run.blockers and self._verdict(agent_case).ready:
+            run.blockers = []
+
     def approve_activation(self, agent_case: AgentCase, *, actor: str,
                            reason: str = "") -> AgentCase:
         """A human approves the configuration for activation.
@@ -1769,6 +2699,16 @@ class OccAgentService:
             "reason": reason or "Configuration approved for activation.",
             "review_package_ref": run.review_package_ref})
         prior = self._move(run, _states.APPROVED_FOR_ACTIVATION)
+        # THE PACK THIS CONFIGURATION IS FOR, stated once more before the
+        # expectation derived from it is written. Every other point that
+        # records the sample — an upload, a removal, the start of a run — is
+        # unreachable from here: no state past the rehearsal permits
+        # ACTION_REGISTER_ARTEFACT or ACTION_RUN_ONBOARDING, so an operator
+        # whose expected delivery was recorded from a smaller pack had nothing
+        # left to press but `reopen_mapping`, which withdraws the approvals
+        # they had just spent the session earning.
+        self._record_sample_from_pack(agent_case, actor=actor)
+        self._clear_settled_blockers(agent_case)
         intent = self._intent(agent_case)
         run.activation_intent = intent.to_dict()
         self._move(run, _states.ACTIVATION_CONFIRMATION_REQUIRED)
@@ -1858,8 +2798,19 @@ class OccAgentService:
                                        "the governed store for activation",
                         output_reference=run.case_ref)
 
-        result = self.adapter.activate(pre=pre, intent=intent, actor=actor,
-                                       payloads=self._payloads(run))
+        # The run's decisions travel with the activation so the mappings a
+        # human settled during the rehearsal become governed rules the ingest
+        # can read. The LIVE adapter promotes them; the synthetic one discards
+        # them, so an unactivated rehearsal still leaves nothing behind.
+        # The run's field requests travel with it too. The LIVE adapter turns
+        # them into a draft system configuration version for a configuration
+        # owner; the synthetic one discards them, so an unactivated rehearsal
+        # leaves no proposal behind either.
+        result = self.adapter.activate(
+            pre=pre, intent=intent, actor=actor,
+            payloads=self._payloads(run),
+            decisions=list(run.open_decisions or []),
+            field_requests=list(run.field_requests or []))
         run.activation_result = result.to_dict()
         if result.ok:
             self._move(run, _states.INGESTION_STARTED)
@@ -1886,6 +2837,154 @@ class OccAgentService:
                     decision_basis=result.message,
                     detail=result.to_dict())
         return agent_case
+
+    def correct_live_mappings(self, agent_case: AgentCase, *,
+                              corrections: List[Dict[str, str]], actor: str,
+                              reason: str = "") -> List[Dict[str, str]]:
+        """Correct what an ACTIVATED case says about particular columns, then
+        carry the case forward.
+
+        ``corrections`` are ``{source_file, source_column, target_field}``; an
+        empty ``target_field`` sets that column of that file aside.
+
+        THE CASE STAYS THE RECORD. The mapping table is closed once a case is
+        live, and writing a rule around it would leave the case saying one
+        thing and the store another — the defect this whole delivery kept
+        hitting. So the correction is made ON the case's decisions, audited,
+        and the rules are re-derived from them by the same promotion as
+        activation. Re-running the carry-forward later reproduces it.
+
+        A DECISION WITH NO FILE IS SPLIT FIRST. Decisions recorded before they
+        carried their file speak for every file with that column name — ERE's
+        one "Post Code" answer set the column aside in the property extract as
+        well as the loan extract. Correcting one file therefore replaces that
+        decision with one per file of the case, each keeping the original
+        answer, and then changes only the file named. The original is kept,
+        marked as split, for the audit trail.
+        """
+        self._require_live_activated(agent_case)
+        run = agent_case.run
+        files = [a.source_file for a in run.artefacts()]
+        at = now_iso()
+        norm = lambda c: " ".join(str(c or "").split()).lower()   # noqa: E731
+        applied: List[Dict[str, str]] = []
+        for fix in corrections or []:
+            source_file = str(fix.get("source_file") or "").strip()
+            column = str(fix.get("source_column") or "").strip()
+            target = str(fix.get("target_field") or "").strip()
+            if source_file not in files:
+                raise OpsError("OCC_AGENT_FILE_NOT_IN_CASE",
+                               f"'{source_file}' is not a file of this case.",
+                               http_status=404)
+            if not column:
+                raise OpsError("OCC_AGENT_COLUMN_REQUIRED",
+                               "Name the column to correct.", http_status=400)
+            if target:
+                self._require_registry_field(agent_case, target)
+            self._split_file_less_decisions(run, column, files, at=at)
+            decision = next(
+                (d for d in run.open_decisions
+                 if len((d.get("subject") or {}).get("source_columns") or []) < 2
+                 and norm((d.get("subject") or {}).get("source_column")) == norm(column)
+                 and str((d.get("subject") or {}).get("source_file") or "")
+                 == source_file
+                 and str(d.get("status") or "") in ("open", "approved", "pending")),
+                None)
+            if decision is None:
+                decision = {"decision_id": new_id("dec"),
+                            "decision_type": _mapping_promotion.PROPOSAL,
+                            "subject": {"source_file": source_file,
+                                        "source_column": column,
+                                        "target_field": target}}
+                run.open_decisions.append(decision)
+            decision["status"] = "approved"
+            if target:
+                decision["resolution"] = "amend"
+                decision["resolved_value"] = target
+            else:
+                decision["resolution"] = _staging.RESOLUTION[
+                    _staging.ACTION_NOT_USED]
+                decision["resolved_value"] = _staging.NOT_USED_VALUE
+            decision["resolved_by"] = actor
+            decision["resolved_at"] = at
+            decision["reason"] = reason or "corrected after activation"
+            applied.append({"source_file": source_file, "source_column": column,
+                            "target_field": target or "(not used)"})
+        self.store.save(run)
+        self._audit(run, "mappings_corrected_after_activation",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis=reason or "an operator corrected what the "
+                                             "case says about these columns",
+                    detail={"corrections": applied})
+        return self.carry_mappings_forward(agent_case, actor=actor)
+
+    @staticmethod
+    def _split_file_less_decisions(run: SyntheticRun, column: str,
+                                   files: List[str], *, at: str) -> None:
+        """Replace a settled decision about ``column`` that names no file with
+        one per file of the case. See ``correct_live_mappings``."""
+        norm = lambda c: " ".join(str(c or "").split()).lower()   # noqa: E731
+        for decision in list(run.open_decisions):
+            subject = decision.get("subject") or {}
+            if (subject.get("source_file")
+                    or len(subject.get("source_columns") or []) > 1
+                    or norm(subject.get("source_column")) != norm(column)
+                    or str(decision.get("status") or "") != "approved"):
+                continue
+            for source_file in files:
+                copy = json.loads(json.dumps(decision))
+                copy["decision_id"] = f"{decision.get('decision_id')}::{source_file}"
+                copy.setdefault("subject", {})["source_file"] = source_file
+                copy["split_from"] = decision.get("decision_id")
+                run.open_decisions.append(copy)
+            decision["status"] = "split"
+            decision["split_at"] = at
+
+    def _require_live_activated(self, agent_case: AgentCase) -> None:
+        engine = getattr(self.adapter, "engine", None)
+        if self.adapter.mode != _adapters.MODE_LIVE \
+                or getattr(engine, "rules", None) is None:
+            raise OpsError("OCC_AGENT_NOT_LIVE",
+                           "Mappings reach the governed rules only in live "
+                           "mode.", http_status=409)
+        if not agent_case.case.activated_version:
+            raise OpsError("OCC_AGENT_NOT_ACTIVATED",
+                           "This case has not been activated; its mappings "
+                           "are promoted when it is.", http_status=409)
+
+    def carry_mappings_forward(self, agent_case: AgentCase, *,
+                               actor: str) -> List[Dict[str, str]]:
+        """Write an ACTIVATED case's settled mappings into the governed rules
+        again, set-asides included.
+
+        WHY THIS EXISTS. Promotion runs once, at activation. A case activated
+        before set-asides were promoted crossed the doorway with its mappings
+        but without its removals, and there is no second doorway: the mapping
+        table is closed once a case is live, so the operator cannot re-commit
+        and the choices they made column by column stay on the practice run,
+        unread. This re-reads the same settled decisions and promotes them by
+        the same governed path. It is idempotent in effect — a rule restated
+        with the same content becomes its next version — and audited.
+
+        Only for a case that has activated, in live mode: a rehearsal must
+        still leave nothing in the governed store.
+        """
+        run = agent_case.run
+        self._require_live_activated(agent_case)
+        rules = self.adapter.engine.rules
+        facts = self.facts(agent_case)
+        written = _mapping_promotion.promote(
+            rules, list(run.open_decisions or []),
+            client_id=facts.client_id, portfolio_id=facts.portfolio_id,
+            workflow_id=run.case_ref)
+        self._audit(run, "mappings_carried_forward", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis="the case's settled mappings, including "
+                                   "the columns set aside, were written to "
+                                   "the governed rules",
+                    detail={"rules": written})
+        return written
 
     def activation_preconditions(self, agent_case: AgentCase, *,
                                  confirmed: bool) -> ActivationPreconditions:
@@ -1918,6 +3017,7 @@ class OccAgentService:
             tenant=run.tenant,
             client_id=facts.client_id,
             portfolio_id=facts.portfolio_id,
+            asset_class=facts.asset_class,
             configuration_valid=bool(preview.get("artefacts")) and not problems,
             configuration_problems=problems,
             artefacts_present=len(run.received_artefacts),
@@ -1933,11 +3033,22 @@ class OccAgentService:
         files = [{"name": a.source_file, "target": a.intended_live_uri,
                   "sha256": a.sha256} for a in run.artefacts()]
         preview = self._safe_preview(agent_case)
+        # WHAT WOULD BE PROMOTED, COUNTED WITHOUT PROMOTING IT.
+        # `rules_from` builds the records and persists nothing, for exactly
+        # this: showing an operator what activation would add to the client's
+        # standing rules before they agree to it.
+        promotable = _mapping_promotion.rules_from(
+            list(run.open_decisions or []),
+            client_id=facts.client_id, portfolio_id=facts.portfolio_id,
+            workflow_id="")
         return _adapters.build_intent(
             agent_case.case, facts, reporting_period=run.reporting_period,
             files=files,
             configuration_artefacts=[str(a.get("path") or a.get("name") or a)
-                                     for a in (preview.get("artefacts") or [])])
+                                     for a in (preview.get("artefacts") or [])],
+            mappings=len([r for r in promotable
+                          if not _mapping_promotion.is_set_aside(r)]),
+            field_requests=len(run.field_requests or []))
 
     def _payloads(self, run: SyntheticRun) -> Dict[str, bytes]:
         """The bytes behind the intent's files, rebuilt from durable storage.
@@ -2162,7 +3273,13 @@ class OccAgentService:
                 agent_case, actor=actor,
                 confirmation=payload.get("confirmation", ""))
         if action == _states.ACTION_CANCEL:
-            return self.cancel(agent_case, actor=actor)
+            # The reason is carried, not dropped. This called cancel() with no
+            # reason at all, so the audit read "cancelled by the operator" and
+            # the withdrawal read "The practice case was cancelled." whatever
+            # the operator had actually typed. The governed dialog refuses a
+            # blank reason; the chat path collected one and threw it away.
+            return self.cancel(agent_case, actor=actor,
+                               reason=payload.get("reason", ""))
         raise ActionNotAllowed(action, agent_case.run.state)  # pragma: no cover
 
     def _resolve_from_language(self, agent_case: AgentCase,
@@ -2531,8 +3648,19 @@ class OccAgentService:
             "readiness": verdict.to_dict(),
             "policy": self.policy.to_dict(),
             "open_decisions": run.open_decisions,
+            # Every source column and what became of it — including the ones
+            # the mapper settled on its own, which are the majority and were
+            # not visible anywhere before.
+            "mapping": _mapping_view.overview(run),
             "observations": run.observations,
-            "blockers": run.blockers,
+            # WHAT IS IN THE WAY NOW. `run.blockers` is written by `_block`
+            # and cleared by nothing, so a case that recovered kept reporting
+            # what used to stop it — a readiness panel reading "13 of 13
+            # criteria passed, blocking exceptions cleared" beside a "What's in
+            # the way" naming a check that no longer blocks, in the same
+            # payload, from the same verdict that is already in scope here.
+            # The history stays in the audit trail, where a history belongs.
+            "blockers": [] if verdict.ready else list(run.blockers or []),
             "occ_links": _occ_links(case, run),
             # The client-facing half: what has been drafted, approved and
             # issued, and — honestly — whether anything actually left Trakt.
@@ -2604,20 +3732,37 @@ class OccAgentService:
 
     @staticmethod
     def _approved_mappings(run: SyntheticRun) -> Dict[str, str]:
-        """source column -> canonical field, from resolved mapping decisions.
+        """``file::column`` -> canonical field, from resolved mapping decisions.
 
         An empty target means "do not use this column", which is how the losing
         side of an ambiguity is recorded: both columns are answered, so the next
         run has nothing left to ask about.
+
+        KEYED ON THE PAIR, NOT THE NAME. Every file in a pack carries a loan
+        identifier and most carry a valuation date, so a flat column-name key
+        made an answer about the property extract's 'Pool' an answer about the
+        tape's. A decision that predates file-scoping carries no
+        ``source_file``; it is keyed on the bare name, which the adapter reads
+        as the fallback it always was.
         """
         out: Dict[str, str] = {}
-        for decision in run.open_decisions:
+        # A decision about SEVERAL columns is read first, so a per-column
+        # answer written later wins. An ambiguity says which of two columns is
+        # the balance; each of those columns then has its own record saying
+        # what it feeds, and that record is the operator's actual answer about
+        # that column. Read the other way round, setting the losing column
+        # aside would drop the winning one too.
+        for decision in sorted(
+                run.open_decisions,
+                key=lambda d: len((d.get("subject") or {}).get(
+                    "source_columns") or []) < 2):
             if decision.get("status") != "approved":
                 continue
             subject = decision.get("subject") or {}
             target = str(subject.get("target_field") or "")
             columns = [str(c) for c in (subject.get("source_columns") or [])]
             primary = str(subject.get("source_column") or "")
+            source_file = str(subject.get("source_file") or "")
             if not primary and not columns:
                 continue
             value = str(decision.get("resolved_value") or "")
@@ -2633,11 +3778,12 @@ class OccAgentService:
                 chosen, target_field = primary, value
             else:
                 chosen, target_field = primary, target
+            key = (lambda c: _mapping_key(source_file, c) if source_file else c)
             if chosen:
-                out[chosen] = target_field
+                out[key(chosen)] = target_field
             for column in columns:
                 if column != chosen:
-                    out[column] = ""       # the losing candidate is not used
+                    out[key(column)] = ""  # the losing candidate is not used
         return out
 
     @staticmethod
@@ -2694,6 +3840,18 @@ _AGENT_FOR_STEP = {
     "stamp": "Provenance stamping",
 }
 
+def _decision_type_of(decision: Dict[str, Any]) -> str:
+    """What kind of decision this is, from either shape it may be in.
+
+    The adapter's raw row keeps it at the top level; the run's card keeps it
+    under ``subject``. Both reach this module.
+    """
+    value = decision.get("decision_type")
+    if value in (None, ""):
+        value = (decision.get("subject") or {}).get("decision_type")
+    return str(value or "")
+
+
 def _raw_decisions(run_root: Path) -> Dict[str, Dict[str, Any]]:
     """The adapter's own pending-decision rows, keyed by decision id.
 
@@ -2724,8 +3882,17 @@ def _decision_card(decision,
     subject = dict(d.get("subject") or {})
     source = (raw or {}).get(str(subject.get("decision_id") or ""))
     if source:
+        # Carried so the run's own copy of a decision still says WHAT KIND it
+        # is. Dropping it made promotion silently no-op: every card reported an
+        # empty decision type and every settled mapping failed the first test.
+        subject.setdefault("decision_type", source.get("decision_type", ""))
         subject.setdefault("source_column", source.get("source_column", ""))
         subject.setdefault("source_columns", source.get("source_columns", []))
+        # WHICH FILE'S COLUMN. Every file in a pack carries a loan identifier
+        # and most carry a valuation date, so a card that says only "Pool"
+        # names three different columns at once — and the table, which matched
+        # rows to decisions on the name alone, marked all three.
+        subject.setdefault("source_file", source.get("source_file", ""))
         subject.setdefault("target_field", source.get("target_field", ""))
         subject.setdefault("proposed_mapping",
                            source.get("proposed_mapping", ""))
@@ -2819,10 +3986,25 @@ def _reached_states(run: SyntheticRun) -> set:
 
 def _occ_links(case: OnboardingCase, run: SyntheticRun) -> List[Dict[str, str]]:
     """Deep links into the EXISTING OCC views, rather than reproducing them."""
-    links = [
-        {"label": "Client onboarding", "to": f"/onboarding/{case.case_id}",
-         "why": "The onboarding case itself, in the screens an operator "
-                "normally works it in."},
+    links: List[Dict[str, str]] = []
+    # THE ONBOARDING CASE, only once there is one to open.
+    #
+    # This link was offered on every case and was broken on all of them, twice
+    # over. An Agent case lives in the synthetic container and reaches the
+    # governed one at activation, through `promotion.promote`, so the governed
+    # wizard 404s on anything earlier. And the path was `/onboarding/{id}`,
+    # which is not a route at all — the wizard is `/onboarding/cases/{id}`,
+    # which is what Client Onboarding's own home links to.
+    #
+    # A link an operator cannot follow is worse than no link: it reads as the
+    # place the real work lives, so its failure reads as the case being lost.
+    if case.status == ACTIVATED:
+        links.append(
+            {"label": "Client onboarding",
+             "to": f"/onboarding/cases/{case.case_id}",
+             "why": "The activated onboarding case, in the screens an operator "
+                    "normally works it in."})
+    links += [
         {"label": "Platform configuration", "to": "/admin/config",
          "why": "The asset, regime and system packages this case resolved "
                 "against."},

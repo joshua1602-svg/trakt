@@ -36,7 +36,18 @@ HISTORICAL = {"KFI": 0.31, "OFFER": 0.77}
 
 
 class TestProbabilityHierarchy(unittest.TestCase):
-    """Each tier of the governed hierarchy, and each precedence boundary."""
+    """Each tier of the governed hierarchy, and each precedence boundary.
+
+    The tier MECHANICS are tested with every open stage forecast; which stages
+    the shipped config forecasts (KFI is top of funnel, not weighted) is
+    pinned separately in ``TestForecastStages``."""
+
+    def setUp(self):
+        from unittest import mock
+        from mi_agent_api import pipeline_prep
+        patcher = mock.patch.object(pipeline_prep, "_forecast_stages", lambda: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _run(self, stages, explicit=None, historical=HISTORICAL, configured=STAGE_PROBS):
         out = pd.DataFrame({"pipeline_stage": stages})
@@ -105,6 +116,22 @@ class TestProbabilityHierarchy(unittest.TestCase):
                          "historical_stage_rate")
         self.assertEqual(out.loc[3, "completion_probability_source"],
                          "excluded_withdrawn")
+
+
+class TestForecastStages(unittest.TestCase):
+    """The shipped config forecasts Applications and Offers; a KFI is open
+    pipeline with zero expected-funding weight (the run-off method treats the
+    KFI stage as reference only)."""
+
+    def test_a_kfi_is_not_forecast(self):
+        out = pd.DataFrame({"pipeline_stage": ["KFI", "OFFER", "WITHDRAWN"],
+                            "current_outstanding_balance": [100.0, 200.0, 300.0]})
+        _derive_probabilities_and_amounts(out, STAGE_PROBS, HISTORICAL, [])
+        src = list(out["completion_probability_source"])
+        self.assertEqual(src, ["not_forecast_kfi", "historical_stage_rate",
+                               "excluded_withdrawn"])
+        self.assertEqual(out["completion_probability"].iloc[0], 0.0)
+        self.assertEqual(out["weighted_expected_funded_amount"].iloc[0], 0.0)
 
 
 class TestExpectedCompletionDerivation(unittest.TestCase):

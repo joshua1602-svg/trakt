@@ -305,9 +305,16 @@ def _resolve_central_tape(
         stats["row_count"] = int(tape_result.get("loan_count", stats["row_count"]))
         stats["field_count"] = int(tape_result.get("mapped_field_count", stats["field_count"]))
         return stats
-    except Exception:
+    except Exception as exc:
+        # THE REASON SURVIVES. This caught everything and returned "no tape",
+        # so a precise, actionable failure — ExpectedBalanceCheckError names the
+        # tolerance it broke and the debug file that shows the working — reached
+        # the operator as nothing at all. Building the tape may still fail
+        # without taking the handoff down with it, but what failed is carried
+        # out rather than discarded at the point it was known.
         return {"path": str(central), "exists": False, "row_count": 0,
-                "field_count": 0, "lineage_path": str(lineage)}
+                "field_count": 0, "lineage_path": str(lineage),
+                "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _central_stats(central: Path, lineage: Path) -> Dict[str, Any]:

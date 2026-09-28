@@ -182,6 +182,27 @@ describe("OCC Agent tab — the operating loop", () => {
     vi.unstubAllEnvs();
   });
 
+  /**
+   * Walk a prepared example as far as it goes.
+   *
+   * A FIRST ONBOARDING NOW STOPS ONCE, to have its proposed mappings approved —
+   * "clean" means no exceptions, not no approval. The walk therefore includes
+   * that act, exactly as the Python scenario harness settles the decisions a
+   * run raises. A test about readiness should not have to know that; a test
+   * ABOUT the approval drives it explicitly (see MappingTable.test.tsx).
+   */
+  async function approveProposedMappings(user: ReturnType<typeof userEvent.setup>) {
+    const approve = screen.queryByRole("button", { name: /Approve \d+ mapping/ });
+    if (approve && !(approve as HTMLButtonElement).disabled) {
+      await user.click(approve);
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: /Approve \d+ mapping/ }),
+        ).not.toBeInTheDocument(),
+      );
+    }
+  }
+
   async function runScenario(label: string) {
     const user = userEvent.setup();
     renderApp("/agent");
@@ -189,6 +210,7 @@ describe("OCC Agent tab — the operating loop", () => {
     expect(card).not.toBeNull();
     await user.click(within(card as HTMLElement).getByRole("button"));
     await screen.findByText(copy.agent.conversationHeading);
+    await approveProposedMappings(user);
     return user;
   }
 
@@ -214,14 +236,23 @@ describe("OCC Agent tab — the operating loop", () => {
     expect(screen.queryByText(copy.agent.readyHeadline)).not.toBeInTheDocument();
   });
 
-  it("an ambiguous mapping shows a decision card with its evidence", async () => {
+  it("an ambiguous mapping is answered on its row, with its evidence", async () => {
+    /* It used to be a decision card. Every question about a column is answered
+       on the mapping table now, because the table is a DRAFT an operator works
+       down and commits in one act — a card that applied its answer on click
+       would be a second route to the same column with different rules.
+       Deleting the card must not delete the one thing that settles the
+       question: how many records each competing column actually carries. */
     await runScenario("B — Ambiguous mapping");
-    expect(await screen.findByText(copy.agent.decisionsHeading)).toBeInTheDocument();
-    expect(screen.getByText(/Confirm where 'Current Balance' belongs/)).toBeInTheDocument();
-    expect(screen.getByText(copy.agent.decisionRecommendation)).toBeInTheDocument();
-    expect(screen.getByText(copy.agent.decisionMateriality)).toBeInTheDocument();
-    expect(screen.getByText(copy.agent.decisionConsequence)).toBeInTheDocument();
-    expect(screen.getByText(/carries values for 24 of 24 records/)).toBeInTheDocument();
+    const table = (await screen.findByText(copy.agent.mappingHeading))
+      .closest("section") as HTMLElement;
+    const row = within(table).getByText("Current Balance").closest("tr") as HTMLElement;
+    expect(within(row).getByText("Needs you")).toBeInTheDocument();
+    expect(
+      within(row).getByText(copy.agent.mappingContested(2)).getAttribute("title"),
+    ).toMatch(/carries values for 24 of 24 records/);
+    // And no card, anywhere, for a question about a column.
+    expect(screen.queryByText(/Confirm where 'Current Balance' belongs/)).toBeNull();
   });
 
   it("a material business-rule failure cannot be talked past in the conversation", async () => {
@@ -252,6 +283,34 @@ describe("OCC Agent tab — the operating loop", () => {
     await waitFor(() =>
       expect(screen.queryByText(copy.agent.proposalHeading)).not.toBeInTheDocument(),
     );
+  });
+
+  it("an applied turn still returns a proposal object, and the screen must ignore it", async () => {
+    // THE CONTRACT THIS PINS, and why the test above could not pin it alone.
+    //
+    // `OccAgentService.instruct` returns `proposal={"disclosure": ...}` on the
+    // APPLIED path, so the field is truthy for a change that has already been
+    // written. The mock used to return null there, and a screen that left its
+    // proposal banner up over an applied change therefore passed every test
+    // while misleading every operator: confirm, see the same banner, conclude
+    // nothing saved.
+    //
+    // So the mock now matches the server, and this asserts the mock — not the
+    // screen. Quietly restoring `proposal: null` would make the fake kinder
+    // than production again and re-hide the defect; this fails if anyone does.
+    const client = new MockOpsClient();
+    const created = await client.createAgentCase(
+      "Onboard Northstar Lending. Monthly management information.",
+    );
+    const caseRef = created.run.case_ref;
+
+    const proposed = await client.instructAgent(caseRef, "cancel this case", false);
+    expect(proposed.applied).toBe(false);
+    expect(proposed.proposal).not.toBeNull();
+
+    const applied = await client.instructAgent(caseRef, "cancel this case", true);
+    expect(applied.applied).toBe(true);
+    expect(applied.proposal).not.toBeNull();
   });
 
   it("links out to the existing OCC views rather than reproducing them", async () => {
@@ -386,16 +445,41 @@ describe("OCC Agent tab — the operating loop", () => {
     const classification = await client.getAgentClassification(created.case_ref);
     const form = await client.getAgentClientForm(created.case_ref);
 
-    // Only category 2 becomes a question.
-    const asked = new Set(
-      form.form.steps.flatMap((s) => s.groups.flatMap((g) => g.fields.map((f) => f.key))),
+    // Every field on the form is a question Trakt puts to a CLIENT — either
+    // one still outstanding (category 2) or one already answered.
+    //
+    // An answered client question stays on the form now, flagged `answered`,
+    // so an operator can see what was saved and correct a typo in it. That
+    // makes its category "known", because "known" means answered. The rule
+    // being enforced is unchanged and is checked here directly: nothing
+    // derived, defaulted, deferred or internal may reach the form.
+    const onForm = new Map(
+      form.form.steps.flatMap((s) =>
+        s.groups.flatMap((g) => g.fields.map((f) => [f.key, f] as const)),
+      ),
     );
     for (const field of classification.fields) {
       const key =
         field.index === null
           ? `${field.section}.${field.field}`
           : `${field.section}[${field.index}].${field.field}`;
-      if (asked.has(key)) expect(field.category).toBe("client");
+      const served = onForm.get(key);
+      if (!served) continue;
+      if (served.answered) {
+        expect(field.category).toBe("known");
+      } else {
+        expect(field.category).toBe("client");
+      }
+    }
+    // Which is to say: no derived, deferred or internal field is ever served.
+    for (const field of classification.fields) {
+      const key =
+        field.index === null
+          ? `${field.section}.${field.field}`
+          : `${field.section}[${field.index}].${field.field}`;
+      if (["derived", "first_delivery", "internal", "not_applicable"].includes(field.category)) {
+        expect(onForm.has(key)).toBe(false);
+      }
     }
     // And the form is materially smaller than the catalogue.
     expect(form.form.questions).toBeLessThan(classification.summary.total);
@@ -467,13 +551,34 @@ describe("OCC Agent tab — the operating loop", () => {
     expect(review.document).toMatch(/first representative delivery/i);
   });
 
-  it("links to the onboarding case in the screens it normally lives in", async () => {
+  it("does NOT link to the onboarding case before there is one to open", async () => {
+    /* This asserted the opposite, and pinned a link that could not work.
+     *
+     * An Agent case lives in the synthetic container and reaches the governed
+     * one only at activation, so the case wizard 404s on anything earlier —
+     * and the href it pinned, `/onboarding/{id}`, is not a route at all: the
+     * wizard is `/onboarding/cases/{id}`. The link was broken twice over, on
+     * every case anyone would ever click it on, and an operator who followed
+     * it reasonably concluded their case had been lost.
+     *
+     * The other links stay: they point at views that exist regardless of this
+     * case. `_occ_links` offers the onboarding one once the case has ACTIVATED,
+     * and at the real route — covered server-side in
+     * tests/operations_control/occ_agent/test_an_agent_case_is_visible_work.py,
+     * because a synthetic run cannot reach activation to show it here.
+     */
     await runScenario("A — Clean onboarding");
     const panel = (await screen.findByText(copy.agent.occLinksHeading)).closest("section");
-    const link = within(panel as HTMLElement).getByRole("link", {
-      name: new RegExp(copy.nav.onboarding),
-    });
-    expect(link.getAttribute("href")).toMatch(/^\/onboarding\/ONB-\d{4}-\d{4}$/);
+    expect(
+      within(panel as HTMLElement).queryByRole("link", {
+        name: new RegExp(copy.nav.onboarding),
+      }),
+    ).not.toBeInTheDocument();
+    // The case is still reachable from Client Onboarding's own queues, which
+    // now list Agent cases and link to the tab they are worked in.
+    expect(
+      within(panel as HTMLElement).getByRole("link", { name: /Rules/ }),
+    ).toBeInTheDocument();
   });
 });
 

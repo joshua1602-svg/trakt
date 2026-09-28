@@ -1,0 +1,515 @@
+"""What a rehearsal settles, and where it is allowed to end up.
+
+Two gaps in the target state, and they pull in opposite directions — which is
+why they are tested together.
+
+**A rehearsal's mapping decisions were thrown away.** The run reads the
+client's real columns, raises the ones it cannot settle, and an operator
+answers them. ``resolve_decision`` wrote that answer onto the run and nowhere
+else, so nothing carried it across the doorway: production re-derived every
+mapping and re-asked every question a human had already answered. The most
+valuable thing the rehearsal produced was discarded at the moment it became
+usable.
+
+**But a rehearsal that is never activated must leave nothing behind.** That is
+the property the whole synthetic boundary exists to hold, and it is not
+negotiable to make the first one convenient. So promotion happens at
+activation, in the live adapter, and the synthetic adapter discards the same
+input — the isolation holds in the adapter rather than depending on a caller
+remembering not to pass the decisions along.
+
+The third test class covers the other gap: adding a reporting product once a
+client is live is an AMENDMENT, not an edit. The source registry carries
+``regime_required`` and is written at activation, so a conversation with a live
+case never reaches it — the book stays registered as it was and the engine
+refuses the delivery rather than splitting it across two incomplete ones.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from operations_control.occ_agent import field_promotion as _field_promotion
+from operations_control.occ_agent import mapping_promotion as _promotion
+from operations_control.occ_agent.adapters import (
+    ActivationIntent,
+    ActivationPreconditions,
+    SyntheticExecutionAdapter,
+)
+from operations_control.occ_agent.policy import synthetic_policy
+from operations_control.rules import RULE_ACTIVE
+
+from .conftest import ACTOR, TENANT_A
+
+OPENING = ("Onboard Northstar Lending. UK equity release. Monthly portfolio "
+           "MI. Portfolio id direct_101.")
+
+
+def settled(decision_id: str, *, source: str, canonical: str,
+            kind: str = _promotion.CONFIRMATION, resolution: str = "approve",
+            value: str = "", confidence: float = 0.41) -> dict:
+    """One decision in the ADAPTER'S RAW SHAPE, with everything at the top.
+
+    This is the artefact row ``execution`` writes. It is NOT what the run
+    holds — see :func:`as_the_run_holds_it` — and the difference is the whole
+    of the defect below.
+    """
+    return {"decision_id": decision_id, "decision_type": kind,
+            "source_column": source, "target_field": canonical,
+            "status": "approved", "resolution": resolution,
+            "resolved_value": value, "resolved_by": ACTOR,
+            "resolved_at": "2026-09-16T10:00:00Z", "confidence": confidence}
+
+
+def as_the_run_holds_it(raw: dict) -> dict:
+    """The same decision as ``run.open_decisions`` actually holds it.
+
+    ``OccAgentService._decision_card`` assembles the operator-facing card and
+    keeps the mapping detail under ``subject``. Activation passes those cards
+    to promotion — so this, not the raw row, is the shape promotion is called
+    with in production.
+    """
+    card = {k: v for k, v in raw.items()
+            if k not in ("decision_type", "source_column", "target_field")}
+    card["subject"] = {"decision_type": raw["decision_type"],
+                       "source_column": raw["source_column"],
+                       "target_field": raw["target_field"]}
+    return card
+
+
+# --------------------------------------------------------------------------- #
+# The shape promotion is actually called with
+# --------------------------------------------------------------------------- #
+
+class TestTheShapeTheRunActuallyHolds:
+    """Promotion silently did nothing, and these tests are why it was missed.
+
+    Every test below this class builds the adapter's RAW row — everything at
+    the top level — which is the shape ``mapping_of`` was written against. The
+    run does not hold that shape. ``_decision_card`` keeps the mapping detail
+    under ``subject``, activation passes ``run.open_decisions``, and so every
+    decision reported an empty ``decision_type``, failed the first test, and
+    promoted nothing. A rehearsal's settled mappings were dropped at the exact
+    moment they became usable, and the second month re-asked the whole tape.
+
+    Testing the function and not the wiring is what let that ship. These drive
+    the shape the caller really passes.
+    """
+
+    def test_a_card_from_the_run_promotes(self):
+        card = as_the_run_holds_it(
+            settled("d1", source="Month Run", canonical="data_cut_off_date"))
+        assert _promotion.mapping_of(card) == {
+            "source_column": "Month Run",
+            "canonical_field": "data_cut_off_date"}
+
+    def test_an_amended_card_names_the_field_the_operator_chose(self):
+        card = as_the_run_holds_it(
+            settled("d1", source="Month Run", canonical="data_cut_off_date",
+                    resolution="amend", value="reporting_date"))
+        assert _promotion.mapping_of(card)["canonical_field"] == "reporting_date"
+
+    def test_an_amended_ambiguity_card_names_the_column(self):
+        card = as_the_run_holds_it(
+            settled("d1", source="Cur Bal", canonical="current_balance",
+                    kind=_promotion.AMBIGUITY, resolution="amend",
+                    value="Current Outstanding Balance"))
+        assert _promotion.mapping_of(card)["source_column"] == \
+            "Current Outstanding Balance"
+
+    def test_a_first_onboarding_proposal_promotes_too(self):
+        """It carries the bulk of a first delivery. Unpromotable, the one
+        approval an operator gives would produce no governed rule at all."""
+        card = as_the_run_holds_it(
+            settled("d1", source="Broker", canonical="broker_channel",
+                    kind=_promotion.PROPOSAL))
+        assert _promotion.mapping_of(card) == {
+            "source_column": "Broker", "canonical_field": "broker_channel"}
+
+    def test_the_card_the_service_builds_carries_the_kind(self):
+        """Asserted against the service's own card builder, not a restatement
+        of it: if `_decision_card` stops carrying the type, promotion goes
+        quiet again and nothing else would say so."""
+        from operations_control.occ_agent.service import _decision_card
+
+        class _D:
+            def to_dict(self):
+                return {"decision_id": "map_broker", "kind": "field_mapping",
+                        "title": "t", "question": "q", "blocking": True,
+                        "evidence": [], "options": [],
+                        "subject": {"decision_id": "map_broker"}}
+
+        card = _decision_card(_D(), {"map_broker": {
+            "decision_type": _promotion.PROPOSAL, "source_column": "Broker",
+            "target_field": "broker_channel"}})
+        assert card["subject"]["decision_type"] == _promotion.PROPOSAL
+
+
+# --------------------------------------------------------------------------- #
+# Which answers assert a mapping
+# --------------------------------------------------------------------------- #
+
+class TestWhatASettledDecisionAsserts:
+
+    def test_an_accepted_recommendation_is_the_mapping(self):
+        assert _promotion.mapping_of(
+            settled("d1", source="Curr Bal", canonical="current_balance")
+        ) == {"source_column": "Curr Bal",
+              "canonical_field": "current_balance"}
+
+    def test_amending_a_confirmation_names_the_canonical_field(self):
+        """"'Bal' is not current balance, it is the original balance."
+        The question fixed the COLUMN, so the answer is the field."""
+        assert _promotion.mapping_of(
+            settled("d2", source="Bal", canonical="current_balance",
+                    resolution="amend", value="original_balance")
+        ) == {"source_column": "Bal",
+              "canonical_field": "original_balance"}
+
+    def test_amending_an_ambiguity_names_the_source_column(self):
+        """Two columns claimed one field; the operator picked one. Here the
+        question fixed the FIELD, so the answer is the column — and reading
+        the two questions as one is how a promoted rule comes out backwards."""
+        assert _promotion.mapping_of(
+            settled("d3", source="A", canonical="current_balance",
+                    kind=_promotion.AMBIGUITY, resolution="amend", value="B")
+        ) == {"source_column": "B", "canonical_field": "current_balance"}
+
+    def test_a_rejected_decision_asserts_no_mapping(self):
+        """"No" is not a mapping."""
+        assert _promotion.mapping_of(
+            settled("d4", source="Junk", canonical="current_balance",
+                    resolution="reject")) is None
+
+    def test_an_unanswered_decision_asserts_nothing(self):
+        raw = settled("d5", source="X", canonical="current_balance")
+        raw["status"] = "open"
+        assert _promotion.mapping_of(raw) is None
+
+    def test_a_decision_that_is_not_about_mapping_is_left_alone(self):
+        raw = settled("d6", source="X", canonical="y")
+        raw["decision_type"] = "validation_exception"
+        assert _promotion.mapping_of(raw) is None
+
+
+# --------------------------------------------------------------------------- #
+# What the rules come out as
+# --------------------------------------------------------------------------- #
+
+class TestTheRulesARunAmountsTo:
+
+    def rules(self, *decisions):
+        return _promotion.rules_from(list(decisions), client_id="ERE",
+                                     portfolio_id="direct_001",
+                                     workflow_id="ONB-2026-0010")
+
+    def test_a_promoted_rule_is_scoped_to_the_book_not_the_client(self):
+        """The operator answered about THIS book's tape. Whether the client's
+        other books use the same column names is a claim they did not make."""
+        rule = self.rules(settled("d1", source="Curr Bal",
+                                  canonical="current_balance"))[0]
+        assert rule.scope == "portfolio"
+        assert (rule.client_id, rule.portfolio_id) == ("ERE", "direct_001")
+
+    def test_the_human_who_answered_is_recorded_not_the_activator(self):
+        rule = self.rules(settled("d1", source="Curr Bal",
+                                  canonical="current_balance"))[0]
+        assert rule.approved_by == ACTOR
+        assert rule.approved_at == "2026-09-16T10:00:00Z", \
+            "the approval date is when the human answered, not when " \
+            "activation got round to writing it"
+        assert rule.decision_id == "d1"
+
+    def test_the_rehearsal_is_named_as_the_source(self):
+        """A governed record must be able to say a rule came from a rehearsal
+        rather than from a live delivery."""
+        rule = self.rules(settled("d1", source="A", canonical="b"))[0]
+        assert rule.suggested_by == _promotion.SUGGESTED_BY
+
+    def test_why_the_question_was_asked_is_kept(self):
+        rule = self.rules(settled("d1", source="A", canonical="b",
+                                  confidence=0.41))[0]
+        assert rule.confidence == 0.41
+
+    def test_one_column_yields_one_rule_and_the_last_answer_stands(self):
+        rules = self.rules(
+            settled("d1", source="Curr Bal", canonical="current_balance"),
+            settled("d2", source="curr bal", canonical="original_balance"))
+        assert len(rules) == 1
+        assert rules[0].payload["canonical_field"] == "original_balance"
+
+    def test_nothing_settled_yields_nothing(self):
+        assert self.rules(
+            settled("d4", source="X", canonical="y",
+                    resolution="reject")) == []
+
+
+# --------------------------------------------------------------------------- #
+# Where they are allowed to land
+# --------------------------------------------------------------------------- #
+
+class _FakeRules:
+    """Enough of RuleStore to see what would be written."""
+
+    def __init__(self):
+        self.approved = []
+
+    def approve(self, rule):
+        rule.rule_id = rule.rule_id or f"rule_{len(self.approved) + 1}"
+        rule.version = rule.version or 1
+        rule.status = RULE_ACTIVE
+        self.approved.append(rule)
+        return rule
+
+
+class TestWhereASettledMappingMayLand:
+
+    def test_promoting_writes_through_the_governed_store(self):
+        store = _FakeRules()
+        added = _promotion.promote(
+            store, [settled("d1", source="Curr Bal",
+                            canonical="current_balance")],
+            client_id="ERE", portfolio_id="direct_001",
+            workflow_id="ONB-2026-0010")
+        assert len(store.approved) == 1
+        assert added[0]["source_column"] == "Curr Bal"
+        assert added[0]["canonical_field"] == "current_balance"
+        assert added[0]["rule_id"]
+
+    def test_a_rehearsal_that_never_activates_leaves_nothing(self):
+        """The synthetic adapter receives the same decisions and discards
+        them. The isolation holds HERE, not in a caller's discipline."""
+        adapter = SyntheticExecutionAdapter(synthetic_policy())
+        pre = ActivationPreconditions(case_ref="ONB-2026-0010",
+                                      tenant=TENANT_A)
+        with pytest.raises(Exception):
+            adapter.activate(
+                pre=pre, intent=ActivationIntent(client_id="ERE"),
+                actor=ACTOR,
+                decisions=[settled("d1", source="Curr Bal",
+                                   canonical="current_balance")])
+
+    def test_the_synthetic_adapter_accepts_the_argument_at_all(self):
+        """A signature check, so the live and rehearsal paths cannot drift
+        apart and leave the caller passing an argument one of them refuses."""
+        import inspect
+        for cls in (SyntheticExecutionAdapter,):
+            params = inspect.signature(cls.activate).parameters
+            assert "decisions" in params
+            assert "field_requests" in params
+
+
+# --------------------------------------------------------------------------- #
+# A field the platform has no word for
+# --------------------------------------------------------------------------- #
+
+class TestAFieldTheOperatorAskedFor:
+    """An ask becomes a DRAFT configuration version, and never more than that.
+
+    The field registry is the vocabulary every client's report is written in.
+    ``operations_control.rules`` states the invariant — "the core field
+    registry is never written" from this container — and proposing is not
+    writing: nothing in force changes, no delivery sees the new field, and the
+    second pair of eyes the config lifecycle exists to require is still
+    required. One client's first delivery must not change what every other
+    client's report means.
+    """
+
+    REQUEST = {"request_id": "fieldreq_1", "status": "requested",
+               "field_name": "broker_code", "label": "broker code",
+               "description": "The intermediary who introduced the case.",
+               "data_type": "string", "source_file": "property.csv",
+               "source_column": "Broker Code",
+               "sample_values": ["BRK001", "BRK002"],
+               "requested_by": ACTOR, "requested_at": "2026-09-18T00:00:00Z",
+               "route": "config package, system layer: "
+                        "config/system/fields_registry.yaml"}
+
+    def _packages(self, storage):
+        from operations_control.configuration.packages import (
+            ConfigPackageStore,
+        )
+        from operations_control.stores import OpsStore
+        return ConfigPackageStore(OpsStore(storage))
+
+    def test_the_ask_becomes_a_draft(self, storage):
+        packages = self._packages(storage)
+        proposed = _field_promotion.propose(
+            packages, [self.REQUEST], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release")
+        assert [p["status"] for p in proposed] == ["proposed"]
+        version = packages.get_version("system", proposed[0]["version"])
+        assert version["status"] == "draft"
+
+    def test_the_draft_carries_the_field(self, storage):
+        import yaml
+        packages = self._packages(storage)
+        proposed = _field_promotion.propose(
+            packages, [self.REQUEST], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release")
+        version = packages.get_version("system", proposed[0]["version"])
+        registry = yaml.safe_load(
+            version["files"]["config/system/fields_registry.yaml"]["content"])
+        assert "broker_code" in registry["fields"]
+        # Scoped to THIS book. The operator met the column in an equity
+        # release tape and said what it means there; whether every asset class
+        # means the same by it is a second claim they did not make.
+        assert registry["fields"]["broker_code"]["portfolio_type"] \
+            == "equity_release"
+        assert registry["fields"]["broker_code"]["core_canonical"] is False
+
+    def test_nothing_in_force_changes(self, storage):
+        packages = self._packages(storage)
+        before = packages.ensure_seeded("system")["version"]
+        _field_promotion.propose(
+            packages, [self.REQUEST], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release")
+        assert packages.active_version("system")["version"] == before
+
+    def test_the_reviewer_is_told_what_they_are_deciding(self, storage):
+        packages = self._packages(storage)
+        proposed = _field_promotion.propose(
+            packages, [self.REQUEST], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release")
+        notes = packages.get_version("system", proposed[0]["version"])["notes"]
+        assert "Broker Code" in notes and "property.csv" in notes
+        assert ACTOR in notes and "intermediary" in notes
+        assert "BRK001" in notes
+
+    def test_a_withdrawn_ask_reaches_nobody(self, storage):
+        packages = self._packages(storage)
+        withdrawn = {**self.REQUEST, "status": "withdrawn"}
+        assert _field_promotion.propose(
+            packages, [withdrawn], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release") == []
+
+    def test_a_field_that_already_exists_is_left_alone(self, storage):
+        """Overwriting a field in use would be the worst possible outcome of
+        asking for a new one."""
+        import yaml
+        packages = self._packages(storage)
+        active = packages.ensure_seeded("system")
+        current = active["files"]["config/system/fields_registry.yaml"]["content"]
+        drafted = _field_promotion.draft_registry(
+            current, [{**self.REQUEST, "field_name": "loan_identifier"}],
+            asset_type="equity_release")
+        before = yaml.safe_load(current)["fields"]["loan_identifier"]
+        assert yaml.safe_load(drafted)["fields"]["loan_identifier"] == before
+
+    def test_a_rehearsal_proposes_nothing(self):
+        """The same reason mappings promote at activation and not sooner: a
+        draft config version is a GLOBAL artefact, and a practice case that is
+        never activated must not litter the platform's configuration history
+        with proposals for clients that never went live."""
+        adapter = SyntheticExecutionAdapter(synthetic_policy())
+        pre = ActivationPreconditions(case_ref="ONB-2026-0010",
+                                      tenant=TENANT_A)
+        with pytest.raises(Exception):
+            adapter.activate(pre=pre, intent=ActivationIntent(client_id="ERE"),
+                             actor=ACTOR, field_requests=[self.REQUEST])
+
+
+# --------------------------------------------------------------------------- #
+# Adding a product once a client is live
+# --------------------------------------------------------------------------- #
+
+def make_live(onboarding, client_id="ERE"):
+    """Take a client all the way to an active configuration.
+
+    The long way round on purpose: an amendment starts from the version IN
+    FORCE, so a test that faked one would not be testing the thing that
+    matters. Every answer here is one the validator actually blocks on.
+    """
+    case = onboarding.start_new_client(by=ACTOR)
+    cid = case.case_id
+    onboarding.save_step(case_id=cid, step="client", by=ACTOR, payload={
+        "client_id": client_id, "client_name": "ERE Funding Limited",
+        "jurisdiction": "GB", "reporting_currency": "GBP"})
+    onboarding.save_step(case_id=cid, step="entities", by=ACTOR, payload={
+        "entities": [{"legal_name": "ERE Funding Limited",
+                      "roles": ["originator", "reporting_entity"],
+                      "country_of_establishment": "GB"}]})
+    onboarding.save_step(case_id=cid, step="portfolios", by=ACTOR, payload={
+        "portfolios": [{"portfolio_id": "direct_001",
+                        "display_name": "ERE Direct Originations",
+                        "asset_class": "equity_release",
+                        "portfolio_type": "direct",
+                        "period_convention": "calendar_month_end"}]})
+    onboarding.save_step(case_id=cid, step="reporting", by=ACTOR,
+                         payload={"products": ["mi"]})
+    onboarding.save_step(case_id=cid, step="contacts", by=ACTOR, payload={
+        "reporting_contact_name": "Jane Doe",
+        "reporting_contact_email": "jane@example.test",
+        "operational_contact_name": "Bob Smith",
+        "operational_contact_email": "bob@example.test"})
+    onboarding.save_step(case_id=cid, step="risk_limits", by=ACTOR, payload={
+        "concentration_tests_status": "deferred_with_reason",
+        "concentration_tests_status_reason":
+            "The client has not supplied their limits yet. MI only."})
+    sources = [dict(s) for s in onboarding.load_case(cid).items("sources")]
+    for s in sources:
+        s["file_format"] = "xlsx"
+        s.setdefault("cadence", "monthly")
+    onboarding.save_step(case_id=cid, step="sources", by=ACTOR,
+                         payload={"sources": sources})
+    onboarding.submit_for_approval(case_id=cid, by=ACTOR)
+    onboarding.approve(case_id=cid, by=ACTOR, reason="MI only for now.")
+    onboarding.activate(case_id=cid, by=ACTOR)
+    return client_id
+
+
+class TestAmendingALiveClient:
+
+    def test_an_amendment_starts_from_the_version_in_force(self, service):
+        """The whole point: adding Annex 2 later must begin from what is
+        live, not from a blank case that happens to look similar."""
+        client_id = make_live(service.onboarding)
+        amended = service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
+                                      amend_client=client_id)
+        assert amended.case.kind == "amendment"
+        assert amended.case.client_id == client_id
+        assert amended.case.based_on_version == 1
+        assert (amended.case.answers["client"]["client_name"]
+                == "ERE Funding Limited")
+        assert amended.case.answers["reporting"]["products"] == ["mi"]
+
+    def test_the_amendment_is_a_new_case_not_the_activated_one(self, service):
+        """A live configuration is never edited in place."""
+        client_id = make_live(service.onboarding)
+        live = service.onboarding.cases.current(client_id)
+        amended = service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
+                                      amend_client=client_id)
+        assert amended.case.case_id != ""
+        assert service.onboarding.cases.current(client_id).version \
+            == live.version, "amending changed what is in force"
+
+    def test_the_regime_product_can_be_added_on_the_amendment(self, service):
+        """The path this gap exists for. Adding the product in conversation
+        on a LIVE case never reaches the source registry — an amendment
+        re-activates, and the registry is rewritten with it."""
+        client_id = make_live(service.onboarding)
+        amended = service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
+                                      amend_client=client_id)
+        turn = service.instruct(amended, text="They also need ESMA Annex 2.",
+                                actor=ACTOR, confirm=True)
+        products = (turn.case.case.answers.get("reporting") or {}).get(
+            "products")
+        assert set(products) == {"mi", "esma_annex2"}, \
+            "the amendment did not carry the client's existing product"
+
+    def test_amending_a_client_with_no_active_configuration_is_refused(
+            self, service):
+        """There is nothing to amend, and inventing a blank one would look
+        like an amendment while being a new onboarding."""
+        from operations_control.engine import OpsError
+        with pytest.raises(OpsError) as exc:
+            service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
+                                amend_client="NOBODY")
+        assert exc.value.code == "OPS_CLIENT_NOT_ONBOARDED"
+
+    def test_opening_without_amend_client_is_still_a_new_onboarding(self,
+                                                                    service):
+        case = service.create_case(tenant=TENANT_A, initiating_user=ACTOR,
+                                   instruction=OPENING)
+        assert case.case.kind == "new_client"
+        assert case.case.based_on_version in (None, 0)

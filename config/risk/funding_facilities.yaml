@@ -37,7 +37,11 @@ facilities:
   # recorded verbatim. The 103% advance rate and the £33m Concentration Limit
   # Denominator floor are the operator's figures; nothing here is inferred.
   # -----------------------------------------------------------------------
-  - client_id: ere_funding_uk
+  # The TRAKT CLIENT IDENTITY, matching the operations-control prefix, the
+  # tenancy tenant_id and config_client_ERE.yaml. The facility register is
+  # keyed by it, so a lookup for the client Trakt actually knows as ERE found
+  # nothing while this said otherwise.
+  - client_id: ERE
     facility_id: ERE_WAREHOUSE_01
     facility_label: ERE Warehouse Facility 01
     facility_type: warehouse

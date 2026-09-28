@@ -154,6 +154,39 @@ def _prov_acq_blank_for_direct(df: pd.DataFrame):
     return ~(is_direct & has_date)
 
 
+def _ltv_consistent(df: pd.DataFrame, ltv_col: str, val_col: str,
+                    bal_cols) -> pd.Series:
+    """True where the reported LTV agrees with the book on ANY of its balances.
+
+    The transform picks the numerator the product calls for: the principal
+    balance on an amortising loan, the rolled-up outstanding balance on a
+    lifetime mortgage, where the interest is never paid and is secured on the
+    same property. A validator that only ever divides by the principal balance
+    therefore contradicts the tape it is checking — it reports the lender's own
+    LTV as incoherent on every loan that has accrued anything, which on a
+    seasoned equity release book is most of them.
+
+    So the reported LTV stands if it agrees with either balance. Where the two
+    are the same number — every amortising loan — that is one test, not two,
+    and this behaves exactly as it always has.
+    """
+    ltv = pd.to_numeric(df[ltv_col], errors="coerce")
+    val = pd.to_numeric(df[val_col], errors="coerce")
+    val = val.where(val > 0)
+    agreed = pd.Series(False, index=df.index)
+    tested = False
+    for bal_col in bal_cols:
+        if bal_col not in df.columns:
+            continue
+        bal = pd.to_numeric(df[bal_col], errors="coerce")
+        agreed = agreed | pd.Series(
+            np.isclose(bal / val * 100.0, ltv, atol=1.0, rtol=0.01, equal_nan=True),
+            index=df.index)
+        tested = True
+    # No balance to divide: nothing was checked, so nothing is failed.
+    return agreed if tested else pd.Series(True, index=df.index)
+
+
 # ==================================================================
 # RULE DEFINITIONS – this will grow to 200–300 rules
 # ==================================================================
@@ -326,16 +359,9 @@ RULES = [
         "severity": "warning",
         "description": "Reported LTV ≈ (balance / valuation) * 100 (within 1% tolerance).",
         "required_columns": ["current_loan_to_value", "current_principal_balance", "current_valuation_amount"],
-        "test": lambda df: pd.Series(
-            np.isclose(
-                df["current_principal_balance"] / df["current_valuation_amount"] * 100,
-                df["current_loan_to_value"],
-                atol=1.0,
-                rtol=0.01,
-                equal_nan=True,
-             ),
-            index=df.index,
-        ),
+        "test": lambda df: _ltv_consistent(
+            df, "current_loan_to_value", "current_valuation_amount",
+            ("current_principal_balance", "current_outstanding_balance")),
         "fail_message": lambda row, col: "current_loan_to_value not consistent with balance and valuation (outside 1% tolerance).",
     },
     # LTV003/LTV004 mirror LTV001/LTV002 for the ORIGINAL LTV, which had no rule

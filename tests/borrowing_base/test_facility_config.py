@@ -19,7 +19,7 @@ from mi_agent.borrowing_base.models import ENV_PRODUCTION, ENV_PROTOTYPE
 
 @pytest.fixture(scope="module")
 def ere():
-    facility = cfg.load_facility("ere_funding_uk")
+    facility = cfg.load_facility("ERE")
     assert facility is not None, "the prototype facility must be configured"
     return facility
 
@@ -98,14 +98,14 @@ class TestPrecedence:
 
     def test_a_client_config_block_beats_the_platform_register(self, tmp_path,
                                                                monkeypatch):
-        write_client_config(tmp_path, "ere_funding_uk", """
+        write_client_config(tmp_path, "ERE", """
             facility_id: FROM_CLIENT_CONFIG
             commitment: 400,000,000
             advance_rate: 95
             environment: production
         """)
         monkeypatch.setenv(cfg.CLIENT_CONFIG_DIR_ENV, str(tmp_path))
-        facility = cfg.load_facility("ere_funding_uk")
+        facility = cfg.load_facility("ERE")
         assert facility.facility_id == "FROM_CLIENT_CONFIG"
         assert facility.commitment == 400_000_000.0
         assert facility.config_source.startswith("client_config:")
@@ -162,10 +162,10 @@ class TestRobustness:
         broken.write_text("facilities: [ this is not: valid: yaml", encoding="utf-8")
         monkeypatch.setenv(cfg.FACILITIES_PATH_ENV, str(broken))
         monkeypatch.setenv(cfg.CLIENT_CONFIG_DIR_ENV, str(tmp_path))
-        assert cfg.load_facility("ere_funding_uk") is None
+        assert cfg.load_facility("ERE") is None
 
     def test_load_facility_checked_surfaces_the_problems(self):
-        facility, problems = cfg.load_facility_checked("ere_funding_uk")
+        facility, problems = cfg.load_facility_checked("ERE")
         assert facility is not None
         assert problems == []
 

@@ -60,6 +60,10 @@ export function NewWorkflowScreen() {
   const [newClientName, setNewClientName] = useState("");
   const [portfolio, setPortfolio] = useState("");
   const [period, setPeriod] = useState("");
+  // A pipeline tape arriving every few days is `adhoc`, not `weekly`, and the
+  // frequency decides the folder it lands in. Defaulting to monthly keeps the
+  // funded pack's behaviour unchanged for every caller that never chose one.
+  const [frequency, setFrequency] = useState("monthly");
   const [creating, setCreating] = useState(false);
 
   // Steps 5 and 6 — upload the files, then confirm. The browser sends file
@@ -85,15 +89,16 @@ export function NewWorkflowScreen() {
   }, [client]);
 
   async function handleCreate() {
-    if (!clientId || !portfolio.trim() || !period) return;
+    if (!clientId || !portfolio.trim() || !period.trim()) return;
     setCreating(true);
     try {
       const created = await client.createBatch({
         client_id: clientId,
         portfolio_id: portfolio.trim(),
-        reporting_date: period,
+        reporting_date: period.trim(),
         workflow_type: outcome,
         dataset,
+        frequency,
         // Sending the files IS the operator's confirmation, so the pack starts
         // as soon as the existing intake path judges it complete.
         auto_start_when_ready: true,
@@ -285,21 +290,50 @@ export function NewWorkflowScreen() {
               <label className="mb-1 block text-sm font-medium text-stone-700" htmlFor="period">
                 {copy.newWorkflow.periodLabel}
               </label>
+              {/* Free text rather than `type="month"`. A month picker cannot
+                  express a pipeline snapshot's own date (2026-09-14), an ISO
+                  week or a quarter, and all three are periods Trakt files
+                  under — so the one control on this screen could only ever
+                  create a monthly delivery. The server canonicalises what is
+                  typed and refuses what it cannot read. */}
               <input
                 id="period"
-                type="month"
                 value={period}
+                placeholder="2026-04"
                 disabled={Boolean(batch)}
                 onChange={(event) => setPeriod(event.target.value)}
                 className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-70"
               />
+              <p className="mt-1 text-xs text-stone-500">{copy.newWorkflow.periodHelp}</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-stone-700" htmlFor="frequency">
+                {copy.newWorkflow.frequencyLabel}
+              </label>
+              {/* The frequency is a path segment and part of the pack key.
+                  `CreateBatch` has carried one since the API door was fixed;
+                  this screen never sent it, so every manually created delivery
+                  landed under /monthly/ whatever it actually was. */}
+              <select
+                id="frequency"
+                value={frequency}
+                disabled={Boolean(batch)}
+                onChange={(event) => setFrequency(event.target.value)}
+                className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-70"
+              >
+                <option value="monthly">{copy.newWorkflow.frequencyMonthly}</option>
+                <option value="weekly">{copy.newWorkflow.frequencyWeekly}</option>
+                <option value="daily">{copy.newWorkflow.frequencyDaily}</option>
+                <option value="adhoc">{copy.newWorkflow.frequencyAdhoc}</option>
+              </select>
+              <p className="mt-1 text-xs text-stone-500">{copy.newWorkflow.frequencyHelp}</p>
             </div>
           </div>
 
           {!batch && (
             <button
               type="button"
-              disabled={creating || !clientId || !portfolio.trim() || !period}
+              disabled={creating || !clientId || !portfolio.trim() || !period.trim()}
               onClick={() => void handleCreate()}
               className="mt-6 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
             >

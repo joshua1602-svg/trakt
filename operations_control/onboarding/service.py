@@ -48,6 +48,7 @@ from .case import (
     REQUEST_SENT,
     STATUS_LABELS,
     STATUSES,
+    TERMINAL,
     WITHDRAWN,
     CaseError,
     InformationRequest,
@@ -56,14 +57,36 @@ from .case import (
     new_request_id,
     source_key,
 )
-from .catalogue import Catalogue, catalogue, reset_cache  # noqa: F401
+from .catalogue import (  # noqa: F401
+    SOURCE_CLIENT, Catalogue, catalogue, reset_cache,
+)
 from .store import OnboardingStore
 from .validation import Validator
 
+#: Recorded against a field the CLIENT is asked for when an OPERATOR answers it.
+#: Kept as a literal rather than imported from the agent package: onboarding is
+#: the lower layer and must not depend on the feature built on top of it.
+PROV_HUMAN = "human_supplied"
+
 #: Wizard steps, in order. Each maps to one catalogue section except review.
+#: The wizard's steps, and — because ``save_step`` refuses anything absent from
+#: here and ``submit_client_response`` iterates it — the set of catalogue
+#: sections whose answers can be WRITTEN AT ALL.
+#:
+#: ``funding_facility`` and ``additional_context`` were missing. Both are
+#: declared sections, both are asked of the client, both appear on the pack and
+#: in the client form; and an answer to either reached ``save_step`` as a step
+#: it did not recognise, or was skipped by the loop before it got there. The
+#: client typed, the operator submitted, and the value went nowhere — the
+#: quietest possible failure, because a section nobody is required to answer
+#: looks the same when it is answered and lost as when it is left blank.
+#:
+#: ``tests/test_onboarding_step_coverage.py`` now holds these to the catalogue
+#: in both directions, so a new section cannot be declared into the same hole.
 STEPS = ("client", "entities", "contacts", "portfolios", "sources",
-         "reporting", "risk_limits", "regime", "data_semantics",
-         "data_definitions", "access", "presentation",
+         "reporting", "risk_limits", "funding_facility", "regime",
+         "data_semantics", "data_definitions", "access", "presentation",
+         "additional_context",
          "review")
 
 STEP_LABELS = {
@@ -74,11 +97,13 @@ STEP_LABELS = {
     "sources": "Expected deliveries",
     "reporting": "Reporting requirements",
     "risk_limits": "Concentration tests and covenants",
+    "funding_facility": "Warehouse / funding facility",
     "regime": "Regulatory information",
     "data_semantics": "What your numbers mean",
     "data_definitions": "How to read each file",
     "access": "Who needs access",
     "presentation": "Report presentation",
+    "additional_context": "How you manage this portfolio",
     "review": "Review and activate",
 }
 
@@ -246,11 +271,45 @@ class OnboardingService:
             client = case.block("client")
             case.client_id = str(client.get("client_id") or "")
             case.client_name = str(client.get("client_name") or "")
+        self._record_operator_authorship(case, step, payload)
         case.record(f"answered_{step}", actor=by,
                     before={step: before},
                     after={step: _deep_copy(case.answers.get(step))})
         self.cases.save_case(case)
         return case
+
+    def _record_operator_authorship(self, case: OnboardingCase, step: str,
+                                    payload: Optional[Dict[str, Any]]) -> None:
+        """Say that an operator typed this, for fields the CLIENT is asked for.
+
+        ``origin_provenance`` falls back to a field's declared ``source`` when
+        nothing recorded where a value came from. For ``inferred``, ``derived``,
+        ``trakt_default`` and ``system_generated`` that is sound — Trakt filled
+        it and there is nobody else it could have been. For ``client_supplied``
+        it is an ASSUMPTION, and it was wrong every time an operator answered on
+        the client's behalf: the record stated the client had given a contact
+        they had never been asked for.
+
+        So the operator's write is marked. The client's own submissions go
+        through this same method and are re-marked immediately afterwards by
+        ``_mark_client_supplied``, which therefore still wins where it applies —
+        and an operator correcting a client's answer later takes authorship
+        back, which is also true.
+
+        Only the fields actually sent, and only non-repeatable sections. Writing
+        a repeatable section means sending the whole row back, derived values
+        included, so marking from the payload would claim authorship of a
+        currency Trakt worked out and an entity link it minted — the same reason
+        ``_mark_client_supplied`` takes explicit paths rather than a payload.
+        """
+        section = self.catalogue.section(step)
+        if section is None or section.repeatable or section.from_regime:
+            return
+        for key in (payload or {}):
+            field = section.field(key)
+            if field is None or field.source != SOURCE_CLIENT:
+                continue
+            case.provenance_class[f"{step}.{key}"] = PROV_HUMAN
 
     def _sync_derived(self, case: OnboardingCase,
                       touched: Optional[Dict[str, set]] = None) -> None:
@@ -301,13 +360,43 @@ class OnboardingService:
         intake already extracts when it reads a pack. Registering one lets Trakt
         answer the file format, the expected file names and often the asset
         class, instead of asking for them.
+
+        A SAMPLE IS EVIDENCE, NOT AN ANSWER, so the answer lock does not apply
+        to it. ``_require_editable`` refuses an APPROVED case, which is right
+        for an operator revising what they told Trakt and wrong here — and it
+        shut this method at exactly the wrong moment, because the practice run
+        REFUSES to start until the onboarding is approved:
+
+            run_synthetic_onboarding: if case.status != APPROVED: raise
+            classify_artefacts:       if case.status not in (APPROVED,) + ...
+
+        The two conditions are mutually exclusive, so every file uploaded FOR
+        the practice run — which is every file the practice run uses — could
+        never reach the sample. A client who supplied one file at onboarding
+        and then supplied the other two for the rehearsal went on being
+        registered as sending one, and no operator action could correct it.
+
+        Only an ACTIVATED or WITHDRAWN case refuses now: after activation the
+        expectation is governed on the other side, and a withdrawn case is
+        finished. The result is shown in the approval package before anything
+        is registered, so nothing about it is silent.
         """
         case = self.load_case(case_id)
-        self._require_editable(case)
+        if case.status in TERMINAL:
+            raise OpsError(
+                "OPS_ONBOARDING_LOCKED",
+                f"This onboarding is {STATUS_LABELS[case.status].lower()} and "
+                "can no longer record a sample.", 409)
         case.answers["sample"] = {"files": files,
                                   "registered_by": by,
                                   "registered_at": now_iso()}
         self._sync_derived(case)
+        # THE SAMPLE HAS CHANGED, SO WHAT THE SAMPLE ANSWERS CHANGES WITH IT.
+        # `_sync_derived` fills blanks and never overwrites, which froze the
+        # first sample's answers in place: a client who sent one file and then
+        # sent three went on being expected to send one. See
+        # :func:`inference.refresh_from_sample`.
+        inference.refresh_from_sample(case)
         inferred = inference.infer_from_sample(case.answers["sample"])
         case.record("sample_registered", actor=by,
                     detail={"files": [f.get("name") for f in files],

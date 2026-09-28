@@ -17,6 +17,7 @@ import type {
   AgentTurn,
   CaseSummary,
   MailIngestOutcome,
+  RegistryField,
 } from "./agentTypes";
 
 import type {
@@ -333,6 +334,15 @@ export class HttpOpsClient implements OpsClient {
     });
   }
 
+  async retireRule(ruleId: string, reason: string,
+                   clientId?: string): Promise<Rule> {
+    const body = await this.post<{ rule: Rule }>(
+      `/ops/rules/${encodeURIComponent(ruleId)}/retire`,
+      { reason, client: clientId ?? null },
+    );
+    return body.rule;
+  }
+
   async getRuleHistory(ruleId: string): Promise<Rule[]> {
     const body = await this.request<{ history: Rule[] }>(
       `/ops/rules/${encodeURIComponent(ruleId)}/history`,
@@ -403,6 +413,15 @@ export class HttpOpsClient implements OpsClient {
         notes: input?.notes ?? "",
       },
     );
+  }
+
+  async createConfigDraftFromDeployment(
+    layer: ConfigLayer,
+    notes = "",
+  ): Promise<{ version: number; status: string }> {
+    return this.post(`/ops/admin/config/${encodeURIComponent(layer)}/draft-from-deployment`, {
+      notes,
+    });
   }
 
   async validateConfigVersion(
@@ -634,11 +653,13 @@ export class HttpOpsClient implements OpsClient {
     instruction: string,
     fixtureId?: string,
     live?: boolean,
+    amendClient?: string,
   ): Promise<AgentStatus> {
     return this.post<AgentStatus>("/ops/agent/cases", {
       instruction,
       fixture_id: fixtureId ?? "",
       live: live === true,
+      amend_client: amendClient ?? "",
     });
   }
 
@@ -662,6 +683,66 @@ export class HttpOpsClient implements OpsClient {
     return this.post<AgentStatus>(
       `/ops/agent/cases/${encodeURIComponent(caseRef)}/decisions`,
       { value: "", reason: "", ...input },
+    );
+  }
+
+  async approveAgentMappings(caseRef: string, reason = ""): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/mappings/approve`,
+      { reason },
+    );
+  }
+
+  async stageAgentMapping(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "confirm" | "amend" | "not_used" | "clear";
+      target_field?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/mappings/stage`,
+      { target_field: "", reason: "", ...input },
+    );
+  }
+
+  async agentFieldRegistry(caseRef: string): Promise<RegistryField[]> {
+    const doc = await this.request<{ fields: RegistryField[] }>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/field-registry`,
+    );
+    return doc.fields ?? [];
+  }
+
+  async declareSourceUnit(
+    caseRef: string,
+    input: { field: string; unit: string; reason?: string },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/mappings/source-unit`,
+      { reason: "", ...input },
+    );
+  }
+
+  async resolveUnmappedColumn(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "use_existing" | "request_field" | "withdraw_request";
+      target_field?: string;
+      field_name?: string;
+      label?: string;
+      description?: string;
+      data_type?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/mappings/unmapped`,
+      { target_field: "", field_name: "", reason: "", ...input },
     );
   }
 
@@ -713,6 +794,23 @@ export class HttpOpsClient implements OpsClient {
     return this.request<AgentStatus>(
       `/ops/agent/cases/${encodeURIComponent(caseRef)}/artefacts`,
       { method: "POST", body: form },
+    );
+  }
+
+  async removeAgentArtefact(caseRef: string, artefactId: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/artefacts/remove`,
+      { artefact_id: artefactId },
+    );
+  }
+
+  async recordAgentConcentration(
+    caseRef: string,
+    input: { status: string; response_text?: string; reason?: string },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/concentration`,
+      { response_text: "", reason: "", ...input },
     );
   }
 

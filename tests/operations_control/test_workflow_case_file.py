@@ -113,10 +113,12 @@ class TestApprovalStep:
         assert approval["question"] == (
             "Publish this delivery as the latest official version?")
 
-    def test_the_default_scope_is_this_delivery_only(self, ready):
+    def test_this_delivery_only_is_still_offered_first(self, ready):
+        """The default is now the standing approval (see
+        test_the_screen_defaults_to_the_operating_model); declining it stays
+        the first, plainly worded choice."""
         approval = next(s for s in _workflow(ready)["steps"]
                         if s["key"] == "publication_approval")["approval"]
-        assert approval["default_scope"] == "delivery"
         assert approval["scopes"][0]["value"] == "delivery"
         assert approval["scopes"][0]["label"] == "No — this delivery only"
 
@@ -129,24 +131,29 @@ class TestApprovalStep:
         assert not any("All of Trakt" in s["label"] for s in approval["scopes"])
 
     def test_the_wording_promises_only_what_the_system_does(self, ready):
-        """``remember_scope`` is RECORDED, not enforced: nothing reads it back
-        to approve a later delivery. Until something does, no wording here may
-        suggest a future delivery will publish itself."""
+        """"Yes" is a standing approval that publishes later deliveries — but
+        only on the same source schema with nothing open. The wording must say
+        both halves: that it publishes, and when it will not."""
         approval = next(s for s in _workflow(ready)["steps"]
                         if s["key"] == "publication_approval")["approval"]
-        assert "does not publish anything on its own" in approval["scope_note"]
-        assert "approved by a person" in approval["scope_note"]
-
-        text = " ".join([approval["scope_note"],
-                         *(s["explanation"] for s in approval["scopes"]),
-                         *approval["scope_consequences"].values()])
-        for promise in ("will apply this decision", "automatically",
-                        "will be approved", "without asking"):
-            assert promise not in text.lower(), (
-                f"the approval wording promises {promise!r}, which the system "
-                "does not do")
+        note = approval["scope_note"].lower()
+        assert "source schema" in note
+        assert "waits for a person" in note
         for wider in ("portfolio", "client"):
-            assert "still approved" in approval["scope_consequences"][wider]
+            explanation = next(s["explanation"] for s in approval["scopes"]
+                               if s["value"] == wider).lower()
+            assert "same source schema" in explanation
+            assert "still waits for you" in explanation
+            assert "without asking" in approval["scope_consequences"][wider]
+        delivery = next(s["explanation"] for s in approval["scopes"]
+                        if s["value"] == "delivery")
+        assert "ask again" in delivery
+
+    def test_the_screen_defaults_to_the_operating_model(self, ready):
+        """Onboard once, then report unchanged months untouched."""
+        approval = next(s for s in _workflow(ready)["steps"]
+                        if s["key"] == "publication_approval")["approval"]
+        assert approval["default_scope"] == "portfolio"
 
     def test_the_consequence_is_stated_before_confirming(self, ready):
         approval = next(s for s in _workflow(ready)["steps"]

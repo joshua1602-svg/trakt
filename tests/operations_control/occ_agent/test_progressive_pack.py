@@ -90,7 +90,12 @@ def test_the_essentials_are_there(built):
 def test_the_representative_file_is_requested_up_front(document):
     needed = document.split("## Please confirm")[0]
     assert "Files to send" in needed
-    assert "Primary loan tape" in needed
+    # Asked for by its LABEL, read from the vocabulary rather than repeated
+    # here: the label is client-facing copy and changes when the words change
+    # ("Primary loan tape" became "Loan tape" when the file list was cut to
+    # four). What must hold is that the required file is named at all.
+    from operations_control.occ_agent.input_roles import artefact_vocabulary
+    assert artefact_vocabulary().label("loan_extract") in needed
 
 
 # --------------------------------------------------------------------------- #

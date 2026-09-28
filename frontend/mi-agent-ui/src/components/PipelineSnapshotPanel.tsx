@@ -107,7 +107,8 @@ export function PipelineSnapshotPanel({
   const amountDelta = weeklyDelta(amount, prior?.pipelineAmount, "gbp");
   const weightedDelta = weeklyDelta(weighted, prior?.weightedExpectedFundedAmount, "gbp");
   const avgDelta = weeklyDelta(avg, priorAvg, "gbp");
-  const topStage = [...snapshot.stageBreakdown].sort((a, b) => b.pipelineAmount - a.pipelineAmount)[0];
+  const profile = snapshot.profile ?? null;
+  const excluded = snapshot.excludedFromOpenPipeline ?? null;
   // The "next" expected completion is the first FUTURE month (> pipeline as-of
   // month); a past month is overdue, not next. Classified backend-side.
   const summary = snapshot.expectedCompletionSummary;
@@ -142,6 +143,20 @@ export function PipelineSnapshotPanel({
   // ranking keep their inherent order (sequence / concentration ranking).
   const byRegion: BarDatum[] = sortStratBars(
     (snapshot.regionBreakdown ?? []).map((r) => ({
+      label: cleanBucketLabel(r.key),
+      value: r.pipelineAmount,
+      count: r.caseCount,
+    })),
+  );
+
+  const byProduct: BarDatum[] = (snapshot.productBreakdown ?? []).map((p) => ({
+    label: p.key,
+    value: p.pipelineAmount,
+    count: p.caseCount,
+  }));
+  // LTV bands read in band order (lowest first, Unknown last).
+  const byLtv: BarDatum[] = sortStratBars(
+    (snapshot.ltvBreakdown ?? []).map((r) => ({
       label: cleanBucketLabel(r.key),
       value: r.pipelineAmount,
       count: r.caseCount,
@@ -184,9 +199,30 @@ export function PipelineSnapshotPanel({
           hint="probability-weighted" />
         <StatTile label="Average case amount" value={formatGBP(avg)}
           delta={avgDelta.delta} deltaIntent={avgDelta.deltaIntent} />
-        {topStage && (
-          <StatTile label="Top stage by amount" value={topStage.stage}
-            hint={`${formatGBP(topStage.pipelineAmount)} · ${topStage.caseCount} cases`} />
+        {/* The credit profile, tile for tile with the funded snapshot, so the
+            two lenses read alike. A measure the extract cannot supply is
+            omitted, never shown as an invented figure. */}
+        {profile?.waLtvPct != null && (
+          <StatTile label="Weighted avg LTV" value={`${profile.waLtvPct.toFixed(1)}%`}
+            hint="amount-weighted" />
+        )}
+        {profile?.waInterestRatePct != null && (
+          <StatTile label="Weighted avg interest rate" value={`${profile.waInterestRatePct.toFixed(1)}%`}
+            hint="amount-weighted" />
+        )}
+        {profile?.waYoungestAge != null && (
+          <StatTile label="Weighted avg youngest age" value={profile.waYoungestAge.toFixed(1)}
+            hint="amount-weighted" />
+        )}
+        {profile?.singleBorrowerPct != null && (
+          <StatTile label="Single borrowers" value={`${profile.singleBorrowerPct.toFixed(1)}%`}
+            hint={profile.singleBorrowerCount != null && profile.borrowerTypeKnownCount != null
+              ? `${profile.singleBorrowerCount.toLocaleString("en-GB")} of ${profile.borrowerTypeKnownCount.toLocaleString("en-GB")} cases`
+              : undefined} />
+        )}
+        {profile?.waPropertyValue != null && (
+          <StatTile label="Weighted avg property value" value={formatGBP(profile.waPropertyValue)}
+            hint="amount-weighted estimated value" />
         )}
         {nextCompletion ? (
           <StatTile label="Next expected completions" value={nextCompletion.month}
@@ -200,6 +236,21 @@ export function PipelineSnapshotPanel({
             hint={`${formatGBP(overdueWeighted)} weighted · before as-of month`} />
         )}
       </div>
+
+      {excluded && excluded.cases > 0 && (
+        <p className="t-micro mt-[var(--gap-group)]" data-testid="pipeline-open-scope">
+          Open pipeline only (KFI · Application · Offer). The weekly extract also
+          holds{" "}
+          {excluded.stages.map((x, i) => (
+            <span key={x.stage}>
+              {i > 0 && (i === excluded.stages.length - 1 ? " and " : ", ")}
+              {x.caseCount.toLocaleString("en-GB")} {x.stage.toLowerCase()} (
+              {formatGBP(x.amount)})
+            </span>
+          ))}
+          {" "}— not counted in these figures.
+        </p>
+      )}
 
       {/* One switch for every breakdown that carries both measures. Each
           breakdown already returned amount AND case count in the same payload,
@@ -238,6 +289,16 @@ export function PipelineSnapshotPanel({
         {byRegion.length > 0 && (
           <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by region`}>
             <BarList data={asMeasure(byRegion, measure)} format={BAR_MEASURE_FORMAT[measure]} />
+          </Panel>
+        )}
+        {byProduct.length > 0 && (
+          <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by product`}>
+            <BarList data={asMeasure(byProduct, measure)} format={BAR_MEASURE_FORMAT[measure]} />
+          </Panel>
+        )}
+        {byLtv.length > 0 && (
+          <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by LTV band`}>
+            <BarList data={asMeasure(byLtv, measure)} format={BAR_MEASURE_FORMAT[measure]} />
           </Panel>
         )}
       </div>

@@ -57,19 +57,31 @@ class EffectiveConfigResolver:
         self.store = store
         self.rules = rules
         self.packages = packages or ConfigPackageStore(store)
-        self.client_config_path = Path(client_config_path
-                                       or "config/client/config_client_ERE.yaml")
+        # An EXPLICIT client-configuration file, for development, migration and
+        # tests. It used to default to the incumbent lender's repository file,
+        # which made "this client has not been onboarded" indistinguishable
+        # from "this client is ERE Funding" — a regulatory return built that
+        # way carries another lender's LEI, originator name and establishment
+        # country. There is no default now: a client with no activated
+        # configuration resolves to nothing and the resolution blocks.
+        self.client_config_path = (Path(client_config_path)
+                                   if client_config_path else None)
         self._generated_cache: Dict[str, Path] = {}
 
     # ------------------------------------------------------------------ #
-    def client_config_for(self, client_id: str) -> Path:
-        """The client configuration in force for ``client_id``.
+    def client_config_for(self, client_id: str) -> Optional[Path]:
+        """The client configuration in force for ``client_id``, or ``None``.
 
         A client that has been through Client Onboarding is governed by the
-        configuration onboarding GENERATED for it — same format, same layer,
-        same readers, but versioned and attributable. A client that has not is
-        governed by the repository file exactly as before, so adopting a client
-        is a decision, never a side effect of this code shipping.
+        configuration onboarding ACTIVATED for it — versioned, attributed and
+        audited. That is the only production authority.
+
+        ``None`` means NOT CONFIGURED, and :meth:`resolve` blocks on it. It
+        used to mean "fall back to the repository file", which for an
+        unonboarded client meant silently adopting the incumbent's identity.
+        An unonboarded client is a valid platform state — it is exactly the
+        state between a client wipe and its fresh onboarding — and the honest
+        answer is a governed blocker, not another lender's configuration.
         """
         if not client_id:
             return self.client_config_path
@@ -79,7 +91,9 @@ class EffectiveConfigResolver:
             from ..onboarding.store import OnboardingStore
             text = OnboardingStore(self.store).read_artefact(
                 client_id, client_config_rel(client_id))
-        except Exception:      # noqa: BLE001 — never break a delivery over this
+        except Exception:      # noqa: BLE001 — an unreachable store is not an
+            # invitation to use someone else's configuration. A cached
+            # materialisation of THIS client's own artefact is still safe.
             return cached or self.client_config_path
         if not text:
             return self.client_config_path
@@ -102,9 +116,20 @@ class EffectiveConfigResolver:
         blockers: List[str] = []
         warnings: List[str] = []
         conflicts: List[Dict[str, Any]] = []
-        # The client layer: onboarding-generated where the client has been
-        # onboarded, the repository file otherwise.
+        # The client layer: the configuration OCC activated for this client.
+        # Absent, the resolution stops here. Continuing without it would build
+        # a regulatory contract from the system, regime and asset layers alone
+        # and silently omit the client's own identity — so "not onboarded" is
+        # answered as a governed blocker rather than as a partial contract.
         client_config_path = self.client_config_for(client_id)
+        if client_config_path is None:
+            return ResolutionOutcome(
+                status=BLOCKED,
+                blockers=[
+                    f"'{client_id}' has no activated client configuration in "
+                    "the Operations Control Centre. Onboard the client and "
+                    "activate its configuration before running a delivery for "
+                    "it."])
 
         # 1-4. Identify asset + applicable regime(s) via the support model.
         asset = ASSET_MODEL.get(asset_type)

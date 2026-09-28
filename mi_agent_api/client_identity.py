@@ -146,10 +146,13 @@ def _config_is_addressed_to(client_id: str, doc: Dict[str, Any]) -> bool:
     """Whether this configuration is about ``client_id``.
 
     True when the configuration says so itself — ``client.client_id`` matches.
-    That is the only positive answer when the configuration declares a client at
-    all: a config that names ``ere_funding_uk`` is ERE's, and reading its name
+    That is the only positive answer when the configuration declares a client
+    at all: a configuration belongs to the client it names, and reading its name
     onto a different tenant is precisely the misattribution this module exists
-    to prevent, however few tenants the deployment serves.
+    to prevent, however few tenants the deployment serves. The match is exact
+    (case-insensitively), which is why a configuration whose declared
+    ``client_id`` drifts from the identity everything else uses is not merely
+    untidy — it is invisible to this check.
 
     A configuration that declares NO client is taken to describe the single
     tenant a single-tenant deployment serves — the case ``trakt_core.tenancy``

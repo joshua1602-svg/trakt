@@ -61,6 +61,21 @@ export const copy = {
     reviewHeading: "Ready for review",
     reviewDescription: "Everything answered, waiting for a decision.",
     noReview: "Nothing is waiting for review.",
+
+    // CASES BEING RUN THROUGH THE OCC AGENT, shown in these queues alongside
+    // the governed ones.
+    //
+    // An Agent case lives in the synthetic container until it activates, so
+    // these queues — which read the governed store — showed nothing while a
+    // real client onboarding was issued and awaiting a reply. The screens told
+    // an operator there was no work, on headings named for exactly the state
+    // the case was in.
+    //
+    // The rows are READ-ONLY here and link to the Agent tab, where the case is
+    // actually worked. Nothing crosses the doorway to make this possible: only
+    // the reader widened, never what may be written.
+    agentChip: "OCC Agent",
+    agentRowHint: "Worked in the OCC Agent.",
     activeHeading: "Active clients",
     activeDescription: "Clients Trakt is configured for. Changes go through an amendment.",
     noActive: "No clients are active yet.",
@@ -242,6 +257,17 @@ export const copy = {
     newClientLabel: "New client name",
     portfolioLabel: "Portfolio",
     periodLabel: "Reporting period",
+    periodHelp:
+      "A month is 2026-04. A snapshot taken on a particular day is " +
+      "2026-09-14. A week is 2026-W38, a quarter 2026-Q2.",
+    frequencyLabel: "How often this arrives",
+    frequencyHelp:
+      "How often this delivery arrives, which is part of where Trakt files " +
+      "it. A pipeline tape that turns up every few days is ad hoc, not weekly.",
+    frequencyMonthly: "Monthly",
+    frequencyWeekly: "Weekly",
+    frequencyDaily: "Daily",
+    frequencyAdhoc: "Ad hoc",
     createButton: "Continue",
     filesHeading: "Upload files",
     uploadLabel: "Choose the files to send",
@@ -371,6 +397,19 @@ export const copy = {
     sourceTerm: "What the file says",
     approvedMeaning: "What it means",
     approvedBy: "Approved by",
+    retire: "Withdraw this rule",
+    retireHeading: "Withdraw this rule",
+    retireHelp:
+      "It stops being applied to deliveries from now on. Nothing already " +
+      "prepared under it changes, and the record of what it did while it " +
+      "was in force is kept.",
+    retireReason: "Why it is being withdrawn",
+    retireReasonHelp:
+      "Read months from now by whoever asks why Trakt stopped treating this " +
+      "column the way it used to.",
+    retireConfirm: "Withdraw it",
+    retireCancel: "Keep it",
+    retired: "Withdrawn. It will not be applied to the next delivery.",
     historyHeading: "Earlier versions",
     empty: "No rules match.",
   },
@@ -393,7 +432,22 @@ export const copy = {
     syntheticBanner:
       "Practice mode uses the real onboarding controls but does not activate configuration, " +
       "send email, or start the live pipeline.",
-    newCase: "Start a new practice case",
+    // Said on a REAL onboarding, where the practice sentence above is not just
+    // unhelpful but false: this case can send email, and does.
+    liveBanner:
+      "This is a real client onboarding. Email is sent, and confirming activation at the end " +
+      "creates the client's live configuration and starts their first delivery.",
+    newCase: "Start a new case",
+    amendHeading: "Change a client already live",
+    amendPrompt:
+      "Start from the configuration in force, rather than onboarding them " +
+      "again. Adding a report a client did not originally take is this — not " +
+      "an edit. What a book is prepared for is settled when its configuration " +
+      "is activated, so asking for a new report in conversation does not " +
+      "change it, and the delivery is refused rather than half-prepared.",
+    amendLabel: "Client identifier",
+    amendPlaceholder: "ERE",
+    amendStart: "Open an amendment",
     newCaseHeading: "What needs to happen?",
     newCasePrompt:
       "Tell Trakt in your own words. For example: “Onboard Northstar Lending. It is a UK " +
@@ -425,9 +479,14 @@ export const copy = {
       "The practice case was created but could not be opened automatically. It appears in " +
       "the case list below.",
     openCase: "Open case",
-    caseCreated: "Practice case created",
-    casesHeading: "Practice cases",
-    caseEmpty: "No practice cases yet.",
+    // NOT "Practice cases". This list holds every Agent case, rehearsal and
+    // real onboarding alike — the mode is per case, and a real client
+    // onboarding sat under a heading calling it practice. The distinction is
+    // carried where it belongs, on the row: `syntheticChip` for a rehearsal,
+    // `modeLiveBadge` for the real thing. Those two stay exactly as they were.
+    caseCreated: "Case created",
+    casesHeading: "Cases",
+    caseEmpty: "No cases yet.",
     filterAll: "All",
     filterNeedsYou: "Needs you",
     filterBlocked: "Blocked",
@@ -484,7 +543,17 @@ export const copy = {
     proposalDismiss: "Not yet",
 
     statusHeading: "Where this case has got to",
-    stageHeading: "Practice run",
+    // A REAL CLIENT ONBOARDING IS NOT A PRACTICE RUN. This label sits directly
+    // beside the case status, so an operator reads it as a statement about the
+    // case in front of them — and on a live onboarding it was flatly false.
+    // The same defect already fixed for the case-list heading above: the mode
+    // is per case, so the words have to be too.
+    //
+    // The dry run that reads the client's files IS a dry run on both modes,
+    // which is what makes the honest live wording "onboarding run" rather than
+    // "live run": nothing has been written yet, and confirming activation is
+    // what changes that.
+    stageHeading: (live: boolean) => (live ? "Onboarding run" : "Practice run"),
     onboardingStageHeading: "Onboarding",
     onboardingHeading: "The onboarding",
     onboardingOpen: "Open it in the onboarding screens",
@@ -498,7 +567,7 @@ export const copy = {
     previewDescription:
       "The configuration this onboarding would generate. Nothing here has been created, and " +
       "this tab cannot create it.",
-    previewNothingWritten: "Not created — practice case",
+    previewNothingWritten: "Not created — nothing has been written",
     previewNone: "There is not yet enough answered to generate a configuration.",
     factsHeading: "What the run is for",
     gatesHeading: "Controls",
@@ -512,12 +581,240 @@ export const copy = {
       "the ones nobody has asked them for, because they are not the client's " +
       "to answer.",
     criteriaOnboarding: "The onboarding",
-    criteriaExecution: "The practice run",
-    criteriaBoundary: "The practice boundary",
+    criteriaExecution: (live: boolean) => (live ? "The onboarding run" : "The practice run"),
+    // On a rehearsal nothing will EVER be written and that is the point of the
+    // exercise; on a real onboarding nothing has been written YET and the
+    // operator is about to change that. The criteria are the same two either
+    // way — see operations_control/occ_agent/readiness.py, which words their
+    // detail the same way.
+    criteriaBoundary: (live: boolean) =>
+      live ? "Nothing created yet" : "The practice boundary",
     decisionsHeading: "Decisions waiting for you",
+    questionsAnsweredHeading: "Already answered",
+    questionsAnsweredHelp:
+      "What has come back, and what Trakt holds. Edit any of it to correct " +
+      "an answer — the change is recorded the same way the first one was.",
+    concentrationHeading: "The concentration-test request",
+    concentrationHelp:
+      "Approval is held until this is resolved. Record it once here: the " +
+      "decision, the client's own wording, and the reason where there is one.",
+    concentrationStatus: "Where the request stands",
+    concentrationSupplied: "The client has supplied them",
+    concentrationNotApplicable: "Not applicable to this client",
+    concentrationDeferred: "Deferred, with a reason",
+    concentrationPending: "Waiting on the client",
+    concentrationText: "The limits, in the client's own words",
+    concentrationTextHelp:
+      "Paste the covenant wording or limits table as supplied. Once the " +
+      "client is activated, the Concentration tab reads this into proposed " +
+      "tests, each one reviewed and approved before it becomes a control.",
+    concentrationReason: "Why",
+    concentrationSave: "Record the decision",
+    concentrationNeedsText:
+      "Recording them as supplied needs the limits themselves — a blank " +
+      "answer cannot stand as one.",
+    concentrationNeedsReason: "Deferring or ruling it out needs a reason.",
+    mappingHeading: "Every column, and what Trakt read it as",
+    mappingHelp:
+      "The questions above are only the columns Trakt could not settle. This " +
+      "is all of them, including the ones it matched on its own.",
+    mappingCount: (mapped: number, total: number) =>
+      `${mapped} of ${total} columns are feeding a field`,
+    mappingEmpty: (live: boolean) =>
+      "Nothing has been read yet. The columns appear once " +
+      (live ? "the onboarding run" : "the practice run") +
+      " has looked at the files.",
+    mappingColumn: "Column in the file",
+    // Its own column now, rather than a pill appended to the column name. Two
+    // facts sharing a cell is what made the longest rows wrap, and a status is
+    // the thing an operator scans down — it needs to line up.
+    mappingState: "Status",
+    // The approval act, and what it would settle. A button reading "Approve"
+    // with no count does not say what it is about to do.
+    // --- Reading the table, then committing it ----------------------------
+    // Per-row answers are a DRAFT. The words have to keep the two apart, or an
+    // operator reads "Confirm" on a row and believes the column is settled.
+    mappingRowConfirm: "Confirm",
+    mappingRowChange: "Change",
+    mappingRowNotUsed: "Do not use",
+    mappingRowUndo: "Undo",
+    // Taking back a mapping the run has already settled. A different act from
+    // undoing a draft, and the words have to say so: it sends the case back to
+    // this step and withdraws anything that was signed off on the old reading.
+    mappingRowReopen: "Change it back",
+    mappingReopenWarning:
+      "This column is already confirmed. Changing it now takes the case back " +
+      "to this step, and anything approved on the old reading — readiness, " +
+      "activation — has to be approved again. Nothing has reached the client " +
+      "or production yet, so it is yours to change until it does.",
+    mappingReopenedToast:
+      "Taken back. The case is at the mapping step again, and approvals that " +
+      "rested on the old reading have been withdrawn.",
+    mappingStagedConfirm: "As Trakt read it",
+    mappingStagedAmend: (field: string) => `You said: ${field.replace(/_/g, " ")}`,
+    mappingStagedNotUsed: "You set this aside",
+    // Why a column set aside BY a request is out, and what taking the ask back
+    // does. On the control rather than beside it: the row already says
+    // "Requested: <field>" in the field cell, and a phrase repeating it is the
+    // one thing on the row with no width to spare.
+    mappingStagedRequested:
+      "This column is out of the delivery because you asked for a new field " +
+      "for it. Withdrawing the request puts the column back to what Trakt " +
+      "read it as.",
+    mappingDraftHelp:
+      "Nothing here is applied yet. Work down the table, change anything " +
+      "that is wrong, and confirm the lot when you are done — that is the " +
+      "act that makes these this client's mappings.",
+    mappingCommit: (n: number) =>
+      `Confirm ${n} mapping${n === 1 ? "" : "s"}`,
+    mappingCommitBreakdown: (staged: number, asProposed: number) =>
+      [staged > 0 ? `${staged} you have been through` : "",
+       asProposed > 0 ? `${asProposed} as Trakt read them` : ""]
+        .filter(Boolean)
+        .join(", "),
+    mappingCommittedToast: (n: number) =>
+      `${n} mapping${n === 1 ? "" : "s"} confirmed.`,
+    // A field two or more columns both claim. Not a blocker — two files
+    // carrying the same fact is ordinary — but an operator confirming the set
+    // is confirming all of them and should see which.
+    mappingContested: (n: number) => `${n} columns claim this`,
+    // TWO COLUMNS OF ONE FILE. A real question: which of them is it? The run
+    // is blocked until somebody picks.
+    mappingAmbiguousHelp:
+      "Two columns of this file read as the same field, and Trakt has no " +
+      "basis to prefer one. Pick the one to use and set the other aside.",
+    // THE SAME FIELD IN ANOTHER FILE, which is not a problem and is usually
+    // the point. Every extract carries a loan identifier and the assembler
+    // needs each of them to join on — a file without one contributes nothing.
+    // This read as a warning, in orange, on rows an operator had just got
+    // right, and told them to undo the very mapping that makes the join work.
+    mappingAlsoIn: (n: number) =>
+      n === 1 ? "also in 1 other file" : `also in ${n} other files`,
+    mappingAlsoInHelp:
+      "Another file reads a column as this field too. That is normal — Trakt " +
+      "joins the files on the loan identifier and reconciles the rest — and " +
+      "for the loan identifier itself it is what makes the join possible.",
+    // THE WAY OUT OF A BLOCK, said on the row that is stopping them. A
+    // blocked case can always be re-run, and the button lived on a stage that
+    // by then read "done" and sat several screens above.
+    rerunBlocked: "Start rehearsal again",
+    rerunBlockedHelp:
+      "Fix what is in the way above, then run the rehearsal again. Nothing " +
+      "is created by running it.",
+    // HOW THE LENDER WRITES A PERCENTAGE. Canonical is percentage POINTS —
+    // 35 means 35% — and a lender sending 0.35 is on another scale, not
+    // wrong. Trakt reconciles the two against balance and valuation where it
+    // can; where it cannot, the operator says which, because guessing from
+    // magnitude is wrong for a genuinely small ratio and invisible after.
+    mappingUnitLabel: "Written as",
+    mappingUnitAuto: "Trakt works it out",
+    mappingUnitPoints: "Percentage points (35 = 35%)",
+    mappingUnitFraction: "A fraction (0.35 = 35%)",
+    mappingUnitHelp:
+      "Trakt stores percentages as points, so 35 means 35%. If this lender " +
+      "writes 0.35 for the same thing, say so here and Trakt will convert " +
+      "it. Left alone, Trakt reconciles the scale against the balance and " +
+      "the valuation, which is right whenever it has both.",
+    mappingContestedFilter: "Claimed twice",
+    mappingApproveHelp:
+      "This is the first delivery from this client, so Trakt has proposed how " +
+      "to read each column rather than deciding for you. What you confirm is " +
+      "what Trakt uses every month after this one.",
+    mappingApproveBlocked: (n: number) =>
+      `${n} column${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} an answer first`,
+    mappingFileColumns: (n: number) => `${n} column${n === 1 ? "" : "s"}`,
+    mappingField: "Trakt reads it as",
+    // A model's suggestion for a column Trakt could not place. Marked, because
+    // a suggestion set in the same type as a contract-backed match reads as
+    // one — and deliberately NOT the word "Proposed", which the status column
+    // uses for a mapping Trakt is asking you to approve. Two different claims
+    // sharing one word on one screen is how an operator comes to think a model
+    // wrote something a person is being asked to sign.
+    mappingProposed: "From a model",
+    // The column holds a two-word kind now, not a sentence of evidence, and
+    // the heading has to fit beside it: at the old wording it was itself the
+    // first thing to clip on a narrow screen.
+    mappingBasis: "How it matched",
+    mappingConfidence: "Confidence",
+    mappingNothing: "—",
+    mappingFilterAll: "All",
+    mappingPrimaryFile: "Trakt builds the loan-level data from this file",
+    // Every file's columns are put to a person now. The loan-level data is
+    // still built from the primary tape, but what an operator approves becomes
+    // a rule for the whole book — and production consolidates a field
+    // whichever file carries it — so a mapping here is worth as much as one
+    // there and is confirmed the same way.
+    mappingSecondaryFile:
+      "The loan-level data is not built from this one, but its columns are " +
+      "confirmed the same way: what you approve here is this client's " +
+      "mapping from now on.",
+
+    // --- A column that matched nothing ------------------------------------
+    // Two different acts, kept apart in the words as well as the code. One
+    // names a field Trakt already has, and is settled on the spot. The other
+    // asks for a field it does not have, which changes the vocabulary every
+    // client's report is written in and is not an onboarding operator's to
+    // make.
+    mappingUnmappedAction: "Give it a field",
+    mappingUnmappedHeading: (column: string) => `What is '${column}'?`,
+    mappingUnmappedIntro:
+      "Nothing Trakt reports on resembled this column. If you know what it " +
+      "is, say so — it becomes this client's mapping from now on.",
+    mappingUseExisting: "It is something Trakt already reports on",
+    mappingUseExistingHelp:
+      "The column feeds this field from now on, and the mapping becomes one " +
+      "of this client's own rules when the case goes live — so next month's " +
+      "delivery matches it without asking.",
+    mappingPickField: "Which field",
+    mappingPickFieldPlaceholder: "Start typing a field name",
+    mappingRequestNew: "Trakt has no field for this",
+    mappingRequestNewHelp:
+      "The list of fields Trakt reports on is shared by every client, so a " +
+      "new one is not added from here. Trakt records the request — this " +
+      "column, what its values look like and your name — for whoever looks " +
+      "after those settings. The column stays unused until they add it.",
+    mappingNewFieldName: "Name for the new field",
+    mappingNewFieldNamePlaceholder: "lower_case_with_underscores",
+    mappingNewFieldWhat: "What it means",
+    mappingNewFieldWhatPlaceholder: "One sentence somebody could decide from",
+    mappingNewFieldType: "What the values look like",
+    mappingUseExistingConfirm: "Use this field",
+    mappingRequestConfirm: "Request this field",
+    mappingWithdrawRequest: "Withdraw the request",
+    mappingRequestedChip: (field: string) => `Requested: ${field}`,
+    mappingRequestDisplaced: (field: string) =>
+      `Trakt had read this column as ${field}; the request overrules that ` +
+      `and the column stays out of this delivery.`,
+    mappingMappedToast: (column: string, field: string) =>
+      `'${column}' now feeds ${field.replace(/_/g, " ")}.`,
+    mappingRequestedToast: (field: string) =>
+      `Requested '${field}'. It is recorded for whoever looks after those ` +
+      "settings; the column stays unused until the field exists.",
+    mappingWithdrawnToast: "The request has been withdrawn.",
+    mappingRequestsHeading: "Fields you have asked for",
     artefactsHeading: "Files received",
     artefactIntended: "Where this would be filed",
-    artefactNotWritten: "Not written — practice case",
+    artefactNotWritten: "Not written",
+    artefactNoDestination:
+      "Name the reporting period below and Trakt can say where this would be filed.",
+    artefactRemove: "Remove",
+    artefactRemoveConfirm: "Yes, remove it",
+    artefactRemoveKeep: "Keep it",
+    artefactRemoveExplain:
+      "Trakt stops counting this file: it leaves the pack, and activation " +
+      "would not place it. The uploaded copy stays in this case's own " +
+      "sandbox and is not written anywhere else.",
+    targetHeading: "Which delivery this is for",
+    targetHelp:
+      "The reporting period the files describe — not the date on the " +
+      "filename. A tape taken on 1 May reports April, so that is 2026-04.",
+    targetPeriodLabel: "Reporting period",
+    targetPeriodPlaceholder: "2026-04",
+    targetDatasetLabel: "Book",
+    targetDatasetFunded: "Funded",
+    targetDatasetPipeline: "Pipeline",
+    targetSave: "Save",
+    targetSaved: "Saved.",
     executionHeading: "Practice execution",
     readinessHeading: "Readiness",
     observationsHeading: "Worth knowing",
@@ -540,6 +837,21 @@ export const copy = {
     packNoRecipient:
       "There is no contact address on this case yet. Record one, or type an address when you " +
       "issue it.",
+    // WHY THE BUTTON IS NOT AVAILABLE. It used to disable itself in silence,
+    // which reads as a broken button rather than a missing address — and the
+    // address is missing for a reason that looks like a contradiction: the
+    // reporting contact is one of the questions the pack itself is going out to
+    // ask. Issuing has never depended on that answer; it just needed somewhere
+    // to send it.
+    packNeedsAddress: "Type an address to issue it to.",
+    // WHETHER IT ACTUALLY LEFT TRAKT, said at the moment of issuing rather than
+    // only in the panel afterwards. `sent` is the honest answer and the two
+    // outcomes are not interchangeable: one reached a client, one is a record
+    // that it did not.
+    packIssuedToast: "Pack issued. It left Trakt.",
+    packRecordedToast:
+      "Pack recorded as issued. Nothing was sent — this deployment has no "
+      + "outbound mail configured.",
     packMappingHeading: "About field mappings",
     packSteps: "Steps",
     packRequired: "required",
@@ -684,15 +996,48 @@ export const copy = {
     actionsInConversation:
       "What you can do next needs a detail Trakt has to be told — use the conversation:",
     actionsNone: "This case is finished. There is nothing further to do.",
+
+    // Ending a case. Deliberately NOT among the governed controls above: those
+    // answer "what next", and abandoning a case is never the answer to that.
+    // It sits alone at the foot of the page, quiet but findable — the same
+    // treatment Client Onboarding gives the identical act, because an operator
+    // who has decided to stop should not have to guess a sentence to say so.
+    cancelLink: "Cancel this case",
+    cancelHeading: "Cancel this case?",
+    cancelExplain:
+      "Nothing has been created for this client, so nothing is removed. The case is kept, " +
+      "with your reason on it, and can be read afterwards.",
+    cancelExplainLive:
+      "This is a real onboarding, but it has not been activated, so no client configuration " +
+      "exists yet and nothing is removed. The case is kept, with your reason on it.",
+    cancelReason: "Why is this being cancelled?",
+    cancelReasonHelp:
+      "Whoever reads this in six months is asking why this client was started and never " +
+      "finished. Write the answer to that.",
+    cancelReasonPlaceholder:
+      "e.g. Superseded by a fresh onboarding so that elapsed time measures the client " +
+      "engagement.",
+    cancelKeep: "Keep working on it",
+    // NOT "Cancel this case" again. That is the link that opened the dialog, so
+    // repeating it put two buttons reading "Cancel this case" on one screen —
+    // indistinguishable to a screen reader, and a coin toss for anyone else, on
+    // the one dialog where being wrong cannot be undone. The pair now reads as
+    // a question and its answer.
+    cancelConfirm: "Yes, cancel it",
+    cancelledToast: "Case cancelled. The record has been kept.",
     uploadHeading: "Provide the client response",
+    // NOT "practice files". On a real onboarding these are the client's own
+    // files. What is true in both modes is where they go: the case, and not the
+    // client's live storage — which is the reassurance an operator actually
+    // wants before uploading a real loan tape.
     uploadHelp:
-      "Upload practice files, or use the files from a prepared example. They stay inside this " +
-      "practice case.",
+      "Upload the client's files, or use the files from a prepared example. They stay inside " +
+      "this case and are never written to the client's live storage.",
     uploadButton: "Add files",
     uploadFixture: "Use the example files",
     uploadGenerate: "Let Trakt make up a response",
 
-    readyHeadline: "Practice case ready for execution.",
+    readyHeadline: "Case ready for execution.",
     readyNotDone: [
       "No live files were written.",
       "No production pipeline was triggered.",
@@ -737,7 +1082,7 @@ export const copy = {
       hard_blocked: "Blocked",
     } as Record<string, string>,
 
-    notFound: "That practice case could not be found.",
+    notFound: "That case could not be found.",
   },
 
   admin: {
@@ -777,6 +1122,17 @@ export const copy = {
       history: "History",
       impact: "Impact",
       compare: "Compare",
+    },
+
+    drift: {
+      heading: "What this deployment carries",
+      adopt: "Draft a version from these files",
+      adopted: "Drafted. Check it, then activate it to put it in force.",
+      explain:
+        "A package is taken from the repository once, when the layer is " +
+        "first used, and never again — so a later deployment's edits are " +
+        "not in force until a version is made from them. Drafting one here " +
+        "changes nothing yet: it still has to be checked and activated.",
     },
 
     actions: {

@@ -243,6 +243,11 @@ export interface AgentClient {
   getCohortVintages(portfolioId: string, query?: CohortVintageQuery,
                     signal?: AbortSignal): Promise<CohortFormation | CohortStaticPool>;
 
+  /** Every vintage by months on book — the static-pool grid. Optional: a
+   *  client without it simply shows no grid. */
+  getCohortMatrix?(portfolioId: string, query?: Omit<CohortVintageQuery, "vintage">,
+                   signal?: AbortSignal): Promise<import("@/domain").CohortMatrix>;
+
   /** Funded exposure per UK ITL3 area — the Geography tab's choropleth feed. */
   getGeoExposure(portfolioId: string, portfolioContext?: string,
                 signal?: AbortSignal): Promise<GeoExposure>;

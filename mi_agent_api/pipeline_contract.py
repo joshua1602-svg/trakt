@@ -34,8 +34,10 @@ from trakt_core import perf as _perf
 from . import serving_cache as _serving_cache
 from .mi_dataset_contract import build_dataset_contract
 from .pipeline_prep import (
+    OPEN_STAGES,
     field_correlation_to_funded,
     forecast_readiness,
+    open_pipeline,
     prepare_pipeline_mi_dataset,
 )
 from . import pipeline_history as _history
@@ -409,6 +411,29 @@ def weekly_extract_inventory(root: str | os.PathLike,
     }
 
 
+def _source_and_as_of(source: str | os.PathLike | Dict[str, Any],
+                      as_of_date: Optional[str]) -> Tuple[Path, Optional[str]]:
+    """The source path and its as-of date, from a path or a discovery scope."""
+    if isinstance(source, dict):
+        # A weekly extract's as-of is its extract date (a published snapshot
+        # carries it in its folder, not its file name).
+        as_of_date = (as_of_date or source.get("pipeline_as_of_date")
+                      or source.get("pipeline_extract_date"))
+        source = source.get("source_file", "")
+    p = Path(source)
+    return p, (as_of_date or _extract_date(p))
+
+
+def _prepared_key(p: Path, rd: Optional[str],
+                  historical_model: Optional[Dict[str, Any]], kind: str) -> Optional[str]:
+    return _serving_cache.key_for(
+        tenant=_serving_cache.resolved_tenant(),
+        scope=f"{kind}={p.name}",
+        identity=[str(p), _serving_cache.file_identity(p),
+                  ("as_of", rd),
+                  ("model", _serving_cache.model_fingerprint(historical_model))])
+
+
 @_perf.stage_fn("pipeline_prep")
 def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
                            as_of_date: Optional[str] = None,
@@ -421,11 +446,7 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
     NOT the funded reporting cut-off. ``historical_model`` (from
     :func:`build_pipeline_history`) supplies empirical stage completion rates.
     """
-    if isinstance(source, dict):
-        as_of_date = as_of_date or source.get("pipeline_as_of_date")
-        source = source.get("source_file", "")
-    p = Path(source)
-    rd = as_of_date or _extract_date(p)
+    p, rd = _source_and_as_of(source, as_of_date)
 
     # Memoised on the immutable identity of the source file plus every input
     # that changes the OUTPUT: the as-of date and the historical model whose
@@ -437,12 +458,7 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
     # snapshot carries its date in the folder, not the filename) — not an
     # unidentifiable source. Only the path and its content marker may null the
     # key, which is what keeps "cannot identify the bytes" uncacheable.
-    key = _serving_cache.key_for(
-        tenant=_serving_cache.resolved_tenant(),
-        scope=f"source={p.name}",
-        identity=[str(p), _serving_cache.file_identity(p),
-                  ("as_of", rd),
-                  ("model", _serving_cache.model_fingerprint(historical_model))])
+    key = _prepared_key(p, rd, historical_model, "source")
 
     def _build() -> Tuple[pd.DataFrame, Dict[str, Any]]:
         raw = _read_source(p)
@@ -463,6 +479,62 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
     return df.copy(deep=False), copy.deepcopy(report)
 
 
+@_perf.stage_fn("pipeline_extract_summary")
+def load_extract_summary(source: str | os.PathLike | Dict[str, Any],
+                         as_of_date: Optional[str] = None,
+                         historical_model: Optional[Dict[str, Any]] = None
+                         ) -> Dict[str, Any]:
+    """The per-extract totals the weekly time series read, without the frame.
+
+    Evolution, the origination funnel and the forecast bridge walk EVERY
+    weekly extract, and a client with a year of history has more of them than
+    the prepared-frame memo holds (``_PIPELINE_PREP_CACHE``) — so each request
+    evicted the frames it was about to need and re-prepared the whole history.
+    ERE's 90 weekly extracts made the Evolution tab time out. The series need
+    only these few numbers per extract, so they are memoised here, keyed on
+    the SAME immutable identity as the prepared frame (source bytes, as-of
+    date, historical model), in a memo sized for years of weekly history.
+
+        {row_count, total_pipeline_amount, weighted_expected_funded_amount,
+         has_stage, has_balance, stages: {stage: {count, value}}}
+
+    ``value`` sums ``current_outstanding_balance`` per ``pipeline_stage``
+    (``None`` when the extract has no balance column).
+    """
+    p, rd = _source_and_as_of(source, as_of_date)
+    key = _prepared_key(p, rd, historical_model, "summary")
+
+    def _build() -> Dict[str, Any]:
+        df, report = load_prepared_pipeline(p, as_of_date=rd,
+                                            historical_model=historical_model)
+        stages: Dict[str, Dict[str, Any]] = {}
+        has_stage = "pipeline_stage" in df.columns
+        if has_stage:
+            stage_str = df["pipeline_stage"].astype(str)
+            counts = stage_str.groupby(stage_str).size()
+            amounts = (coerce_numeric(df[_SUMMARY_BALANCE]).groupby(stage_str).sum()
+                       if _SUMMARY_BALANCE in df.columns else None)
+            for stage, n in counts.items():
+                stages[str(stage)] = {
+                    "count": int(n),
+                    "value": (float(amounts.get(stage, 0.0))
+                              if amounts is not None else None)}
+        return {
+            "row_count": int(report.get("row_count", len(df))),
+            "total_pipeline_amount": report.get("total_pipeline_amount"),
+            "weighted_expected_funded_amount":
+                report.get("weighted_expected_funded_amount"),
+            "has_stage": has_stage,
+            "has_balance": _SUMMARY_BALANCE in df.columns,
+            "stages": stages,
+        }
+
+    return copy.deepcopy(_EXTRACT_SUMMARY_CACHE.get_or_build(key, _build))
+
+
+_SUMMARY_BALANCE = "current_outstanding_balance"
+
+
 def collect_weekly_history(root: str | os.PathLike,
                            client_id: str) -> List[Dict[str, Any]]:
     """The UNIQUE governed weekly pipeline extracts for a client across every
@@ -477,6 +549,10 @@ def collect_weekly_history(root: str | os.PathLike,
 #: rolling window of weekly extracts. See mi_agent_api/serving_cache.py.
 _HISTORY_CACHE = _serving_cache.BoundedCache("history_model", max_entries=16)
 _PIPELINE_PREP_CACHE = _serving_cache.BoundedCache("pipeline_prep", max_entries=64)
+#: Per-extract series totals (see load_extract_summary): a few numbers each,
+#: so sized for years of weekly extracts rather than a rolling window.
+_EXTRACT_SUMMARY_CACHE = _serving_cache.BoundedCache("pipeline_extract_summary",
+                                                     max_entries=4096)
 #: Governed pipeline SOURCE DISCOVERY (see discover_pipeline_sources).
 _DISCOVERY_CACHE = _serving_cache.BoundedCache("pipeline_discovery", max_entries=16)
 
@@ -514,6 +590,7 @@ def build_pipeline_history(root: str | os.PathLike,
     performs exactly the calculation below.
     """
     from .pipeline_history import build_historical_completion_model
+    from .pipeline_prep import runoff_settings as _prep_runoff_settings
     inv = weekly_extract_inventory(root, client_id)
     key = _serving_cache.key_for(
         tenant=_serving_cache.resolved_tenant(),
@@ -523,7 +600,8 @@ def build_pipeline_history(root: str | os.PathLike,
         identity=[str(root), *(_extract_set_identity(inv["extracts"]) or [None])])
 
     def _build() -> Dict[str, Any]:
-        model = build_historical_completion_model(inv["extracts"])
+        model = build_historical_completion_model(
+            inv["extracts"], runoff_settings=_prep_runoff_settings())
         # Provenance: how many files were scanned vs how many unique extracts
         # were used.
         model["sourceFilesScanned"] = inv["sourceFilesScanned"]
@@ -679,13 +757,15 @@ def compute_prior_week_aggregates(
             prior, as_of_date=extract_date, historical_model=historical_model)
     except Exception:  # noqa: BLE001 - a bad prior file must not break the snapshot
         return None
-    cases = int(report.get("row_count", len(df)))
+    # Same open-pipeline population as the current snapshot's tiles, so the
+    # week-on-week delta is like-for-like.
+    totals = _open_totals(df)
     return {
         "snapshotDate": extract_date or prior.get("pipeline_source_folder_date"),
         "sourceFile": Path(prior.get("source_file", "")).name or None,
-        "pipelineRowCount": cases,
-        "pipelineAmount": report.get("total_pipeline_amount"),
-        "weightedExpectedFundedAmount": report.get("weighted_expected_funded_amount"),
+        "pipelineRowCount": totals["cases"],
+        "pipelineAmount": totals["amount"],
+        "weightedExpectedFundedAmount": totals["weighted"],
     }
 
 
@@ -712,9 +792,24 @@ def build_pipeline_dataset_contract(
 # --------------------------------------------------------------------------- #
 # Pipeline snapshot (API block)
 # --------------------------------------------------------------------------- #
+#: Probability sources that carry forward expected-funding weight. Settled
+#: (completed / withdrawn), lapsed and not-forecast cases have none, so they
+#: have no expected completion month to report.
+_FORECAST_SOURCES = ("row_level", "historical_runoff", "historical_stage_rate",
+                     "configured_stage_rate")
+
+
+def forecast_rows(df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+    """The cases that carry forecast weight (see ``_FORECAST_SOURCES``)."""
+    if df is None or "completion_probability_source" not in df.columns:
+        return df
+    return df[df["completion_probability_source"].isin(_FORECAST_SOURCES)]
+
+
 def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     if "expected_completion_month" not in df.columns:
         return []
+    df = forecast_rows(df)
     rows: List[Dict[str, Any]] = []
     grp = df.groupby(df["expected_completion_month"].astype(str), dropna=False)
     for month, sub in grp:
@@ -842,6 +937,90 @@ def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
     return head + [other]
 
 
+def _col_sum(df: pd.DataFrame, col: str) -> Optional[float]:
+    if col not in df.columns:
+        return None
+    return round(float(coerce_numeric(df[col]).sum()), 2)
+
+
+def _open_totals(df: pd.DataFrame) -> Dict[str, Any]:
+    """Case count, amount and weighted expected funded of the OPEN pipeline."""
+    odf = open_pipeline(df)
+    return {
+        "cases": int(len(odf)),
+        "amount": _col_sum(odf, "current_outstanding_balance") or 0.0,
+        "expected": _col_sum(odf, "expected_funded_amount"),
+        "weighted": _col_sum(odf, "weighted_expected_funded_amount"),
+    }
+
+
+def _excluded_from_open(df: pd.DataFrame) -> Dict[str, Any]:
+    """What the open-pipeline figures leave out, by stage — disclosed, never
+    silently dropped: completed and withdrawn cases stay in the weekly extract,
+    and an unmapped stage is not evidence of a live case."""
+    if "pipeline_stage" not in df.columns:
+        return {"stages": [], "cases": 0, "amount": 0.0}
+    stage = df["pipeline_stage"].astype(str).str.strip().str.upper()
+    rest = df[~stage.isin(OPEN_STAGES)]
+    rows = []
+    for key, sub in rest.groupby(stage[~stage.isin(OPEN_STAGES)], sort=True):
+        rows.append({"stage": str(key), "caseCount": int(len(sub)),
+                     "amount": _col_sum(sub, "current_outstanding_balance") or 0.0})
+    return {"stages": rows, "cases": int(len(rest)),
+            "amount": _col_sum(rest, "current_outstanding_balance") or 0.0}
+
+
+def _pipeline_profile(df: pd.DataFrame) -> Dict[str, Any]:
+    """The pipeline's credit profile, on the same definitions as the funded
+    snapshot's tiles, so the two lenses read alike: weighted-average LTV,
+    interest rate, youngest-borrower age and property value (each weighted by
+    the pipeline amount, as the funded tiles weight by balance), and the
+    single-borrower share of cases.
+
+    Computed over the same population as the pipeline totals beside it. A
+    measure whose inputs the extract does not carry is ``None`` — the UI then
+    omits the tile rather than showing an invented figure.
+    """
+    from mi_agent.mi_dataset_profile import percent_storage_scale, to_display_points
+    from .snapshots import _weighted_average
+
+    weights = (df["current_outstanding_balance"] if "current_outstanding_balance" in df.columns
+               else pd.Series(1.0, index=df.index))
+
+    def _wavg(col: str) -> Optional[float]:
+        if col not in df.columns or not coerce_numeric(df[col]).notna().any():
+            return None
+        return _weighted_average(df[col], weights)
+
+    def _points(col: str) -> Optional[float]:
+        value = _wavg(col)
+        if value is None:
+            return None
+        return round(float(to_display_points(value, percent_storage_scale(df[col]))), 2)
+
+    def _rounded(value: Optional[float], ndigits: int) -> Optional[float]:
+        return None if value is None else round(float(value), ndigits)
+
+    single_pct = single = known_n = None
+    if "borrower_type" in df.columns:
+        btype = df["borrower_type"].astype(str).str.strip().str.lower()
+        known = btype.isin(["single", "joint"])
+        if known.any():
+            single = int((btype == "single").sum())
+            known_n = int(known.sum())
+            single_pct = round(single / known_n * 100.0, 1)
+
+    return {
+        "waLtvPct": _points("current_loan_to_value"),
+        "waInterestRatePct": _points("current_interest_rate"),
+        "waYoungestAge": _rounded(_wavg("youngest_borrower_age"), 1),
+        "waPropertyValue": _rounded(_wavg("current_valuation_amount"), 2),
+        "singleBorrowerPct": single_pct,
+        "singleBorrowerCount": single,
+        "borrowerTypeKnownCount": known_n,
+    }
+
+
 def compute_pipeline_snapshot(
     df: pd.DataFrame,
     report: Dict[str, Any],
@@ -864,13 +1043,20 @@ def compute_pipeline_snapshot(
     prior weekly snapshot exists — the UI then shows "No prior week").
     """
     contract = build_pipeline_dataset_contract(df, semantics, report)
-    weighted = report.get("weighted_expected_funded_amount")
     src = source or {}
+    # Every figure below is the OPEN pipeline (KFI / Application / Offer).
+    # Completed and withdrawn cases stay in the weekly extract with their
+    # balance; they are disclosed in ``excludedFromOpenPipeline``, not counted.
+    excluded = _excluded_from_open(df)
+    totals = _open_totals(df)
+    full_df, df = df, open_pipeline(df)
+    weighted = totals["weighted"]
     as_of = src.get("pipeline_as_of_date") or report.get("pipeline_as_of_date")
     # Long categorical breakdowns are capped to top 10 (+ Other) for the visual;
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
     broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
     region_full = _dimension_breakdown(df, "geographic_region_obligor", key_name="key")
+    product_full = _dimension_breakdown(df, "product_type", key_name="key")
     completion_breakdown = _expected_completion_breakdown(df)
     completion_summary = _expected_completion_summary(completion_breakdown, as_of)
     return {
@@ -896,9 +1082,13 @@ def compute_pipeline_snapshot(
         "duplicatesExcluded": src.get("duplicates_excluded"),
         "primarySourcePreference": src.get("primary_source_preference"),
         "sourceFoldersIncluded": src.get("source_folders_included", []),
-        "pipelineRowCount": int(report.get("row_count", len(df))),
-        "pipelineAmount": report.get("total_pipeline_amount"),
-        "expectedFundedAmount": report.get("expected_funded_amount"),
+        "pipelineRowCount": totals["cases"],
+        "pipelineAmount": totals["amount"],
+        "expectedFundedAmount": totals["expected"],
+        "pipelinePopulation": "open",
+        "openStages": list(OPEN_STAGES),
+        "excludedFromOpenPipeline": excluded,
+        "extractRowCount": int(len(full_df)),
         "weightedExpectedFundedAmount": weighted,
         # Prior weekly extract aggregates for week-on-week tile deltas (null when
         # no earlier weekly snapshot exists — the UI shows "No prior week").
@@ -910,6 +1100,8 @@ def compute_pipeline_snapshot(
             report.get("historical_completion_model"),
             report.get("completion_probability_basis")),
         "stageBreakdown": _stage_breakdown(df),
+        # Credit profile on the funded tiles' definitions (additive).
+        "profile": _pipeline_profile(df),
         "expectedCompletionBreakdown": completion_breakdown,
         "expectedCompletionSummary": completion_summary,
         # Named diagnostics (relative to the pipeline as-of month).
@@ -921,6 +1113,12 @@ def compute_pipeline_snapshot(
         "brokerBreakdownFull": broker_full,
         "regionBreakdown": cap_breakdown(region_full, 10),
         "regionBreakdownFull": region_full,
+        # Product and LTV band (additive): the same amount / count / weighted
+        # rows as broker and region. LTV bands come from the shared bucket
+        # engine the funded book uses, so the two books band alike.
+        "productBreakdown": cap_breakdown(product_full, 10),
+        "productBreakdownFull": product_full,
+        "ltvBreakdown": _dimension_breakdown(df, "ltv_bucket", key_name="key"),
         "availableMetrics": report.get("metrics_available", []),
         "availableDimensions": report.get("dimensions_available", []),
         "missingDimensions": report.get("missing_dimensions", []),

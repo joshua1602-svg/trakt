@@ -86,11 +86,20 @@ UNKNOWN = "Unknown"
 #: Stages a case can sit at without being in the ACTIVE pipeline.
 TERMINAL_STAGES = ("COMPLETED", "WITHDRAWN")
 
+#: The OPEN pipeline — the same stages as ``pipeline_prep.OPEN_STAGES``.
+#: Restated rather than imported: this module ships in the blob-trigger
+#: Function App (Teams insight notifications), whose package does not carry
+#: pipeline_prep's dependency chain, so importing it broke that deploy.
+#: ``tests/test_the_pipeline_is_the_open_pipeline.py`` pins the two equal.
+OPEN_STAGES = ("KFI", "APPLICATION", "OFFER")
+
 #: The attribution convention, echoed in every payload.
 ATTRIBUTION = "current_period_dimension_prior_for_removed"
 
 #: Bumped when any definition in this module changes.
-METHODOLOGY_VERSION = "1"
+#: 2: the pipeline measure is the OPEN pipeline; contributor case counts are
+#:    moved cases; headline counts are matched cases.
+METHODOLOGY_VERSION = "2"
 
 #: Case-id tokens that mean "no identifier".
 _NULL_IDS = ("", "nan", "none", "nat", "null")
@@ -170,8 +179,14 @@ def movement_components(current: Optional[pd.DataFrame],
                         *,
                         dims: Sequence[str],
                         terminal_stages: Sequence[str] = TERMINAL_STAGES,
+                        open_stages: Optional[Sequence[str]] = None,
                         ) -> pd.DataFrame:
     """Per-case ``delta``, ``component`` and resolved dimension values.
+
+    With ``open_stages`` the measure is the OPEN pipeline: a case counts only
+    while it sits at an open stage, so a case that moves to a terminal stage
+    carries its whole balance out (``progressed_out`` is negative), and a case
+    open in neither period is not part of the movement at all.
 
     The returned frame is the single source for every number in the payload:
     the headline is its ``delta`` sum, the component summary groups it by
@@ -182,6 +197,19 @@ def movement_components(current: Optional[pd.DataFrame],
     pri = _case_level(prior, dims)
 
     joined = cur.join(pri, how="outer", rsuffix="_prior")
+    if open_stages is not None:
+        opened = tuple(s.upper() for s in open_stages)
+        cur_open = joined["_stage"].fillna("").isin(opened) if "_stage" in joined.columns \
+            else pd.Series(False, index=joined.index)
+        pri_open = (joined["_stage_prior"].fillna("").isin(opened)
+                    if "_stage_prior" in joined.columns
+                    else pd.Series(False, index=joined.index))
+        joined = joined[cur_open | pri_open].copy()
+        cur_open, pri_open = cur_open[joined.index], pri_open[joined.index]
+        # Present but not open counts as zero exposure, not as absent: the
+        # case is still matched, so its departure is classified, not guessed.
+        joined.loc[joined["_measure"].notna() & ~cur_open, "_measure"] = 0.0
+        joined.loc[joined["_measure_prior"].notna() & ~pri_open, "_measure_prior"] = 0.0
     cur_m = joined["_measure"].astype("float64")
     pri_m = joined["_measure_prior"].astype("float64")
 
@@ -277,8 +305,12 @@ def rank_contributors(components: pd.DataFrame, dim: str, *,
     """
     if components.empty or dim not in components.columns:
         return []
-    grouped = components.groupby(dim, sort=False).agg(
-        amount=("delta", "sum"), case_count=("delta", "size"))
+    # ``case_count`` is the cases that MOVED in this group (any component but
+    # unchanged), matching the amount beside it — not the group's whole book.
+    moved = (components["component"] != "unchanged").astype(int) \
+        if "component" in components.columns else pd.Series(1, index=components.index)
+    grouped = components.assign(_moved=moved).groupby(dim, sort=False).agg(
+        amount=("delta", "sum"), case_count=("_moved", "sum"))
     grouped = grouped.reset_index().rename(columns={dim: "name"})
     grouped["_abs"] = grouped["amount"].abs()
     grouped = grouped.sort_values(["_abs", "name"], ascending=[False, True])
@@ -312,6 +344,24 @@ def reassignment_counts(components: pd.DataFrame,
 # --------------------------------------------------------------------------- #
 # Payload assembly
 # --------------------------------------------------------------------------- #
+def _open_rows(df: pd.DataFrame, open_stages: Sequence[str]) -> pd.Series:
+    if STAGE not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df[STAGE].astype(str).str.strip().str.upper().isin(
+        [s.upper() for s in open_stages])
+
+
+def _measured_cases(df: Optional[pd.DataFrame],
+                    open_stages: Optional[Sequence[str]]) -> int:
+    """Distinct keyed cases in the measured population of one frame."""
+    if df is None or df.empty or CASE_KEY not in df.columns:
+        return 0
+    if open_stages is not None:
+        df = df[_open_rows(df, open_stages)]
+    key = df[CASE_KEY].astype(str).str.strip()
+    return int(key[~key.str.lower().isin(_NULL_IDS)].nunique())
+
+
 def _filter_completed(df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
     """Rows sitting at the COMPLETED stage — the funnel's completion measure."""
     if df is None or df.empty or STAGE not in df.columns:
@@ -324,9 +374,11 @@ _HEADLINE = {
     DETAIL_PIPELINE: {
         "label": "Pipeline balance",
         "metric_definition": (
-            "Total open pipeline exposure (current_outstanding_balance) across "
-            "all cases in the governed weekly extract. Same measure and same "
-            "prepared frames as the pipeline evolution series."),
+            "Open pipeline exposure (current_outstanding_balance) of cases at "
+            "KFI, Application or Offer in the governed weekly extract. Completed "
+            "and withdrawn cases are excluded; a case moving to either leaves "
+            "the pipeline with its balance. Same measure as the pipeline "
+            "evolution series and the snapshot tiles."),
     },
     DETAIL_COMPLETIONS: {
         "label": "Completed case value",
@@ -361,23 +413,30 @@ def build_movement_detail(detail_type: str,
     if detail_type not in _HEADLINE:
         raise ValueError(f"unknown detail_type {detail_type!r}")
 
+    open_stages: Optional[Sequence[str]] = None
     if detail_type == DETAIL_COMPLETIONS:
         current, prior = _filter_completed(current), _filter_completed(prior)
         terminal: Sequence[str] = ()      # already terminal; no "moved out" step
     else:
         terminal = TERMINAL_STAGES
+        open_stages = OPEN_STAGES
 
     dims = [col for _key, col in DIMENSIONS]
     components = movement_components(current, prior, dims=dims,
-                                     terminal_stages=terminal)
+                                     terminal_stages=terminal,
+                                     open_stages=open_stages)
 
     total = round(float(components["delta"].sum()), 2) if not components.empty else 0.0
-    cur_cases = int(len(current)) if current is not None else 0
-    pri_cases = int(len(prior)) if prior is not None else 0
+    # Counts are MATCHED cases (keyed, de-duplicated) in the measured
+    # population, so they reconcile with the components beside them.
+    cur_cases = _measured_cases(current, open_stages)
+    pri_cases = _measured_cases(prior, open_stages)
 
-    cur_value = (float(coerce_numeric(current[MEASURE]).fillna(0.0).sum())
-                 if current is not None and not current.empty
-                 and MEASURE in current.columns else 0.0)
+    measured = (current if open_stages is None or current is None
+                else current[_open_rows(current, open_stages)])
+    cur_value = (float(coerce_numeric(measured[MEASURE]).fillna(0.0).sum())
+                 if measured is not None and not measured.empty
+                 and MEASURE in measured.columns else 0.0)
     pri_value = cur_value - total
 
     contributors = {

@@ -87,28 +87,64 @@ _CONFIG_CURRENCY_PATHS = (
 
 
 def client_config_path(client_id: Optional[str] = None) -> Optional[str]:
-    """The governed client configuration in force, or ``None`` when none is.
+    """Where the governed client configuration in force actually IS, or ``None``.
+
+    THE AUTHORITY IS OCC. After onboarding, a client's standing configuration
+    is the artefact OCC activated for it, and this returns that artefact's
+    ``blob://`` URI. Both readers of this locator already handle a URI
+    (:func:`_load_client_config` here, ``mi_agent.portfolio_metadata._read_text``
+    there), so pointing at the governed artefact changes WHERE the answer comes
+    from without changing how anyone reads it.
 
     A client must be IDENTIFIED before its configuration can speak: resolving
     without a client and then reading some client's config would apply one
-    tenant's governed decision to another. With no client and no explicit
-    override there is no governed answer, and the caller falls through to the
-    tape — the pre-existing behaviour.
+    tenant's governed decision to another.
+
+    ``None`` means NOT CONFIGURED. It does not mean "use the repository file",
+    and it never means "use the incumbent's". The repository copy is where a
+    configuration was authored before onboarding owned it; reading it in
+    production lets an activated configuration and a stale file disagree with
+    no version, attribution or audit — so it is reachable only through the
+    development override below, which production ignores.
     """
-    configured = os.environ.get(ENV_CLIENT_CONFIG)
+    configured = _development_override()
     if configured:
         return configured
     if not client_id:
         return None
-    per_client = _CONFIG_ROOT / f"config_client_{client_id}.yaml"
-    if per_client.exists():
-        return str(per_client)
-    # A client with no governed configuration of its own has no governed answer.
-    # There used to be a fallback to the incumbent lender's file here, which
-    # meant a second client silently reported under ERE Funding's configured
-    # currency. Returning None sends the caller to the tape and the platform
-    # default, which is what "not configured" should look like.
-    return None
+    try:
+        from operations_control.configuration.client_config import (
+            get_active_client_config,
+        )
+        active = get_active_client_config(client_id)
+    except Exception:  # noqa: BLE001 — configuration must never break MI
+        logger.info("the activated configuration for %s could not be resolved",
+                    client_id, exc_info=True)
+        return None
+    return active.uri if active is not None else None
+
+
+def _development_override() -> Optional[str]:
+    """``TRAKT_MI_CLIENT_CONFIG``, honoured only outside production.
+
+    It was an unconditional override, which made an environment variable a
+    higher authority than an activated configuration. Kept for development and
+    migration, where pointing MI at a file is exactly what is wanted, and
+    ignored in production — where ``trakt_core.runtime`` reports production
+    unconditionally in Azure, so a stray app setting cannot reinstate it.
+    """
+    configured = (os.environ.get(ENV_CLIENT_CONFIG) or "").strip()
+    if not configured:
+        return None
+    try:
+        from trakt_core.runtime import is_production
+    except Exception:  # noqa: BLE001 — unknown runtime is treated as production
+        return None
+    if is_production():
+        logger.warning("%s is set but ignored: this runtime is production",
+                       ENV_CLIENT_CONFIG)
+        return None
+    return configured
 
 
 @lru_cache(maxsize=8)

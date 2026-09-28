@@ -126,38 +126,43 @@ describe("publication approval inside the workflow", () => {
     ).toBeInTheDocument();
     expect(within(approval).getByText(/0 blocking issues/)).toBeInTheDocument();
     expect(
-      within(approval).getByText(/as the latest official version\..*applies only to this delivery/s),
+      within(approval).getByText(
+        /as the latest official version\..*with this source schema will publish without asking/s,
+      ),
     ).toBeInTheDocument();
   });
 
-  it("defaults the remembered scope to this delivery only", async () => {
+  it("asks whether to remember the decision, and still offers this delivery only", async () => {
     renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
 
     const approval = await approvalStep();
     expect(
       within(approval).getByText("Should Trakt remember this decision for future deliveries?"),
     ).toBeInTheDocument();
-    const chosen = within(approval).getByRole("radio", {
-      name: /No — this delivery only/,
-    }) as HTMLInputElement;
-    expect(chosen.checked).toBe(true);
+    expect(
+      within(approval).getByRole("radio", { name: /No — this delivery only/ }),
+    ).toBeInTheDocument();
   });
 
-  it("does not promise automatic approval it cannot deliver", async () => {
+  it("says when a later delivery publishes itself, and when it waits", async () => {
     renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
     const approval = await approvalStep();
 
-    // The answer is recorded; it does not publish anything by itself, and the
-    // wording says so rather than implying a future delivery approves itself.
+    // "Yes" is a standing approval: an unchanged schema publishes without a
+    // click, and the wording says both that and what still waits for a person.
+    expect(within(approval).getByText(/waits for a person/i)).toBeInTheDocument();
     expect(
-      within(approval).getByText(/does not publish anything on its own/),
-    ).toBeInTheDocument();
+      within(approval).getAllByText(/same source schema publish without asking/).length,
+    ).toBe(2);
+    expect(within(approval).getAllByText(/still waits for you/).length).toBe(2);
+  });
+
+  it("defaults to the standing approval", async () => {
+    renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
+    const approval = await approvalStep();
     expect(
-      within(approval).getByText(/every delivery is approved by a person/i),
-    ).toBeInTheDocument();
-    expect(within(approval).getAllByText(/Someone still approves each delivery/).length).toBe(2);
-    expect(within(approval).queryByText(/will apply this decision/i)).toBeNull();
-    expect(within(approval).queryByText(/automatically/i)).toBeNull();
+      within(approval).getByRole("radio", { name: /future deliveries for this portfolio/i }),
+    ).toBeChecked();
   });
 
   it("never offers a platform-wide scope on a single delivery", async () => {
@@ -181,7 +186,7 @@ describe("publication approval inside the workflow", () => {
     );
     // The consequence updates with the scope, before anything is confirmed.
     expect(
-      within(approval).getByText(/also recorded against future deliveries for/),
+      within(approval).getByText(/with this source schema will publish without asking/),
     ).toBeInTheDocument();
 
     await user.click(within(approval).getByRole("button", { name: "Approve and publish" }));
@@ -264,6 +269,60 @@ describe("cancelling a delivery", () => {
     await approvalStep();
     expect(
       screen.queryByRole("button", { name: "Cancel this delivery" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * A delivery that has stopped can be run again.
+ *
+ * Reported from the live case: the step read "Held by a blocking problem", the
+ * header read "Needs review", and the only control on the page was to cancel
+ * the delivery. The engine had always permitted the rerun —
+ *
+ *     RUN_NEEDS_REVIEW: (RUN_RUNNING, RUN_CANCELLED, RUN_PUBLISHED, RUN_HELD)
+ *
+ * — but the screen restated a list of three statuses and needs_review was not
+ * among them, so an operator whose delivery halted had nothing to press. The
+ * line below it takes its rule from the engine and says so in a comment; this
+ * one did not.
+ */
+describe("running a stopped delivery again", () => {
+  it("is offered while the delivery needs review", async () => {
+    const client = new MockOpsClient(0);
+    renderWorkflow(client, "/workflows/wf-1001");
+    await approvalStep();
+    expect(
+      screen.getByRole("button", { name: "Run again" }),
+    ).toBeInTheDocument();
+  });
+
+  it("is offered while the delivery is blocked", async () => {
+    const client = new MockOpsClient(0);
+    renderWorkflow(client, "/workflows/wf-1004");
+    await approvalStep();
+    expect(
+      screen.getByRole("button", { name: "Run again" }),
+    ).toBeInTheDocument();
+  });
+
+  it("is not offered once the delivery is published", async () => {
+    const client = new MockOpsClient(0);
+    await client.publishWorkflow("wf-1002");
+    renderWorkflow(client, "/workflows/wf-1002");
+    await approvalStep();
+    expect(
+      screen.queryByRole("button", { name: "Run again" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("is not offered once the delivery is cancelled", async () => {
+    const client = new MockOpsClient(0);
+    await client.cancelWorkflow("wf-1002", "no longer needed");
+    renderWorkflow(client, "/workflows/wf-1002");
+    await approvalStep();
+    expect(
+      screen.queryByRole("button", { name: "Run again" }),
     ).not.toBeInTheDocument();
   });
 });

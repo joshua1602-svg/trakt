@@ -87,6 +87,11 @@ class SyntheticArtefact:
     sha256: str = ""
     size: int = 0
     columns: List[str] = field(default_factory=list)
+    #: The worksheet the columns were read from. Empty for a CSV, and for a
+    #: workbook it is the sheet CHOSEN — a lender's extract opens on a summary
+    #: tab as often as not, so which sheet was read is a fact about the
+    #: delivery, not an implementation detail.
+    source_sheet: str = ""
     row_count: int = 0
     recognition_confidence: Optional[float] = None
     recognition_basis: str = ""
@@ -201,6 +206,55 @@ class SyntheticRun:
     # What the run did.
     stage_outcomes: Dict[str, str] = field(default_factory=dict)
     mapping_report: List[Dict[str, Any]] = field(default_factory=list)
+    #: Fields more than one file in the delivery carries, and whether those
+    #: files agree about them. A disagreement stops the delivery when it is
+    #: built, so it is surfaced here — in rehearsal — rather than after.
+    cross_file: List[Dict[str, Any]] = field(default_factory=list)
+    #: Required fields the product profile does not need for management
+    #: information. Kept on the run because an approver is entitled to see
+    #: which governed answer let a required field through.
+    excused_findings: List[Dict[str, Any]] = field(default_factory=list)
+    #: What a model was asked about the columns deterministic matching could
+    #: not settle, what it proposed, and why it was not asked where it was not.
+    #: Kept on the run because a suggestion an operator confirms is one they
+    #: must be able to see the origin of — and because a model that quietly did
+    #: not run looks exactly like one that had nothing to say.
+    llm: Dict[str, Any] = field(default_factory=dict)
+    #: Canonical fields an operator asked for because a column in the delivery
+    #: has no field to go to. Requests, not fields: ``operations_control.rules``
+    #: states that the core field registry is never written from here, and
+    #: adding a canonical field is a versioned system-configuration change with
+    #: its own approval. Kept on the run so the ask is a governed record with a
+    #: named requester and the column that prompted it, rather than a note in
+    #: somebody's inbox.
+    field_requests: List[Dict[str, Any]] = field(default_factory=list)
+    #: HOW THE LENDER WRITES A PERCENTAGE, where they and the platform could
+    #: mean two different things by the same number. Canonical is percentage
+    #: POINTS — 35 means 35% — and a lender who sends 0.35 is not wrong, just
+    #: on another scale. The transform reconciles the two where it can see a
+    #: balance and a valuation to reconcile against; where it cannot, this is
+    #: the operator saying which it is, rather than the platform guessing from
+    #: magnitude and being wrong about a genuinely small ratio.
+    #:
+    #: canonical field -> "percentage_points" | "fraction".
+    source_units: Dict[str, str] = field(default_factory=dict)
+    #: THE OPERATOR'S WORKING COPY OF THE MAPPING TABLE.
+    #:
+    #: One entry per column they have been through — the field they confirmed,
+    #: the field they changed it to, or their decision not to use it — held as
+    #: a DRAFT. Nothing here has resolved a decision, promoted a rule, or
+    #: caused a rerun; every entry can be changed or taken back, and a hundred
+    #: and fifty columns are read and answered over an afternoon rather than in
+    #: one sitting. ``confirm_mappings`` is the single act that applies the lot.
+    #:
+    #: Persisted rather than held in the browser because the reading is the
+    #: work: a lost tab or a hard refresh must not cost an operator an
+    #: afternoon of it. Persisted is not applied.
+    staged_mappings: List[Dict[str, Any]] = field(default_factory=list)
+    #: The product an operator confirmed this book to be. Until it is set, the
+    #: product profile excuses nothing — the platform proposes a profile on the
+    #: asset class alone and deliberately does not apply one.
+    confirmed_product_profile: str = ""
     open_decisions: List[Dict[str, Any]] = field(default_factory=list)
     control_results: List[Dict[str, Any]] = field(default_factory=list)
     planned_pipeline_actions: List[Dict[str, Any]] = field(default_factory=list)
@@ -275,8 +329,16 @@ class SyntheticRun:
                 if d.get("blocking") and d.get("status", "open") == "open"]
 
     def has_approval(self, subject: str) -> bool:
-        return any(a.get("subject") == subject and a.get("decision") == "approved"
-                   for a in self.approvals)
+        """Is this approval STANDING — not merely ever given?
+
+        It used to read "approved at any point in this run's history", so an
+        approval that was later withdrawn went on reading as held. That was
+        harmless while nothing withdrew one; re-opening a settled mapping does,
+        and readiness reads this to decide whether a person has signed off the
+        delivery. An approval given against a reading that no longer exists is
+        not an approval of the one that replaced it.
+        """
+        return self.approval(subject).get("decision") == "approved"
 
     def approval(self, subject: str) -> Dict[str, Any]:
         for entry in reversed(self.approvals):

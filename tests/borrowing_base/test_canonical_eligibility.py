@@ -34,7 +34,7 @@ GOVERNED_COLUMNS = (FIELD_ELIGIBLE, FIELD_ELIGIBILITY_STATUS,
                     FIELD_ELIGIBILITY_REASON, FIELD_FACILITY_ID)
 
 #: The prototype client, which HAS a configured facility.
-FACILITY_CLIENT = "ere_funding_uk"
+FACILITY_CLIENT = "ERE"
 
 
 def tape(client_id: str, rows: int = 3) -> pd.DataFrame:

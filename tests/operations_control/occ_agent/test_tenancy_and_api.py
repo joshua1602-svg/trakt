@@ -226,13 +226,28 @@ def test_a_case_is_created_and_read_back_over_the_api(api_client):
     assert body["onboarding"]["status"] == "draft"
 
 
-def test_the_status_links_to_the_onboarding_screens(api_client):
+def test_the_status_links_only_where_an_operator_can_actually_go(api_client):
+    """This pinned a link that could not work, and pinned it twice over.
+
+    It asserted ``/onboarding/{case_ref}`` was offered on a freshly created
+    case. That path is not a route — the wizard is ``/onboarding/cases/{id}``
+    — and the case it named lives in the synthetic container until activation,
+    so the governed wizard would 404 on it either way. An operator who followed
+    it reasonably concluded the case had been lost.
+
+    The link is now offered only once the case has ACTIVATED; see
+    ``test_an_agent_case_is_visible_work.py`` for both halves of that. What is
+    offered here is the views that exist regardless of this case.
+    """
     headers = {"X-Operator-Token": "tok-a"}
     created = api_client.post("/ops/agent/cases", headers=headers,
                               json={"instruction": "Onboard Northstar Lending."})
     body = created.json()
     links = {link["to"] for link in body["occ_links"]}
-    assert f"/onboarding/{body['case_ref']}" in links
+    assert f"/onboarding/{body['case_ref']}" not in links
+    assert f"/onboarding/cases/{body['case_ref']}" not in links
+    assert "/admin/config" in links
+    assert "/rules" in links
 
 
 def test_one_operator_cannot_read_another_tenants_case(api_client):

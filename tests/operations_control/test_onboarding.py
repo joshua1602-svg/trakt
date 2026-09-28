@@ -7,6 +7,7 @@ and generate the same artefacts.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -123,13 +124,39 @@ def activate(service: OnboardingService, case: OnboardingCase, *,
 
 class TestCatalogue:
     def test_it_carries_no_client_values(self):
-        """The catalogue is a schema. A client name, LEI or ERE-specific default
-        appearing in it would make onboarding client-specific again."""
+        """The catalogue is a schema. A client name, LEI or lender-specific
+        default appearing in it would make onboarding client-specific again.
+
+        ONE OF THESE NEEDS A BOUNDARY AND THE REST MUST NOT HAVE ONE.
+
+        ``ERE`` is three letters, so a substring search for it fires on "here",
+        "where" and "there" — ordinary English in the help text a client reads,
+        reported as a client identifier leaking into the schema. It is matched
+        with no LETTER on either side, which keeps ``ERE/``, ``ERE.yaml`` and
+        ``client_ERE_config`` as hits (``/``, ``.`` and ``_`` are not letters)
+        while letting prose through. ``\\b`` would not do: it counts an
+        underscore as a word character, so ``\\bERE\\b`` would miss
+        ``config_client_ERE`` — one of the shapes most worth catching.
+
+        The others are matched as plain substrings, and that is not laziness.
+        ``213800`` is an LEI PREFIX: the value that matters is
+        ``213800ABCDE123456701``, where the next character is a letter, so the
+        same boundary rule would let the single most client-specific value in
+        the estate through untouched. None of these four is short enough to
+        collide with English, so none of them needs protecting from it.
+        """
         text = Path("config/onboarding/field_catalogue.yaml").read_text(
             encoding="utf-8")
-        for forbidden in ("ERE", "ERM_UK", "Equity Release Mortgages",
+        # No letter either side — a short identifier, not a syllable.
+        bounded = re.search(r"(?<![A-Za-z])ERE(?![A-Za-z])", text)
+        assert bounded is None, (
+            "the catalogue names a specific client: 'ERE' at offset "
+            f"{bounded.start() if bounded else -1}")
+        # Distinctive enough to match anywhere, and 213800 MUST, being a prefix.
+        for forbidden in ("ERM_UK", "Equity Release Mortgages",
                           "213800", "ere_funding"):
-            assert forbidden not in text
+            assert forbidden not in text, (
+                f"the catalogue names a specific client: {forbidden!r}")
 
     def test_vocabularies_are_read_from_the_modules_that_own_them(self):
         from operations_control.configuration.packages import ASSET_MODEL

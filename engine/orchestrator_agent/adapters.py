@@ -23,7 +23,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -180,8 +180,18 @@ class RealAgentAdapters(AgentAdapters):
                  enable_llm_mapping_review: bool = False,
                  llm_mapping_profile: str = "low",
                  managed_service: bool = False,
-                 regulatory_reporting_enabled: bool = False):
+                 regulatory_reporting_enabled: bool = False,
+                 set_aside_columns: Optional[List[Tuple[str, str]]] = None,
+                 confirmed_mappings: Optional[List[Tuple[str, str]]] = None):
         self.registry = registry
+        # set_aside_columns: (file, column) pairs an operator said feed nothing
+        # ("*" = any file). Gate 1 leaves them out of every target field's
+        # candidates, so a column set aside once is not asked about again.
+        self.set_aside_columns = list(set_aside_columns or [])
+        # confirmed_mappings: (column, field) pairs an operator confirmed. A
+        # field with one is answered; a column confirmed elsewhere is not a
+        # candidate for it.
+        self.confirmed_mappings = list(confirmed_mappings or [])
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
         self.aliases_dir = aliases_dir
@@ -279,6 +289,8 @@ class RealAgentAdapters(AgentAdapters):
             reporting_period=(self.reporting_period or ""),
             managed_service=self.managed_service,
             regulatory_reporting_enabled=self.regulatory_reporting_enabled,
+            set_aside_columns=self.set_aside_columns,
+            confirmed_mappings=self.confirmed_mappings,
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":
@@ -326,7 +338,18 @@ class RealAgentAdapters(AgentAdapters):
                 ok=ok, blocking=not ok, output_path=tape, manifest_path=handoff_manifest,
                 readiness={"central_lender_tape": tape, "loan_count": res.get("loan_count"),
                            "mi_handoff": handoff_manifest, "target_contract": "mi_semantics"},
-                blockers=[] if ok else ["onboarding did not produce a central lender tape"],
+                # WHY, NOT ONLY WHAT. This said "onboarding did not produce a
+                # central lender tape" and stopped — while the build had already
+                # recorded which file it chose as the loan listing, the key
+                # column and rule it used, how many rows it read, and every
+                # source it excluded with the reason. The operator's screen then
+                # translated the bare sentence into a guess about a missing loan
+                # listing, so a delivery could halt with nothing on it to act on.
+                # Its sibling three lines above names the role and the column to
+                # check; this one now does the same, from the same record.
+                blockers=[] if ok else (
+                    central_tape_builder.explain_empty_lender_tape(res)
+                    or ["onboarding did not produce a central lender tape"]),
                 message=f"central tape: {tape}")
 
         # Regulatory path: the governed handoff package.

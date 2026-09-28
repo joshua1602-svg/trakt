@@ -298,12 +298,22 @@ sections:
 
       - key: lei
         label: Legal Entity Identifier
-        help: Twenty characters. Required for any entity named in regulatory reporting.
+        help: >-
+          Twenty characters. Required for any entity named in regulatory
+          reporting — no Annex 2 return can be built without it. Management
+          information does not wait for it.
         scope: legal_entity
         source: client_supplied
         type: lei
         required: false
         required_when: "roles contains originator"
+        # REQUIRED, BUT NOT REQUIRED TO GO LIVE. It stays on the client's
+        # checklist as required, because for the regime it is; it no longer
+        # refuses approval, because MI is ready as soon as there is a tape and
+        # the return is not due for weeks. The regime's own gate still refuses
+        # to build a return without RREL83, which is where the requirement
+        # belongs.
+        blocks_activation: false
         validation: lei
         evidence_required: true
         consumers: [Annex 2 RREL83, Annex 12 IVSS1]
@@ -323,11 +333,17 @@ sections:
 
       - key: country_of_establishment
         label: Country of establishment
+        help: >-
+          Where the originator is established. Required for regulatory
+          reporting; management information does not wait for it.
         scope: legal_entity
         source: client_supplied
         type: country
         required: false
         required_when: "roles contains originator"
+        # Required for RREL84 and asked as such; not a reason to hold the
+        # client's MI. See `lei` above.
+        blocks_activation: false
         validation: country
         consumers: [Annex 2 RREL84]
         writes_to: derived:client_config.defaults
@@ -1129,6 +1145,26 @@ sections:
     # Branding and disclaimer preferences. Genuinely optional: every one has a
     # Trakt default that is fine, so this must not be presented to a client as
     # something they have to complete.
+    #
+    # NONE OF IT IS ASKED OF THE CLIENT ANY MORE.
+    #
+    # Every pack ended with a step headed "Your reports" asking for a hex
+    # colour, a logo, a disclaimer and a note about the reporting calendar.
+    # Under a managed service the answer to each is Trakt's — the operator sets
+    # it — so the questions read as consequential while changing nothing, which
+    # is the worst kind to ask. The same argument retired the entitlement
+    # questions from `access`.
+    #
+    # Answering them to silence the step was the worse option: these write to
+    # `client_config:mi.branding.*`, read by the MI surface and the Annex
+    # delivery publication path, so an operator typing "none" to make the
+    # question go away would have printed "none" as the disclaimer on delivered
+    # output. Silencing a question by writing junk into production
+    # configuration is not an improvement on the question.
+    #
+    # The fields stay, write where they wrote, and stay `amendable`: an
+    # operator sets any of them the moment a client expresses a preference.
+    # What stops is asking a client to invent one during onboarding.
     optional_context: true
     label: Report presentation
     help: >-
@@ -1153,7 +1189,7 @@ sections:
         label: Brand colour
         help: "A hex colour, for example #1F3B5C."
         scope: branding
-        source: client_supplied
+        source: operator_supplied
         type: colour
         required: false
         validation: colour
@@ -1165,7 +1201,7 @@ sections:
         asked_when: "reporting.products contains mi"
         label: Logo
         scope: branding
-        source: client_supplied
+        source: operator_supplied
         type: text
         required: false
         consumers: [Report cover pages]
@@ -1176,7 +1212,7 @@ sections:
         asked_when: "reporting.products contains mi"
         label: Disclaimer
         scope: branding
-        source: client_supplied
+        source: operator_supplied
         type: multiline
         required: false
         consumers: [Report cover pages]
@@ -1214,7 +1250,7 @@ sections:
           Anything Trakt should know about when reports are due — for example a
           fixed business day, or a quarter-end dependency.
         scope: operational
-        source: client_supplied
+        source: operator_supplied
         type: multiline
         required: false
         consumers: [Onboarding record]
@@ -1229,32 +1265,55 @@ sections:
   # -----------------------------------------------------------------------
   # -----------------------------------------------------------------------
   - key: additional_context
-    # The one open question in the pack. Everything else Trakt asks is a
-    # declared field with a destination; this is deliberately not, because the
-    # thing a client most wants to tell you at the start is usually the thing
-    # no catalogue anticipated — an asset-class quirk, a servicing arrangement,
-    # a transition mid-period. Offered, never required.
+    # The one open question in the pack, and it asks about OUTPUT.
+    #
+    # WHAT IT USED TO ASK, AND WHY THAT WAS THE WRONG QUESTION HERE. It asked
+    # for anything that would "help Trakt read your data correctly" — an
+    # unusual servicing arrangement, a portfolio acquired mid-period, local
+    # terminology. Those are real and they matter, but they already have two
+    # homes: `data_semantics` and `data_definitions` below, both deliberately
+    # DEFERRED until there is a file, because asking a client to describe a
+    # column Trakt has not looked at yet is a data-dictionary request wearing a
+    # friendlier costume. Asking a third time, generically, before any file
+    # exists, produced exactly what a vague question earns: blank boxes, or
+    # prose restating what the tape says anyway.
+    #
+    # WHAT NOTHING ELSE ASKS is what the client wants OUT of the platform. The
+    # rest of this catalogue establishes what the book IS — its identity,
+    # entities, deliveries, regimes. None of it asks which numbers this lender
+    # actually runs on. Trakt can derive a great deal from a tape; it cannot
+    # derive which slice of it this credit committee looks at first, or which
+    # report someone rebuilds by hand every month. That answer shapes the MI,
+    # and only the client has it.
+    #
+    # Still offered, never required: a client with nothing to add loses nothing
+    # by leaving it blank, and a first delivery still produces full MI.
     optional_context: true
-    label: Anything else we need to know
+    label: How you manage this portfolio
     help: >-
-      Anything specific to your business, your asset class or this portfolio
-      that would help Trakt read your data correctly. Leave it blank if nothing
-      comes to mind — it is not a gate on anything.
+      The metrics, cuts and questions you use to run this book, so your MI
+      answers them rather than the generic ones. Nothing here changes how your
+      data is read, and leaving it blank holds nothing up.
     fields:
 
+      # The key is unchanged. It is the destination for any answer already
+      # given against the old wording, and renaming it would orphan those
+      # answers on cases that are mid-flight.
       - key: client_context_note
-        label: Anything else we should know
+        label: Metrics, analysis and questions specific to your business
         help: >-
-          For example: an unusual servicing or sub-servicing arrangement, a
-          portfolio acquired mid-period, a product feature that behaves
-          differently from the rest of the book, or terminology used in your
-          files that is specific to you.
+          For example: the measures your board or credit committee asks for
+          each month; how you cut the book when you look at it (by product,
+          vintage, region, LTV band, introducer, or something particular to
+          you); a performance or concentration question you currently answer by
+          hand; a ratio or covenant specific to your lending; or a report you
+          produce today that you would rather Trakt produced.
         scope: client
         source: client_supplied
         type: multiline
         required: false
         max_length: 4000
-        consumers: [Onboarding record]
+        consumers: [Onboarding record, MI question design]
         writes_to: onboarding_record
         amendable: true
 
@@ -1516,18 +1575,32 @@ sections:
         writes_to: onboarding_record
 
   - key: access
-    label: Who needs access
+    # WHO SIGNS IN. Nothing else.
+    #
+    # This asked a client to design their own entitlements: a role from a
+    # four-way enum, which portfolios each person may see, and three booleans
+    # for Operations Control Centre access, dashboard access and report
+    # delivery by email. Under a MANAGED SERVICE none of that is the client's
+    # to decide — the Operations Control Centre is operated by Trakt, reports
+    # reach people through the platform, and everyone named here needs the same
+    # thing: an account.
+    #
+    # Seven questions to collect two facts is not thoroughness, it is a form
+    # that invites someone to stall over what "Approves deliveries and
+    # configuration" might commit them to. What remains is exactly what
+    # creating the account requires, and the operator decides the rest.
+    label: Who needs Trakt access
     help: >-
-      The people who will use Trakt for this client, and what each of them
-      needs. Trakt records the requirement; provisioning is an operator action
-      outside onboarding.
+      The people who should be able to sign in. Trakt records who they are;
+      creating the accounts is an operator action after onboarding.
     repeatable: true
     repeatable_key: access
     item_label_field: user_name
     fields:
 
       - key: user_name
-        label: Name
+        label: Full name
+        help: As it should appear on their account.
         scope: access
         source: client_supplied
         type: text
@@ -1537,65 +1610,16 @@ sections:
         writes_to: onboarding_record
 
       - key: user_email
-        label: Email address
+        label: Work email address
+        help: >-
+          The address they will sign in with. It must be the one their
+          organisation uses, not a personal address.
         scope: access
         source: client_supplied
         type: email
         required: true
         validation: email
         consumers: [Onboarding record, access provisioning]
-        writes_to: onboarding_record
-
-      - key: user_role
-        label: Role
-        scope: access
-        source: client_supplied
-        type: enum
-        required: true
-        options:
-          - value: viewer
-            label: Views reports and dashboards
-          - value: analyst
-            label: Works with the data
-          - value: approver
-            label: Approves deliveries and configuration
-          - value: administrator
-            label: Administers this client's settings
-        consumers: [Access provisioning]
-        writes_to: onboarding_record
-
-      - key: scope_note
-        label: Which clients or portfolios
-        help: Leave blank for all of this client's portfolios.
-        scope: access
-        source: client_supplied
-        type: text
-        max_length: 200
-        consumers: [Access provisioning]
-        writes_to: onboarding_record
-
-      - key: occ_access_required
-        label: Needs Operations Control Centre access
-        scope: access
-        source: client_supplied
-        type: boolean
-        consumers: [Access provisioning]
-        writes_to: onboarding_record
-
-      - key: dashboard_access_required
-        label: Needs dashboard access
-        scope: access
-        source: client_supplied
-        type: boolean
-        consumers: [Access provisioning]
-        writes_to: onboarding_record
-
-      - key: report_recipient
-        label: Receives reports by email
-        scope: access
-        source: client_supplied
-        type: boolean
-        consumers: [Report distribution]
         writes_to: onboarding_record
 
 not_collected:

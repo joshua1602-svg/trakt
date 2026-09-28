@@ -39,6 +39,7 @@ from typing import Any, Dict, List, Optional
 
 from ..onboarding.case import OnboardingCase
 from ..onboarding.catalogue import Catalogue, Section
+from .extraction import MULTI_VALUED
 
 # -- actions ---------------------------------------------------------------- #
 ADD = "add"
@@ -270,14 +271,30 @@ class ApplicationPlan:
 def plan_changes(case: OnboardingCase, cat: Catalogue, *,
                  steps: Dict[str, Any],
                  provenance: Optional[Dict[str, str]] = None,
-                 confidence: Optional[Dict[str, float]] = None
+                 confidence: Optional[Dict[str, float]] = None,
+                 set_changes: Optional[Dict[str, Dict[str, List[Any]]]] = None
                  ) -> ApplicationPlan:
     """Work out what ``steps`` would do to ``case``. Writes nothing."""
     provenance = provenance or {}
     confidence = confidence or {}
+    set_changes = set_changes or {}
     plan = ApplicationPlan(provenance=dict(provenance))
 
-    for step, payload in (steps or {}).items():
+    # An amendment — "they also need Annex 2", "remove Annex 2" — names a
+    # field without stating its value, so the field has to be visited for the
+    # before and after to be worked out against the case at all.
+    steps = {key: (dict(value) if isinstance(value, dict) else value)
+             for key, value in (steps or {}).items()}
+    for path in set_changes:
+        section_key, _, field_key = path.partition(".")
+        section = cat.section(section_key)
+        if section is None or section.repeatable:
+            continue
+        block = steps.setdefault(section_key, {})
+        if isinstance(block, dict):
+            block.setdefault(field_key, [])
+
+    for step, payload in steps.items():
         section = cat.section(step)
         if section is None:
             plan.unrecognised.append(f"'{step}' is not part of this onboarding")
@@ -286,13 +303,36 @@ def plan_changes(case: OnboardingCase, cat: Catalogue, *,
             _plan_repeatable(plan, case, section, payload, provenance,
                              confidence)
         else:
-            _plan_block(plan, case, section, payload, provenance, confidence)
+            _plan_block(plan, case, section, payload, provenance, confidence,
+                        set_changes)
     return plan
+
+
+def _amended(before: Any, stated: Any,
+             spec: Dict[str, List[Any]]) -> List[Any]:
+    """What a list comes to once an amendment is applied to it.
+
+    The amendment is resolved against the list the case ALREADY HOLDS, which
+    is the whole difference between adding a product and replacing every
+    product with it. Where the same message also states values outright, those
+    are what is being amended — "MI and investor reporting but not static
+    pools" states two and withdraws a third.
+    """
+    base = list(stated) if isinstance(stated, list) and stated else (
+        list(before) if isinstance(before, list) else [])
+    removing = spec.get("remove") or []
+    out = [value for value in base if value not in removing]
+    for value in spec.get("add") or []:
+        if value not in out:
+            out.append(value)
+    return out
 
 
 def _plan_block(plan: ApplicationPlan, case: OnboardingCase, section: Section,
                 payload: Dict[str, Any], provenance: Dict[str, str],
-                confidence: Dict[str, float]) -> None:
+                confidence: Dict[str, float],
+                set_changes: Optional[Dict[str, Dict[str, List[Any]]]] = None
+                ) -> None:
     block = case.answers.get(section.key) or {}
     proposed: Dict[str, Any] = {}
     for key, value in (payload or {}).items():
@@ -303,16 +343,19 @@ def _plan_block(plan: ApplicationPlan, case: OnboardingCase, section: Section,
             continue
         before = block.get(key)
         path = f"{section.key}.{key}"
+        spec = (set_changes or {}).get(path)
+        after = (_amended(before, value, spec)
+                 if spec and f.type in MULTI_VALUED else value)
         change = ProposedFieldChange(
             section=section.key, section_label=section.label, field=key,
-            label=f.label, before=before, after=value,
-            action=(UNCHANGED if _same(before, value)
+            label=f.label, before=before, after=after,
+            action=(UNCHANGED if _same(before, after)
                     else UPDATE if _present(before) else ADD),
             provenance=provenance.get(path, ""),
             confidence=confidence.get(path))
         plan.understood.append(change)
         if change.action != UNCHANGED:
-            proposed[key] = value
+            proposed[key] = after
     if proposed:
         plan.steps[section.key] = proposed
 

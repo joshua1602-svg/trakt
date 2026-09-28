@@ -164,6 +164,34 @@ def _is_likely_reporting_date(col_name: str, series: pd.Series, inferred_type: s
     return any(h in name_norm for h in hints)
 
 
+def blanks_as_null(series: pd.Series) -> pd.Series:
+    """A cell that holds NOTHING is empty, whatever type it arrived as.
+
+    Excel hands an empty cell over as ``''`` rather than as a blank whenever
+    the cell is text-formatted or carries a formula returning "". ``dropna()``
+    keeps an empty string, so a real lender column — 568 loans, 19 with a
+    repayment amount and 549 blank — was profiled as
+
+        non_null_count : 568 of 568        (fully populated)
+        null_rate      : 0.0
+        inferred_type  : string            (it is a decimal)
+        min / max      : '' / ''
+
+    and `column_evidence` independently called the same column an ``enum``,
+    because twenty distinct values across 568 rows reads as a category. None
+    of that is a crash; it is a wrong answer that the mapping stage then makes
+    decisions from, and it would have gone to MI unnoticed.
+
+    ONLY WHITESPACE COUNTS AS NOTHING. ``"N/A"``, ``"n/k"`` and ``"-"`` are
+    the lender ASSERTING that a value does not apply, which is a different
+    fact from a cell nobody filled in, and it stays visible as itself.
+    """
+    if series.dtype != object:
+        return series
+    return series.mask(series.map(
+        lambda v: isinstance(v, str) and not v.strip()))
+
+
 def profile_column(
     file_path: str,
     file_name: str,
@@ -172,6 +200,7 @@ def profile_column(
     series: pd.Series,
     max_samples: int = 5,
 ) -> ColumnProfile:
+    series = blanks_as_null(series)
     non_null = series.dropna()
     n_total = len(series)
     n_null = int(series.isna().sum())

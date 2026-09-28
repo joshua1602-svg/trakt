@@ -9,7 +9,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { CohortMatrix } from "@/domain";
 import { MockAgentClient } from "@/api/MockAgentClient";
 import { CohortsPanel } from "./CohortsPanel";
 
@@ -84,5 +85,65 @@ describe("CohortsPanel", () => {
     renderPanel();
     expect(await screen.findByText(/book outstanding at each reporting date is/i))
       .toBeInTheDocument();
+  });
+
+  it("lines every vintage up by months on book, in the chosen measure", async () => {
+    const matrix: CohortMatrix = {
+      dataset: "cohort_matrix", portfolioId: "ERE", grain: "M", available: true,
+      monthsOnBook: [0, 1, 2],
+      vintages: [
+        { vintage: "2025-10", originalLoanCount: 33, base: 4_200_000, basis: "original_advance",
+          cells: {
+            "0": { period: "2025-10", survivingLoanCount: 33, balanceFactor: 1, cumulativeExitRate: 0 },
+            "2": { period: "2025-12", survivingLoanCount: 30, balanceFactor: 0.95,
+                   cumulativeExitRate: 3 / 33, idsRekeyed: true },
+          } },
+        { vintage: "2025-11", originalLoanCount: 40, base: 4_700_000, basis: "original_advance",
+          cells: { "0": { period: "2025-11", survivingLoanCount: 40, balanceFactor: 1,
+                          cumulativeExitRate: 0 } } },
+      ],
+    };
+    const client = Object.assign(new MockAgentClient(),
+      { getCohortMatrix: () => Promise.resolve(matrix) });
+    render(<CohortsPanel client={client} portfolioId="client_001/mi_2025_12" />);
+    const grid = await screen.findByTestId("vintage-matrix-table");
+    const oct = within(grid).getByTestId("matrix-row-2025-10");
+    expect(oct.textContent).toContain("95.0%");
+    expect(within(grid).getByText("+2")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("matrix-metric-survivingLoanCount"));
+    expect(within(grid).getByTestId("matrix-row-2025-10").textContent).toContain("30");
+    expect(screen.getByTestId("vintage-matrix").textContent).toMatch(/originally advanced/);
+  });
+
+  it("shows no grid when the client cannot supply one", async () => {
+    renderPanel();
+    await screen.findByTestId("formation-table");
+    expect(screen.queryByTestId("vintage-matrix")).toBeNull();
+  });
+
+  it("splits exits by cause and the balance into advances and roll-up", async () => {
+    const base = new MockAgentClient();
+    const client = Object.assign(base, {
+      getCohortVintages: async (pid: string, q?: { vintage?: string; grain?: "M" | "Q" | "Y" }) => {
+        const r = await new MockAgentClient().getCohortVintages(pid, q);
+        if (r.dataset !== "cohort_static_pool") return r;
+        return {
+          ...r,
+          periods: r.periods.map((p, i) => i === 0 ? p : {
+            ...p,
+            exitsByCause: { deaths: 1, voluntaryRepayments: 2, leftTape: 0 },
+            cumulativeExits: 3,
+            balanceSplit: { originalAdvance: 3_000_000, furtherAdvances: 50_000,
+                            rolledUpInterest: 120_000, furtherAdvancesReported: true },
+          }),
+        };
+      },
+    });
+    render(<CohortsPanel client={client} portfolioId="client_001/mi_2025_12" />);
+    const pool = await screen.findByTestId("static-pool-table");
+    await waitFor(() => expect(within(pool).getAllByText("1 death · 2 repaid").length)
+      .toBeGreaterThan(0));
+    expect(within(pool).getByText("Roll-up")).toBeInTheDocument();
+    expect(within(pool).getByText("In force")).toBeInTheDocument();
   });
 });

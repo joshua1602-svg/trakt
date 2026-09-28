@@ -194,6 +194,19 @@ def run_orchestration(
         state.full_pipeline = full_pipeline
         state.force_publish = force_publish
         state.dataset = dataset
+    elif dataset == "pipeline" and state.dataset != "pipeline":
+        # A pipeline run started before the caller said it was one: resume it
+        # on the pipeline route (onboard -> stamp, pipeline tape as canonical)
+        # rather than the funded chain that stopped it.
+        state.dataset = dataset
+        state.full_pipeline = full_pipeline
+        # The funded-only steps it stopped in are not part of this route; a
+        # stale failure there would go on reading as "could not be checked".
+        from .state import StepState
+        for p in state.portfolios:
+            for name in ("transform", "validate"):
+                if name in p.steps and not p.steps[name].done:
+                    p.steps[name] = StepState(name)
     state.status = STEP_RUNNING
     state.blockers = []
     state.save()

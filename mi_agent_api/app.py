@@ -1466,8 +1466,11 @@ def cohort_vintages(portfolioId: Optional[str] = None,
                     portfolioContext: Optional[str] = None,
                     lens: Optional[str] = None,
                     vintage: Optional[str] = None,
-                    grain: str = "M") -> Dict[str, Any]:
+                    grain: str = "M",
+                    view: Optional[str] = None) -> Dict[str, Any]:
     """Vintage FORMATION, and one vintage's static pool when ``vintage`` is given.
+
+    ``view=matrix`` returns every vintage by months on book instead.
 
     Formation answers "what entered the book in each origination period" — each
     loan counted once, in its own vintage. That is deliberately NOT the book
@@ -1490,7 +1493,9 @@ def cohort_vintages(portfolioId: Optional[str] = None,
         scope = resolved.scope if resolved else None
         frames = evolution_mod.funded_frames(
             _onboarding_output_root(), cid, scope=scope)
-        if vintage:
+        if view == "matrix":
+            result = cohorts_mod.cohort_matrix(frames, grain=grain, client_id=cid)
+        elif vintage:
             result = cohorts_mod.cohort_static_pool(
                 frames, vintage=vintage, grain=grain, client_id=cid)
         else:

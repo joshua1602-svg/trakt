@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from ..contracts import (
     DEC_OPEN,
+    KIND_SOURCE_PRECEDENCE,
     PUBLICATION_SCOPE_DEFAULT,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
@@ -36,6 +37,7 @@ from ..contracts import (
 )
 from ..engine import OpsEngine, OpsError
 from ..onboarding.case import CaseError as _CaseError
+from ..rules import RuleRecord
 from ..stores import OpsStore
 from . import presenters, workflow_view
 from .auth import Principal, authenticate, require_admin, require_client
@@ -364,6 +366,17 @@ class CreateBatch(BaseModel):
     # The engine refuses an unknown dataset, and refuses pipeline + mi_annex2 —
     # a pipeline view never carries a regime delivery.
     dataset: str = ""
+    # How often this book arrives: monthly | weekly | daily | adhoc. Blank keeps
+    # the monthly default, so a caller that does not send the field behaves
+    # exactly as before.
+    #
+    # It was absent entirely, and the consequence was not cosmetic: the
+    # destination is derived from the batch's own frequency, `intake` stores
+    # `frequency or BATCH_FREQUENCY_DEFAULT`, and that default is monthly. So
+    # every manually created delivery landed under /monthly/ whatever it was —
+    # a weekly pipeline file included. The engine accepted a frequency and
+    # passed it through the whole way down; only this door dropped it.
+    frequency: str = ""
 
 
 class RegisterBatchFile(BaseModel):
@@ -385,7 +398,7 @@ def create_batch(body: CreateBatch,
         reporting_date=body.reporting_date, workflow_type=body.workflow_type,
         created_by=principal.name,
         auto_start_when_ready=body.auto_start_when_ready,
-        dataset=body.dataset)
+        dataset=body.dataset, frequency=body.frequency)
     return {"ok": True, "batch": presenters.present_batch(batch,
                                                           _role_labels())}
 
@@ -732,6 +745,134 @@ def list_rules(client: Optional[str] = None, q: str = "",
     return {"ok": True, "rules": out}
 
 
+class SourcePrecedence(BaseModel):
+    """Which file to believe for one field, when a delivery's files disagree.
+
+    Not a mapping: every source is correctly mapped. They carry different
+    values for the same loan, and something has to say which is authoritative
+    — otherwise the central tape builder refuses the field rather than
+    picking, which is right, and leaves the delivery stopped.
+    """
+
+    client_id: str
+    canonical_field: str
+    primary_source_file: str
+    primary_source_column: str = ""
+    secondary_source_file: str = ""
+    secondary_source_column: str = ""
+    portfolio_id: str = ""
+    reason: str = ""
+
+
+@app.post("/ops/rules/precedence", status_code=201)
+def set_source_precedence(body: SourcePrecedence,
+                          principal: Principal = Depends(authenticate)
+                          ) -> Dict[str, Any]:
+    """Record which file is authoritative for a field. Supersedes, never edits.
+
+    Goes through the same ``RuleStore.approve`` every other governed decision
+    takes, so naming a different file later becomes version n+1 and the
+    previous answer stays readable rather than being overwritten. It reaches
+    the pipeline the way the rules already do — projected into the client's
+    memory, which the onboarding agent reads on the next run.
+    """
+    require_client(principal, body.client_id)
+    for name, value in (("canonical_field", body.canonical_field),
+                        ("primary_source_file", body.primary_source_file)):
+        if not str(value or "").strip():
+            raise OpsError("OPS_FIELD_REQUIRED",
+                           f"A precedence decision needs its {name.replace('_', ' ')}.",
+                           400)
+    if (body.secondary_source_file
+            and body.secondary_source_file == body.primary_source_file):
+        raise OpsError(
+            "OPS_SAME_SOURCE",
+            "The file to believe and the one it is preferred over cannot be "
+            "the same file.", 400)
+
+    eng = get_engine()
+    field_label = body.canonical_field.replace("_", " ")
+    rule = eng.rules.approve(RuleRecord(
+        rule_id="", version=0, kind=KIND_SOURCE_PRECEDENCE,
+        scope="portfolio" if body.portfolio_id else "client",
+        client_id=body.client_id, portfolio_id=body.portfolio_id,
+        payload={"canonical_field": body.canonical_field,
+                 "primary_source_file": body.primary_source_file,
+                 "primary_source_column": body.primary_source_column,
+                 "secondary_source_file": body.secondary_source_file,
+                 "secondary_source_column": body.secondary_source_column,
+                 "reconciliation_status": "resolved_by_precedence"},
+        description=(f"For {field_label}, believe "
+                     f"'{body.primary_source_file}'."),
+        approved_by=principal.name, reason=body.reason,
+        suggested_by="operator"))
+    eng.store.append_audit(body.client_id, "source_precedence_approved",
+                           actor=principal.name,
+                           detail={"rule_id": rule.rule_id,
+                                   "version": rule.version,
+                                   "canonical_field": body.canonical_field,
+                                   "primary_source_file":
+                                       body.primary_source_file,
+                                   "reason": body.reason})
+    return {"ok": True, "rule": presenters.present_rule(rule.to_dict())}
+
+
+class RetireRule(BaseModel):
+    """Withdrawing a standing rule. The reason is not optional.
+
+    A rule is read on every future delivery, so taking one out changes what
+    the platform will do with data nobody has sent yet. Six months later the
+    only thing that explains that is what was written here.
+    """
+
+    reason: str
+    client: Optional[str] = None
+
+
+@app.post("/ops/rules/{rule_id}/retire")
+def retire_rule(rule_id: str, body: RetireRule,
+                principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    """Withdraw a standing rule, so it stops being applied.
+
+    NOT a delete. The rule keeps its history and its versions; it is marked
+    retired, and the record of what it did while it was in force stays
+    readable. Reversing a decision is an ordinary part of operating this
+    platform — it was the one thing the rules surface could not do, so a
+    mapping confirmed in error could only ever be superseded by chance, on a
+    later delivery that happened to ask the same question again.
+    """
+    if not str(body.reason or "").strip():
+        raise OpsError("OPS_REASON_REQUIRED",
+                       "Please say why this rule is being withdrawn.", 400)
+    eng = get_engine()
+    candidates = ([body.client] if body.client
+                  else principal.visible_clients(eng.store.known_clients()))
+    for client_id in [*candidates, None]:
+        if client_id is not None and not principal.allows(client_id):
+            continue
+        current = eng.rules.get(client_id, rule_id)
+        if current is None:
+            continue
+        if current.client_id:
+            require_client(principal, current.client_id)
+        retired = eng.rules.retire(client_id, rule_id,
+                                   by=principal.name, reason=body.reason)
+        if retired is None:
+            raise OpsError(
+                "OPS_RULE_NOT_ACTIVE",
+                "That rule is not in force, so there is nothing to withdraw.",
+                409)
+        eng.store.append_audit(current.client_id or "_global", "rule_retired",
+                               actor=principal.name,
+                               detail={"rule_id": rule_id,
+                                       "version": retired.version,
+                                       "kind": retired.kind,
+                                       "reason": body.reason})
+        return {"ok": True, "rule": presenters.present_rule(retired.to_dict())}
+    raise HTTPException(status_code=404, detail={
+        "errorCode": "OPS_NOT_FOUND", "message": "That could not be found."})
+
+
 @app.get("/ops/rules/{rule_id}/history")
 def rule_history(rule_id: str, client: Optional[str] = None,
                  principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
@@ -772,6 +913,24 @@ def approve_publication(workflow_id: str, body: Optional[PublishBody] = None,
                                   remember_scope=(body.remember_scope if body
                                                   else PUBLICATION_SCOPE_DEFAULT))
     return {"ok": True, "publication": presenters.present_publication(pub)}
+
+
+class StandingBody(BaseModel):
+    scope: str = "portfolio"
+
+
+@app.post("/ops/workflows/{workflow_id}/standing-approval")
+def grant_standing_publication(workflow_id: str, body: StandingBody,
+                               client: Optional[str] = None,
+                               principal: Principal = Depends(authenticate)
+                               ) -> Dict[str, Any]:
+    """Let an already-published delivery stand for later ones with the same
+    source schema. See ``OpsEngine.grant_standing_publication``."""
+    eng = get_engine()
+    run = _load_owned_workflow(eng, principal, workflow_id, client)
+    return {"ok": True, **eng.grant_standing_publication(
+        client_id=run.client_id, workflow_id=workflow_id, scope=body.scope,
+        actor=principal.name)}
 
 
 @app.post("/ops/workflows/{workflow_id}/hold")
@@ -943,6 +1102,38 @@ def admin_config_draft(layer: str, body: DraftBody,
                   "based_on": doc.get("based_on_version"),
                   "edited_files": sorted(body.edits)})
     return {"ok": True, "version": doc["version"], "status": doc["status"]}
+
+
+@app.post("/ops/admin/config/{layer}/draft-from-deployment")
+def admin_config_draft_from_deployment(
+        layer: str, body: DraftBody,
+        principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    """Draft a new version holding the files this deployment carries.
+
+    A layer is seeded from the repository ONCE and never again, so an edited
+    file in a later deployment is not in force. That is deliberate — a
+    configuration change is a version, drafted, checked and activated, not a
+    file landing. What was missing was any way to act on the difference
+    without hand-copying file contents through the generic draft route.
+
+    This is a DRAFT, not an activation. Re-seeding automatically would mean
+    whatever was last deployed silently became the configuration in force,
+    which is the one thing the version model exists to prevent.
+    """
+    require_admin(principal)
+    eng = get_engine()
+    pkgs = _packages(eng)
+    before = pkgs.drift(layer, by=principal.name)
+    doc = pkgs.create_draft_from_deployment(layer, by=principal.name,
+                                            notes=body.notes)
+    _admin_audit(eng, "config_draft_from_deployment", principal.name,
+                 {"layer": layer, "version": doc["version"],
+                  "based_on": doc.get("based_on_version"),
+                  "changed_files": [c["path"] for c in before["changed"]],
+                  "added_files": before["added"],
+                  "removed_files": before["removed"]})
+    return {"ok": True, "version": doc["version"], "status": doc["status"],
+            "drift": before}
 
 
 @app.post("/ops/admin/config/{layer}/{version}/validate")

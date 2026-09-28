@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { FlaskConical } from "lucide-react";
+import { Building2, FlaskConical } from "lucide-react";
 import { copy } from "@/lib/copy";
 
 /**
@@ -21,15 +21,36 @@ export function stateTone(state: string): string {
   return "waiting";
 }
 
-/** The banner every OCC Agent screen leads with. */
-export function SyntheticBanner() {
+/**
+ * The banner every OCC Agent screen leads with — and it must match the case.
+ *
+ * This rendered the practice sentence unconditionally, so a REAL onboarding led
+ * with "Practice mode ... does not activate configuration, SEND EMAIL, or start
+ * the live pipeline" on a case that had just emailed a client. A banner that
+ * contradicts what the operator did a minute ago is worse than no banner: it
+ * invites them to doubt the thing that actually happened.
+ *
+ * `mode` comes from the run, which is where the truth is. Omitted, it keeps the
+ * practice reading — the safer default, since a case with no mode is not one
+ * anything should be claimed about.
+ */
+export function SyntheticBanner({ mode }: { mode?: string } = {}) {
+  const live = mode === "live";
   return (
     <div
       role="note"
-      className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900"
+      className={
+        live
+          ? "flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          : "flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900"
+      }
     >
-      <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-      <p>{copy.agent.syntheticBanner}</p>
+      {live ? (
+        <Building2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      ) : (
+        <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      )}
+      <p>{live ? copy.agent.liveBanner : copy.agent.syntheticBanner}</p>
     </div>
   );
 }

@@ -309,9 +309,17 @@ def _provider_available(policy: LLMPolicy, llm_callable) -> bool:
 def _call_live(prompt: Dict[str, str], model: str) -> Tuple[str, dict]:  # pragma: no cover
     import anthropic  # type: ignore
 
+    from trakt_core import llm_sampling
+
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    # ASKED, NOT ASSUMED. `anthropic` 1.x removed `temperature` from
+    # `messages.create()`, so a hardcoded `temperature=0.0` raises `TypeError`
+    # before any request is made — and onboarding records a FAILED run rather
+    # than raising, so the crash reached its operator four stages later as "the
+    # delivery appears to hold no files". See trakt_core.llm_sampling.
     message = client.messages.create(
-        model=model, max_tokens=1024, temperature=0.0,
+        model=model, max_tokens=1024,
+        **llm_sampling.sampling_for(client, model),
         system=prompt["system"],
         messages=[{"role": "user", "content": prompt["user"]}],
     )

@@ -84,7 +84,9 @@ from .contracts import (
     STAGE_VALIDATION,
     STAGE_XML,
     WF_NEW_CLIENT,
+    WF_BACKFILL,
     WF_NEW_PORTFOLIO,
+    WF_RECURRING,
     WORKFLOW_TYPES,
     WorkflowRun,
     new_id,
@@ -93,6 +95,36 @@ from .contracts import (
     transition,
 )
 from .rules import RuleRecord, RuleStore, project_rules_to_client_memory
+from .rules import SCOPE_CLIENT as SCOPE_CLIENT_PUB
+from .rules import SCOPE_PORTFOLIO as SCOPE_PORTFOLIO_PUB
+
+#: The subject of the rule a standing publication approval is stored as.
+STANDING_PUBLICATION = "standing_publication_approval"
+#: Who the audit trail names when a delivery publishes on a standing approval.
+AUTO_PUBLICATION_ACTOR = "trakt:standing-approval"
+
+
+def _is_pipeline(run) -> bool:
+    return _dataset(run) == "pipeline"
+
+
+def _dataset(run) -> str:
+    return str((getattr(run, "delivery", None) or {}).get("dataset")
+               or "funded")
+
+
+def _approved_fingerprints(rule) -> List[str]:
+    """Every source schema a standing publication approval covers."""
+    p = (getattr(rule, "payload", None) or {}) if rule is not None else {}
+    out = [str(f) for f in (p.get("schema_fingerprints") or []) if f]
+    if p.get("schema_fingerprint") and p["schema_fingerprint"] not in out:
+        out.append(str(p["schema_fingerprint"]))
+    return out
+
+
+def _standing_subject(run) -> str:
+    """One standing approval per dataset: funded and pipeline are separate."""
+    return f"{STANDING_PUBLICATION}:{_dataset(run)}"
 from .stores import OpsStore
 
 logger = logging.getLogger("trakt.operations_control.engine")
@@ -139,8 +171,23 @@ class OpsEngine:
         # Governed Annex 2 delivery chain (I1): real runners by default; tests
         # substitute a stub with the same method signatures.
         self._annex2_stages = annex2_stages
-        self.client_config_path = Path(client_config_path or os.environ.get(
-            "TRAKT_OPS_CLIENT_CONFIG", "config/client/config_client_ERE.yaml"))
+        # An EXPLICIT repository client-configuration file, or nothing.
+        #
+        # This used to default to the incumbent lender's file, which had two
+        # consequences worth separating. It seeded the effective-configuration
+        # resolver's client layer with ERE Funding for ANY client, and it made
+        # `_client_is_activated` admit a client merely because that file named
+        # it. The first is how another lender's identity reaches a regulatory
+        # return; the second is a grandfather clause for the client who
+        # predates Client Onboarding.
+        #
+        # The grandfather clause is legitimate but must be ASKED FOR. Setting
+        # TRAKT_OPS_CLIENT_CONFIG keeps a pre-onboarding client governed and
+        # leaves a deliberate, inspectable app setting saying so; unset, a
+        # client is governed only by its own activated OCC configuration.
+        configured = client_config_path or os.environ.get(
+            "TRAKT_OPS_CLIENT_CONFIG")
+        self.client_config_path = Path(configured) if configured else None
         self.real_agents = real_agents
         self._adapter_factory = adapter_factory
         self._source_registry_factory = source_registry_factory
@@ -331,7 +378,7 @@ class OpsEngine:
     def _execute_safely(self, client_id: str, workflow_id: str) -> None:
         try:
             self._execute(client_id, workflow_id)
-        except Exception:
+        except Exception as exc:
             logger.exception("workflow execution failed: %s", workflow_id)
             run = self.store.load_workflow(client_id, workflow_id)
             if run is not None:
@@ -339,10 +386,49 @@ class OpsEngine:
                 run.blockers = [language.GENERIC_PROBLEM]
                 self.store.save_workflow(run)
                 self.store.clear_lease(run)
-                self.store.append_event(run, "execution_error")
+                # The operator gets GENERIC_PROBLEM, which is the contract. The
+                # event carries what an engineer needs, so "something did not go
+                # as expected" is not the whole of what was kept.
+                from trakt_core import fault_report as _fault
+                self.store.append_event(run, "execution_error",
+                                        detail=_fault.fault_report(exc))
 
     def _staging_dir(self, run: WorkflowRun) -> Path:
         return self.staging_root / run.client_id / run.workflow_id
+
+    #: What a delivery's working folder must hold for there to be anything to
+    #: read. Everything else in a pack (markers, notes) is not a data file.
+    _DATA_SUFFIXES = (".csv", ".xlsx", ".xls")
+
+    def _input_shortfall(self, run: WorkflowRun) -> str:
+        """One operator sentence when this run's files are not where it reads.
+
+        Returns "" when the working folder holds at least one data file, which
+        is the only state in which the agents have anything to work on.
+        """
+        recorded = 0
+        if run.batch_id:
+            batch = self.intake.load_batch(run.client_id, run.batch_id)
+            recorded = len(batch.get("files") or []) if batch else 0
+
+        path = str(run.delivery.get("input_path") or "")
+        if not path:
+            return ("This delivery has no recorded location for its files, so "
+                    "there is nothing for Trakt to read. Send the pack again "
+                    "to open a new delivery for this period.")
+        base = Path(path)
+        if base.is_dir() and any(p.is_file()
+                                 and p.suffix.lower() in self._DATA_SUFFIXES
+                                 for p in base.iterdir()):
+            return ""
+        return (
+            (f"This delivery recorded {recorded} file(s), but none of them is "
+             "available to read now and none could be restored from the copy "
+             "Trakt keeps. " if recorded else
+             "No files are available to read for this delivery. ")
+            + "The files you sent are safe where they were received; it is "
+              "this delivery's working copy that is gone. Send the pack again "
+              "to open a new delivery for this period.")
 
     def _contract_target(self, run: WorkflowRun) -> str:
         """The TARGET whose field contract this delivery must satisfy.
@@ -422,6 +508,20 @@ class OpsEngine:
         if dataset and dataset not in BATCH_DATASETS:
             raise OpsError("OPS_BAD_DATASET",
                            "Choose which book these files describe.", 400)
+        # ONE SPELLING, AND A REFUSAL RATHER THAN A GUESS.
+        #
+        # The frequency is a path segment, part of the pack key and part of a
+        # snapshot's logical slot, so `adhoc` and `ad_hoc` were two key spaces
+        # for one stream. Canonicalised here — the one door every manually
+        # created delivery passes through — so what is written is consistent
+        # whatever the caller typed.
+        from apps.blob_trigger_app.path_parser import (
+            PathParseError, canonical_frequency,
+        )
+        try:
+            frequency = canonical_frequency(frequency)
+        except PathParseError as exc:
+            raise OpsError("OPS_BAD_FREQUENCY", str(exc), 400) from None
         # A pipeline view can never produce a regime delivery. Refusing the
         # combination here means an operator cannot route a delivery into regime
         # reporting by accident — the same rule the blob trigger applies to
@@ -701,15 +801,20 @@ class OpsEngine:
         return client_id == self._configured_client_id()
 
     def _configured_client_id(self) -> str:
-        """The client the repository's configured client file belongs to."""
+        """The client an EXPLICITLY configured client file belongs to.
+
+        Empty unless an operator named that file, so the grandfather clause in
+        :meth:`_client_is_activated` cannot admit a client by default.
+        """
         cached = getattr(self, "_configured_client_id_cache", None)
         if cached is not None:
             return cached
         value = ""
         try:
-            doc = yaml.safe_load(
-                self.client_config_path.read_text(encoding="utf-8")) or {}
-            value = str((doc.get("client") or {}).get("client_id") or "")
+            if self.client_config_path is not None:
+                doc = yaml.safe_load(
+                    self.client_config_path.read_text(encoding="utf-8")) or {}
+                value = str((doc.get("client") or {}).get("client_id") or "")
         except Exception:  # noqa: BLE001
             value = ""
         self._configured_client_id_cache = value
@@ -794,9 +899,13 @@ class OpsEngine:
             expected_outputs=(["platform_canonical", "annex2_submission_xml"]
                               if batch["workflow_type"] == OUTCOME_MI_ANNEX2
                               else ["platform_canonical"]))
+        # The pack's book and cadence travel with it. They were dropped here,
+        # so every pack — a pipeline file included — became a funded delivery.
         delivery = self.register_delivery(
             client_id=client_id, portfolio_id=batch["portfolio_id"],
             input_path=str(self.intake.batch_dir(batch)),
+            dataset=batch.get("dataset") or "funded",
+            frequency=batch.get("frequency") or "monthly",
             reporting_period=batch["reporting_date"], registered_by=actor)
         run = self.create_workflow(
             client_id=client_id, delivery_id=delivery["delivery_id"],
@@ -911,14 +1020,69 @@ class OpsEngine:
                 # product it exists to protect. Depth is no longer a function of
                 # the outcome; the outcome still decides what happens AFTER the
                 # canonical is assembled (see _run_annex2_chain).
-                full_pipeline=True,
+                #
+                # EXCEPT THE PIPELINE. Its deliverable is the central pipeline
+                # tape, deliberately built without the funded contract's
+                # hand-off, so Transformation had nothing to read and ERE's first
+                # pipeline delivery stopped at "the first step did not finish
+                # cleanly". It takes the orchestrator's pipeline route.
+                full_pipeline=not _is_pipeline(run),
                 reporting_period=run.reporting_period,
                 enable_llm_advisor=(not deterministic
                                     and bool(llm_policy.get("enabled"))),
                 enable_llm_mapping_review=(not deterministic
                                            and bool(llm_policy.get("resolve_mapping"))),
-                managed_service=True)
+                managed_service=True,
+                set_aside_columns=self._set_aside_columns(run),
+                confirmed_mappings=self._confirmed_mappings(run))
         return GovernedAdapters(inner, recorder)
+
+    def _confirmed_mappings(self, run: WorkflowRun) -> List[Tuple[str, str]]:
+        """``(column, field)`` for every mapping an operator confirmed and the
+        governed rules hold for this run.
+
+        Handed to Gate 1 for the same reason as the set-asides: coverage finds
+        a field's sources by NAME, so a field the operator had answered —
+        `Product Category` is the ERM product type — was put back to them as
+        "which of these four columns is authoritative?", the other three being
+        columns that merely look like it. A confirmation IS that answer.
+        """
+        from .occ_agent.mapping_promotion import is_set_aside
+        out: List[Tuple[str, str]] = []
+        for rule in self.rules.applicable(
+                client_id=run.client_id, portfolio_id=run.portfolio_id,
+                file_ref=run.delivery.get("schema_fingerprint", "")):
+            p = rule.payload or {}
+            if rule.kind not in ("field_mapping", "alias") or is_set_aside(rule):
+                continue
+            column = str(p.get("source_column") or p.get("alias") or "")
+            field = str(p.get("canonical_field") or "")
+            if column and field and (column, field) not in out:
+                out.append((column, field))
+        return sorted(out)
+
+    def _set_aside_columns(self, run: WorkflowRun) -> List[Tuple[str, str]]:
+        """``(file, column)`` pairs an operator said feed nothing, from the
+        governed rules this run is subject to. ``"*"`` as the file means the
+        column is set aside wherever it appears.
+
+        Handed to Gate 1 explicitly because nothing else carried it there. The
+        rule store is projected into a client-memory directory the workflow's
+        onboarding never opens — it resolves its own, beside its output — and
+        the overrides file is read only by the tape builder, after coverage
+        has already asked its questions. A column set aside in the Client
+        Onboarding screen was therefore found again by name and put back to
+        the operator on every run.
+        """
+        from .occ_agent.mapping_promotion import set_aside_pairs
+        out: List[Tuple[str, str]] = []
+        for rule in self.rules.applicable(
+                client_id=run.client_id, portfolio_id=run.portfolio_id,
+                file_ref=run.delivery.get("schema_fingerprint", "")):
+            for pair in set_aside_pairs(rule):
+                if pair not in out:
+                    out.append(pair)
+        return sorted(out)
 
     def _execute(self, client_id: str, workflow_id: str) -> None:
         from engine.orchestrator_agent.adapters import PortfolioSpec
@@ -951,6 +1115,39 @@ class OpsEngine:
                     self.store.append_event(run, "restage_failed",
                                             detail=report)
                     return
+
+        # AND THEN LOOK. Restaging reports what it could not put back; it says
+        # nothing about a delivery it was never asked to put anything back for,
+        # because `_current_files` had already filtered every recorded file out
+        # as superseded or duplicate. Both cases end here identically — an
+        # empty working folder — and the run used to proceed into it, produce
+        # an empty file inventory, an empty loan tape, and a blocker four steps
+        # later about a missing loan listing. An absent input is not a
+        # modelling result, so it is refused where it is true.
+        shortfall = self._input_shortfall(run)
+        if shortfall and run.batch_id:
+            # AND IF IT IS NOT THERE, GO AND GET IT. Restaging above restores
+            # file by RECORD, so it can only put back what the pack still
+            # lists as current and unique. The pack itself is not a record —
+            # it is a folder in the container, still holding every file the
+            # delivery arrived with. `backfill` refetches from there on every
+            # run, which is exactly why it works where a rerun does not; its
+            # own docstring says so. A rerun now does the same.
+            batch = self.intake.load_batch(run.client_id, run.batch_id)
+            if batch is not None:
+                refetch = self.intake.restage_from_source_prefix(
+                    batch, dest=Path(str(run.delivery.get("input_path") or "")))
+                self.store.append_event(run, "input_refetched", detail=refetch)
+                shortfall = self._input_shortfall(run)
+        if shortfall:
+            self._park(run, RUN_BLOCKED)
+            run.blockers = [shortfall]
+            self.store.save_workflow(run)
+            self.store.append_event(
+                run, "input_unavailable",
+                detail={"input_path": str(run.delivery.get("input_path") or ""),
+                        "batch_id": run.batch_id or ""})
+            return
 
         # Materialise applicable approved rules into client memory (existing
         # MappingMemoryStore artefact) before the agents run.
@@ -1033,8 +1230,12 @@ class OpsEngine:
             out_root=str(staging), adapters=adapters,
             created_at=now_iso(), run_id=orun_id,
             resume_state=resume_state,
-            # See _build_adapters: MI runs Gate 1 -> Gate 2 -> Gate 3 too.
-            full_pipeline=True,
+            # See _build_adapters: MI runs Gate 1 -> Gate 2 -> Gate 3 too;
+            # a pipeline delivery takes the pipeline route, and says so, so
+            # its pipeline tape is the canonical rather than the funded
+            # assembler's input.
+            full_pipeline=not _is_pipeline(run),
+            dataset=("pipeline" if _is_pipeline(run) else ""),
             force_publish=self._validation_exception_approved(run))
 
         run = self.store.load_workflow(client_id, workflow_id) or run
@@ -1089,6 +1290,13 @@ class OpsEngine:
         self.store.clear_lease(run)
         self.store.append_event(run, "execution_finished",
                                 detail={"status": run.status})
+        if new_status == RUN_AWAITING_PUBLICATION:
+            try:
+                self._publish_on_standing_approval(run)
+            except Exception:                 # noqa: BLE001 — fall back to a person
+                logger.exception("standing-approval publication failed for %s",
+                                 run.workflow_id)
+            run = self.store.load_workflow(run.client_id, run.workflow_id) or run
         self._update_batch_from_run(run)
 
     # ------------------------------------------------------------------ #
@@ -1732,6 +1940,11 @@ class OpsEngine:
                 subject={"artefact": "publication"})])
         self._prepare_publication(run, state)
         self._park(run, RUN_AWAITING_PUBLICATION)
+        try:
+            self._publish_on_standing_approval(run)
+        except Exception:                     # noqa: BLE001 — fall back to a person
+            logger.exception("standing-approval publication failed for %s",
+                             run.workflow_id)
 
     def _on_step(self, client_id: str, workflow_id: str, step: str, result) -> None:
         """Live progress: persist a light stage-status update as each agent
@@ -1751,10 +1964,44 @@ class OpsEngine:
     # Decisions
     # ------------------------------------------------------------------ #
     def _sync_decisions(self, run: WorkflowRun, gar: GovernedAgentResult) -> None:
-        """Persist newly-surfaced decisions; keep already-resolved ones."""
+        """Persist newly-surfaced decisions; keep already-resolved ones; close
+        the ones this stage no longer raises.
+
+        A QUESTION THE STAGE STOPPED ASKING IS NOT STILL A QUESTION. When a
+        stage runs again — because the operator's answers or set-asides
+        changed — its new result is the whole of what it asks. An open
+        decision from the earlier pass that it did not raise again stayed open
+        before, held the run in review and was shown as still to answer,
+        about a column nobody was reading any more. It is closed as
+        superseded, like a cancelled run's questions: nobody answered it, and
+        recording an answer would put a decision in the trail nobody made.
+        """
+        raised = {d.decision_id for d in gar.decisions_required}
+        # Only a stage that actually finished its pass has said everything it
+        # asks. A failed or blocked stage raised nothing because it stopped,
+        # not because the questions went away.
+        finished = gar.status in (ST_COMPLETED, ST_NEEDS_REVIEW)
+        for doc in (self.store.list_decisions(run.client_id, status=DEC_OPEN,
+                                              workflow_id=run.workflow_id)
+                    if finished else []):
+            if doc.get("stage") != gar.stage or doc.get("decision_id") in raised:
+                continue
+            doc.update(status=DEC_SUPERSEDED, resolved_by="system",
+                       resolved_at=now_iso(),
+                       resolution_reason="No longer asked: this step ran "
+                                         "again and did not raise it.")
+            self.store.save_decision(run.client_id, doc)
+            self.store.append_audit(
+                run.client_id, "decision_superseded", actor="system",
+                workflow_id=run.workflow_id,
+                decision_id=doc.get("decision_id", ""),
+                detail={"cause": "no_longer_raised", "stage": gar.stage})
         for d in gar.decisions_required:
             existing = self.store.load_decision(run.client_id, d.decision_id)
-            if existing is not None and existing.get("status") != DEC_OPEN:
+            # A superseded question raised again is open again; an ANSWERED
+            # one stays answered.
+            if existing is not None and existing.get("status") not in (
+                    DEC_OPEN, DEC_SUPERSEDED):
                 continue
             doc = d.to_dict()
             doc.update({"status": DEC_OPEN, "workflow_id": run.workflow_id,
@@ -2145,6 +2392,11 @@ class OpsEngine:
                 match = resolved.get(f"{run.workflow_id}_{entry.get('decision_id')}")
             if match is None:
                 continue
+            # The same number is not the same question once Gate 1 has run
+            # again: an answer applies only to the field it was given for.
+            answered = str((match.get("subject") or {}).get("target_field") or "")
+            if answered and answered != str(entry.get("target_field") or ""):
+                continue
             entry["status"] = "approved"
             sel = match.get("resolution_value") \
                 or entry.get("recommended_action") or entry.get("selected_action")
@@ -2193,6 +2445,20 @@ class OpsEngine:
         # ...and the source's standing mapping contract, which is what makes
         # next month deterministic. Decisions are matched on target_field, not
         # on position, so the same contract answers the same schema again.
+        #
+        # NOT FROM A BACKFILL. The contract is written whole, from this run's
+        # decisions. ERE's older months are a different layout — the interest
+        # rate is `Loan Interest Rate`, a property tape is missing — so their
+        # answers are about THAT layout, and writing them over the contract
+        # the current months run on would put next month's questions back.
+        # A backfilled month keeps its answers in its own record, above.
+        if run.workflow_type == WF_BACKFILL:
+            self.store.append_audit(
+                run.client_id, "approved_mapping_contract_kept", actor="system",
+                workflow_id=run.workflow_id,
+                detail={"portfolio_id": run.portfolio_id,
+                        "reason": "backfill answers stay with the backfilled run"})
+            return
         self.store.storage.write_text(
             self.store.layout.approved_decisions_uri(
                 run.client_id, run.portfolio_id,
@@ -2275,6 +2541,25 @@ class OpsEngine:
             if p is not None and p.exists():
                 digest.update(p.read_bytes())
                 seen = True
+        # AND THE COLUMNS SET ASIDE. They change what Gate 1 asks, so a run
+        # resumed after they change must run Gate 1 again. Without this a
+        # rerun reused the finished mapping step and put the same questions
+        # back — on ERE's delivery, eleven of them, seventeen reruns running.
+        try:
+            set_aside = self._set_aside_columns(run)
+        except Exception:                     # noqa: BLE001 — never block a run
+            set_aside = []
+        if set_aside:
+            digest.update(repr(set_aside).encode("utf-8"))
+            seen = True
+        # And the confirmed mappings, which settle Gate 1's source questions.
+        try:
+            confirmed = self._confirmed_mappings(run)
+        except Exception:                     # noqa: BLE001 — never block a run
+            confirmed = []
+        if confirmed:
+            digest.update(repr(confirmed).encode("utf-8"))
+            seen = True
         return digest.hexdigest() if seen else ""
 
     def _approved_decisions_path(self, run: WorkflowRun) -> Optional[Path]:
@@ -2426,6 +2711,144 @@ class OpsEngine:
         return ProductionPersistence(storage=self.store.storage,
                                      layout=Layout.from_env())
 
+    # ------------------------------------------------------------------ #
+    # Standing publication approval — the monthly delivery that needs nobody
+    # ------------------------------------------------------------------ #
+    def _record_standing_approval(self, run: WorkflowRun, scope: str,
+                                  actor: str) -> Optional[RuleRecord]:
+        """Turn "Yes — future deliveries for this portfolio/client" into a
+        governed rule, tied to the SCHEMA of the delivery being approved.
+
+        THE MODEL THIS RESTORES: onboarding is done once, and a later month
+        whose source schema has not changed is reported without anyone
+        touching it. The approval screen offered exactly that choice and then
+        recorded it and did nothing with it, so every month waited for a click.
+
+        Every dataset and every product: a funded or pipeline delivery, for
+        management reporting and — where the product includes it — the
+        regulatory return. One standing approval per portfolio (or client) AND
+        dataset, because a funded tape and a pipeline file are different
+        sources with different schemas.
+        """
+        if scope not in (SCOPE_PORTFOLIO_PUB, SCOPE_CLIENT_PUB):
+            return None
+        fingerprint = str(run.delivery.get("schema_fingerprint") or "")
+        if not fingerprint:
+            return None
+        # EVERY schema a person has approved stays approved. A backfilled month
+        # with an older layout, approved by hand, must not replace the current
+        # layout — or the next ordinary month would stop publishing itself.
+        existing = self._standing_approval(run)
+        fingerprints = list(dict.fromkeys(
+            _approved_fingerprints(existing) + [fingerprint]))
+        rule = RuleRecord(
+            rule_id="", version=0, kind=KIND_PUBLICATION, scope=scope,
+            client_id=run.client_id,
+            portfolio_id=run.portfolio_id if scope == SCOPE_PORTFOLIO_PUB else "",
+            payload={"subject": _standing_subject(run),
+                     "dataset": _dataset(run),
+                     "schema_fingerprint": fingerprint,
+                     "schema_fingerprints": fingerprints,
+                     "outcome": run.outcome,
+                     "approved_period": run.reporting_period or ""},
+            description=("Publish later management-report deliveries with "
+                         "this source schema without asking."),
+            approved_by=actor, workflow_id=run.workflow_id,
+            reason="standing approval given when publishing "
+                   f"{run.reporting_period or 'a delivery'}")
+        rule = self.rules.approve(rule)
+        self.store.append_audit(
+            run.client_id, "publication_standing_approval_recorded",
+            actor=actor, workflow_id=run.workflow_id, rule_id=rule.rule_id,
+            detail={"scope": scope, "schema_fingerprint": fingerprint})
+        return rule
+
+    def grant_standing_publication(self, *, client_id: str, workflow_id: str,
+                                   scope: str, actor: str) -> Dict[str, Any]:
+        """Give a standing approval from a delivery ALREADY published.
+
+        For a delivery approved before "Yes — future deliveries" did anything:
+        its publication was a person's approval of exactly this schema, so it
+        can stand for later deliveries without being published again.
+        """
+        run = self.store.load_workflow(client_id, workflow_id)
+        if run is None:
+            raise OpsError("OPS_WORKFLOW_NOT_FOUND",
+                           "That workflow could not be found.", 404)
+        if run.status != RUN_PUBLISHED:
+            raise OpsError("OPS_NOT_PUBLISHED",
+                           "Only a published delivery can stand for later "
+                           "ones.", 409)
+        rule = self._record_standing_approval(run, scope, actor)
+        if rule is None:
+            raise OpsError("OPS_BAD_SCOPE",
+                           "Choose this portfolio or this client, for a "
+                           "delivery whose schema was recorded.", 400)
+        return {"rule_id": rule.rule_id, "version": rule.version,
+                "scope": scope, "dataset": _dataset(run),
+                "schema_fingerprint": rule.payload.get("schema_fingerprint")}
+
+    def _standing_approval(self, run: WorkflowRun) -> Optional[RuleRecord]:
+        for rule in self.rules.applicable(client_id=run.client_id,
+                                          portfolio_id=run.portfolio_id):
+            p = rule.payload or {}
+            if rule.kind == KIND_PUBLICATION \
+                    and p.get("subject") == _standing_subject(run):
+                return rule
+        return None
+
+    def auto_publication_refusals(self, run: WorkflowRun) -> List[str]:
+        """Every reason this delivery may NOT publish on a standing approval.
+        Empty means it may. Each is a sentence an operator can act on."""
+        why: List[str] = []
+        rule = self._standing_approval(run)
+        if rule is None:
+            return ["No standing approval: publish one delivery with "
+                    "'Yes — future deliveries' to turn automatic publishing on."]
+        if run.workflow_type not in (WF_RECURRING, WF_BACKFILL):
+            why.append("A first delivery for a client or portfolio is always "
+                       "approved by a person.")
+        if run.outcome != (rule.payload or {}).get("outcome", run.outcome):
+            why.append("The products this delivery prepares differ from the "
+                       "ones approved for automatic publishing.")
+        fingerprint = str(run.delivery.get("schema_fingerprint") or "")
+        if not fingerprint or fingerprint not in _approved_fingerprints(rule):
+            why.append("The source schema differs from the one approved for "
+                       "automatic publishing.")
+        others = [d for d in self.store.open_decisions(run.client_id,
+                                                       run.workflow_id)
+                  if d.get("kind") != KIND_PUBLICATION]
+        if others:
+            why.append(f"{len(others)} question(s) are still open.")
+        if self._validation_exception_approved(run):
+            why.append("A validation exception was accepted for this delivery.")
+        if run.blockers:
+            why.append("The delivery carries a blocking problem.")
+        return why
+
+    def _publish_on_standing_approval(self, run: WorkflowRun) -> Optional[Dict[str, Any]]:
+        """Publish a prepared delivery that meets its standing approval.
+
+        Anything short of every condition leaves it waiting for a person,
+        with the reasons recorded on the run, never guessed past.
+        """
+        refusals = self.auto_publication_refusals(run)
+        if refusals:
+            self.store.append_event(run, "auto_publication_not_applied",
+                                    detail={"reasons": refusals})
+            return None
+        rule = self._standing_approval(run)
+        self.store.append_audit(
+            run.client_id, "publication_auto_approved",
+            actor=AUTO_PUBLICATION_ACTOR, workflow_id=run.workflow_id,
+            rule_id=rule.rule_id,
+            detail={"rule_version": rule.version,
+                    "schema_fingerprint": run.delivery.get("schema_fingerprint"),
+                    "approved_by": rule.approved_by})
+        return self.approve_publication(
+            client_id=run.client_id, workflow_id=run.workflow_id,
+            actor=AUTO_PUBLICATION_ACTOR)
+
     def approve_publication(self, *, client_id: str, workflow_id: str,
                             actor: str,
                             remember_scope: str = PUBLICATION_SCOPE_DEFAULT
@@ -2466,6 +2889,13 @@ class OpsEngine:
         pub.update(status="approved", approved_by=actor, approved_at=now_iso(),
                    approval_scope=remember_scope)
         self.store.save_publication(client_id, pub)
+        # "Yes — future deliveries for this portfolio / client" is a STANDING
+        # approval: later deliveries with this same schema publish without a
+        # click. See `_publish_on_standing_approval`.
+        standing = self._record_standing_approval(run, remember_scope, actor)
+        if standing is not None:
+            pub["standing_approval_rule"] = standing.rule_id
+            self.store.save_publication(client_id, pub)
 
         # Resolve any still-open publication decision for this workflow so it
         # leaves the Review Centre whichever surface the operator used.
@@ -2480,8 +2910,32 @@ class OpsEngine:
         persistence = self._persistence()
         central = (pub.get("source_artefacts") or {}).get("central_canonical")
         published: Dict[str, Any] = {}
-        if central and Path(str(central)).exists():
-            published = persistence.persist_platform(client_id, period, str(central))
+        # AN EARLIER MONTH DOES NOT BECOME "LATEST". Publishing always
+        # overwrote the latest copy, so backfilling June after August would
+        # have made MI read June as the current book. Newest is judged within
+        # the delivery's own book: a pipeline snapshot dated 24 September is
+        # not a newer funded month than August.
+        dataset = _dataset(run)
+        pub["dataset"] = dataset
+        newest = max((str(p.get("reporting_period") or "")
+                      for p in self.store.list_publications(client_id)
+                      if p.get("status") == "published"
+                      and p.get("workflow_id") != run.workflow_id
+                      and self._publication_dataset(client_id, p) == dataset),
+                     default="")
+        is_newest = not newest or str(period) >= newest
+        if dataset == "pipeline":
+            # THE PIPELINE IS NOT THE FUNDED BOOK. Every publication used to go
+            # to the platform canonical — the funded book MI reads — so a
+            # pipeline file published through the OCC would have become the
+            # latest funded portfolio. It goes to the pipeline store, as the
+            # blob route always published it.
+            published = self._publish_pipeline(run, period, central,
+                                               persistence, is_newest)
+        elif central and Path(str(central)).exists():
+            published = persistence.persist_platform(
+                client_id, period, str(central), update_latest=is_newest)
+        published["is_latest"] = is_newest
         a2 = pub.get("annex2") or {}
         if a2.get("xml") and Path(str(a2["xml"])).exists():
             regime_dir = str(Path(str(a2["xml"])).parent)
@@ -2515,6 +2969,40 @@ class OpsEngine:
                                         "approval_scope": remember_scope})
         self._notify_publication(run, pub)
         return pub
+
+    def _publication_dataset(self, client_id: str, pub: Dict[str, Any]) -> str:
+        """The book a publication belongs to. Recorded on it from now on; an
+        older one is read from its workflow's delivery, and anything that says
+        nothing is the funded book — which every publication was, until now."""
+        if pub.get("dataset"):
+            return str(pub["dataset"])
+        wf = self.store.load_workflow(client_id, str(pub.get("workflow_id") or ""))
+        return _dataset(wf) if wf is not None else "funded"
+
+    def _publish_pipeline(self, run: WorkflowRun, period: str,
+                          central: Optional[str], persistence,
+                          is_newest: bool) -> Dict[str, Any]:
+        """Publish a pipeline delivery where MI's pipeline view reads it.
+
+        The same snapshot the blob route published: the RAW extract with its
+        original headers (the pipeline layer maps rate, value, dates, stage
+        and applicant ages from them), falling back to the central tape, with
+        a stable row identity. An earlier snapshot is filed under its own
+        period and never becomes the latest pipeline."""
+        from types import SimpleNamespace
+        from apps.blob_trigger_app import router as _router
+        parsed = SimpleNamespace(reporting_period=period)
+        raw = _router._pick_pipeline_source(
+            str(run.delivery.get("input_path") or ""), None)
+        snapshot = (_router._pipeline_snapshot_from_raw(raw, parsed)
+                    if raw and Path(str(raw)).exists() else None)
+        if not snapshot and central and Path(str(central)).exists():
+            snapshot = str(central)
+        if not snapshot:
+            return {"latest": None, "period": None, "pointer": None}
+        snapshot = _router._ensure_pipeline_identity(snapshot, parsed)
+        return persistence.persist_pipeline(run.client_id, period, snapshot,
+                                            update_latest=is_newest)
 
     def _notify_publication(self, run: WorkflowRun,
                             pub: Dict[str, Any]) -> None:

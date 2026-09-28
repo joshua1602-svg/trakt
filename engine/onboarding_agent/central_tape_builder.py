@@ -59,6 +59,7 @@ import yaml
 from engine.gate_1_alignment.semantic_alignment import load_field_registry
 from engine import provenance as _provenance
 from . import domain_coverage as dc
+from . import file_identity as _file_identity
 from . import run_context as _rc
 from . import source_period_eligibility as spe
 from .field_scope import resolve_field_scope
@@ -244,6 +245,19 @@ def _loan_key_hints(project_dir: Path) -> Dict[Tuple[str, str], str]:
     return hints
 
 
+def _columns_by_file(project_dir: Path) -> Dict[str, List[str]]:
+    """``{file_name: [column, ...]}`` — every column each file carries, from
+    02_column_profiles (one row per column of every file profiled)."""
+    out: Dict[str, List[str]] = {}
+    for r in _load_json(Path(project_dir) / "02_column_profiles.json") or []:
+        if not isinstance(r, dict):
+            continue
+        fname, col = r.get("file_name", ""), r.get("source_column", "")
+        if fname and col and col not in out.setdefault(fname, []):
+            out[fname].append(col)
+    return out
+
+
 def _approved_loan_key(overrides: Dict[str, Any]) -> str:
     """The source column an operator APPROVED as the loan identifier, if any.
 
@@ -296,6 +310,46 @@ def _loan_key_candidates(df: pd.DataFrame, file_sheet: Tuple[str, str],
     # selects anything; it only decides whether there is a question to ask.
     out.extend(c for c in _reference_code_columns(df) if c not in out)
     return out
+
+
+#: Normalisations tried when looking for the column that joins a file to the
+#: loans: as written, digits only, the short form of a "…01" policy number,
+#: and without separators. The same rules the entity-key resolver uses.
+_JOIN_RULES = ("", "numeric_string", "strip_trailing_01", "remove_separators")
+
+
+def _best_joining_key(df: pd.DataFrame, universe_ids: set, join_key
+                      ) -> Optional[Tuple[str, str, str, int]]:
+    """``(column, file_rule, loan_rule, matches)`` for the column of ``df``
+    whose values match the most loans, or ``None`` when none matches half of
+    what it could.
+
+    Each side gets its OWN form: a loan written 76030101 is 760301 once its
+    trailing "01" is stripped, but a file already holding 760301 must be read
+    as written — stripping it too would make it 7603.
+
+    A key has to be nearly unique: a column with fewer distinct values than
+    half its rows (an originator, a product, a status) is never a loan key,
+    however many loans its one value happens to match.
+    """
+    best: Optional[Tuple[str, str, str, int]] = None
+    loan_forms = {rule: {join_key(u, rule) for u in universe_ids}
+                  for rule in _JOIN_RULES}
+    for col in df.columns:
+        values = df[col].dropna()
+        if values.empty or values.nunique() < 0.5 * len(values):
+            continue
+        for file_rule in _JOIN_RULES:
+            keys = {join_key(v, file_rule) for v in values}
+            keys.discard("")
+            for loan_rule, loans in loan_forms.items():
+                hits = len(keys & loans)
+                if best is None or hits > best[3]:
+                    best = (str(col), file_rule, loan_rule, hits)
+    if best is None:
+        return None
+    reach = min(len(universe_ids), int(df.shape[0]) or 1)
+    return best if best[3] >= 0.5 * reach else None
 
 
 def _reference_code_columns(df: pd.DataFrame) -> List[str]:
@@ -406,20 +460,51 @@ class _Source:
         self.classification = classification
 
 
+#: How Gate 1 marks a candidate an operator (or client memory) set aside.
+_SET_ASIDE_METHODS = ("set_aside_by_operator", "ignored_by_client_memory")
+
+
+def _operator_fields(overrides: Dict[str, Any]) -> set:
+    """Canonical fields an operator mapped a column to (``user_overrides``).
+
+    An operator's confirmation is the most specific instruction a delivery
+    carries. The mode's field scope decides what Trakt ASKS about and what it
+    rediscovers by name; it must not silently drop a mapping someone already
+    confirmed. On ERE's August delivery it did: `Full Redemption Date`,
+    `Product Type`, `Type` (property type) and the cash-flow columns were
+    confirmed, reached this file, and were then filtered out as regulatory or
+    cash-flow fields of an MI-only run — so the mapping screen said "mapped"
+    and the tape did not carry them.
+    """
+    return {str(o.get("canonical_field") or "").strip()
+            for o in (overrides or {}).get("user_overrides", []) or []
+            if str(o.get("canonical_field") or "").strip()}
+
+
 def _collect_field_sources(
     mapping_candidates: List[Dict[str, Any]],
     overrides: Dict[str, Any],
     inventory_by_name: Dict[str, Dict[str, Any]],
     included_fields: set,
+    columns_by_file: Optional[Dict[str, List[str]]] = None,
+    set_aside: Optional[List[Any]] = None,
 ) -> Dict[str, List[_Source]]:
-    """canonical_field -> ordered list of candidate sources (in-scope only)."""
+    """canonical_field -> ordered list of candidate sources (in-scope only).
+
+    ``columns_by_file`` is every column each file actually carries (from the
+    column profiles); ``set_aside`` the ``(file, column)`` pairs that feed
+    nothing. Together they say where an approval that names only a column
+    applies.
+    """
     sources: Dict[str, List[_Source]] = {}
     seen: set = set()
+    operator_fields = _operator_fields(overrides)
 
     def add(file_name: str, column: str, canon: str, method: str, conf: float):
         if not canon or not file_name or not column:
             return
-        if included_fields and canon not in included_fields:
+        if (included_fields and canon not in included_fields
+                and canon not in operator_fields):
             return
         key = (canon, file_name, column)
         if key in seen:
@@ -438,16 +523,65 @@ def _collect_field_sources(
             )
         )
 
+    # WHERE "ANY FILE" MEANS. An approval records a column and a canonical
+    # field. On a multi-file pack the Operations Control Centre deliberately
+    # leaves `source_file` blank rather than guess which file the operator
+    # meant — and `add` discarded it, because a source needs a file. On the
+    # live three-file delivery that silently dropped EVERY approved mapping
+    # before the tape saw one, so the coverage matrix kept re-deriving
+    # mappings the operator had already confirmed.
+    #
+    # Neither half was wrong on its own; the seam between them lost the
+    # operator's intent. The pack itself settles it: an override with no file
+    # applies to every file that actually carries that column. One file is no
+    # guess at all, and several is the overlap question coverage already asks.
+    #
+    # "Every file that carries the column" is read from the files themselves.
+    # It used to be read from the mapping candidates, which leave out a column
+    # whose NAME suggested a field outside the mode's scope — so ERE's
+    # `Customer 1 DOB`, confirmed by an operator as borrower_1_DOB, had no file
+    # to come from and never reached the tape. The candidates still count, for
+    # a run whose column profiles are missing.
+    from .target_coverage import without_set_asides as _without
+    set_aside_pairs = [tuple(p) for p in (set_aside or [])
+                       if isinstance(p, (list, tuple)) and len(p) == 2]
+    set_aside_pairs += [(m.get("source_file", ""), m.get("source_column", ""))
+                        for m in mapping_candidates or []
+                        if m.get("method") in _SET_ASIDE_METHODS]
+    files_by_column: Dict[str, List[str]] = {}
+    carried = [(fname, col) for fname, cols in (columns_by_file or {}).items()
+               for col in cols or []]
+    carried += [(m.get("source_file", ""), m.get("source_column", ""))
+                for m in mapping_candidates or []]
+    for fname, column in carried:
+        col = _norm(column or "")
+        if not col or not fname:
+            continue
+        # Not a file an operator set this column aside in: "every file that
+        # carries the column" means every file it is still IN USE in.
+        if not _without([{"source_file": fname, "source_column": column}],
+                        set_aside_pairs):
+            continue
+        if fname not in files_by_column.setdefault(col, []):
+            files_by_column[col].append(fname)
+
+    def add_override(o: Dict[str, Any], method: str, conf: float) -> None:
+        column = o.get("source_column", "")
+        named = o.get("source_file", "")
+        if named:
+            # The file an override names may be another month's: this pack's
+            # file of the same family is the one meant.
+            named = _file_identity.resolve(named, inventory_by_name) or named
+        for file_name in ([named] if named else files_by_column.get(_norm(column), [])):
+            add(file_name, column, o.get("canonical_field", ""),
+                o.get("method", method), o.get("confidence", conf))
+
     # 1. Approved user overrides (highest priority — listed first).
     for o in (overrides or {}).get("user_overrides", []) or []:
-        add(o.get("source_file", ""), o.get("source_column", ""),
-            o.get("canonical_field", ""), o.get("method", "approved_override"),
-            o.get("confidence", 1.0))
+        add_override(o, "approved_override", 1.0)
     # 2. Approved high-confidence mappings.
     for o in (overrides or {}).get("approved_high_confidence_mappings", []) or []:
-        add(o.get("source_file", ""), o.get("source_column", ""),
-            o.get("canonical_field", ""), o.get("method", "approved"),
-            o.get("confidence", 0.92))
+        add_override(o, "approved", 0.92)
     # 3. Full deterministic mapping candidates (context hints etc.).
     for m in mapping_candidates or []:
         add(m.get("source_file", ""), m.get("source_column", ""),
@@ -533,7 +667,11 @@ def _coverage_selections(
         if not canon:
             continue
         if status in _COV_SOURCE_MAPPED:
-            f = r.get("selected_source_file", "")
+            # An answer carried from another month names that month's file;
+            # this pack's file of the same family is the one meant.
+            f = (_file_identity.resolve(r.get("selected_source_file", ""),
+                                        inventory_by_name)
+                 or r.get("selected_source_file", ""))
             c = r.get("selected_source_column", "")
             if f and c:
                 inv = inventory_by_name.get(f, {})
@@ -646,7 +784,10 @@ def _order_sources(
     rule = (precedence or {}).get(canon)
     if rule and rule.get("primary_source_file"):
         primary_file = rule["primary_source_file"]
-        return sorted(srcs, key=lambda s: 0 if s.file_name == primary_file else 1)
+        # "This file is authoritative" was said about one month's file; it
+        # holds for the same file in every month.
+        return sorted(srcs, key=lambda s: 0 if _file_identity.same_source(
+            s.file_name, primary_file) else 1)
 
     # Default ordering by the field's domain -> classification precedence.
     domains = dc.field_domains(canon, registry_fields.get(canon, {}))
@@ -687,6 +828,8 @@ def _build_lender_tape(
     period_gate: Optional[Dict[str, Any]] = None,
     enrichment_fields: Optional[set] = None,
     static_field_specs: Optional[Dict[str, Dict[str, Any]]] = None,
+    columns_by_file: Optional[Dict[str, List[str]]] = None,
+    set_aside: Optional[List[Any]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     inventory_by_name = {i.get("file_name", ""): i for i in inventory}
     # Case/basename-tolerant file lookup (28a selected_source_file should match the
@@ -719,8 +862,10 @@ def _build_lender_tape(
     included = (getattr(field_scope, "included_fields", set()) or set()) | set(enrichment_fields)
 
     field_sources = _collect_field_sources(
-        mapping_candidates, overrides, inventory_by_name, included
+        mapping_candidates, overrides, inventory_by_name, included,
+        columns_by_file=columns_by_file, set_aside=set_aside,
     )
+    operator_fields = _operator_fields(overrides)
 
     # Lower-level source-selection basis per (canon, file, column) from the
     # deterministic mapping candidates — so the lineage can show the real
@@ -744,8 +889,11 @@ def _build_lender_tape(
     # fields bypass the domain filter so a linked collateral/pipeline field (e.g.
     # broker_channel) can ENRICH the funded universe via entity-key linkage — it
     # still never creates funded rows (universe selection is unchanged).
+    # A field an operator mapped a funded-pack column to is the lender's own
+    # data about that loan, whatever domain its name suggests (a per-loan
+    # redemption amount is "cashflow"): it is carried, not filtered out.
     def in_lender_scope(canon: str) -> bool:
-        if canon in enrichment_fields:
+        if canon in enrichment_fields or canon in operator_fields:
             return True
         return bool(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS)
 
@@ -955,9 +1103,14 @@ def _build_lender_tape(
     indexes: Dict[Tuple[str, str], Dict[str, Dict[str, Any]]] = {}
     all_ids: set = set()
     universe_pks: List[Tuple[str, str]] = []
-    for pk, df in frames.items():
-        key = key_cols[pk]
-        rule = _entity_for(pk).get("normalisation_rule", "")
+
+    def _index_frame(pk: Tuple[str, str], df: pd.DataFrame, key: str,
+                     rule: str,
+                     translate: Optional[Dict[str, str]] = None) -> None:
+        """Index one frame's rows by its normalised loan key (see below).
+
+        ``translate`` maps a key in this frame's form to the loan universe's
+        own id, for a file that writes the same loan number differently."""
         ld = load_debug.setdefault(pk, {})
         period_col = ld.get("period_column", "")
         actual_period_col = _actual_col(pk, period_col) if period_col else ""
@@ -994,6 +1147,8 @@ def _build_lender_tape(
                     continue
             rows_kept += 1
             lid = _join_key(row[key], rule)
+            if translate:
+                lid = translate.get(lid, lid)
             if not lid:
                 continue
             if lid in idx:
@@ -1008,7 +1163,11 @@ def _build_lender_tape(
         ld["rows_raw"] = rows_raw
         ld["rows_after_period_filter"] = rows_kept
         ld["raw_keys_in_scope"] = rows_kept
-        if bool(ld.get("is_universe_source")):
+
+    for pk, df in frames.items():
+        _index_frame(pk, df, key_cols[pk],
+                     _entity_for(pk).get("normalisation_rule", ""))
+        if bool(load_debug.get(pk, {}).get("is_universe_source")):
             universe_pks.append(pk)
 
     # --- Universe SOURCE selection (not a blind union) ---------------------- #
@@ -1051,6 +1210,40 @@ def _build_lender_tape(
     universe_ids: set = set()
     for pk in selected_universe_pks:
         universe_ids |= set(indexes.get(pk, {}).keys())
+
+    # A SUPPORTING FILE MUST JOIN THE LOANS IT DESCRIBES. Its key column is
+    # chosen by name, and names mislead: ERE's property extract has no column
+    # called a loan number, so the word "ID" won and `Originator ID` — one
+    # value for all 568 rows — was used as the key. Nothing joined, and every
+    # valuation, postcode, date of birth and protected-equity figure was
+    # dropped from a tape that otherwise looked complete. When the chosen key
+    # matches few of the loans, the column that actually matches them is used
+    # instead, with the evidence recorded.
+    if universe_ids:
+        for pk, df in frames.items():
+            if pk in selected_set:
+                continue
+            current = indexes.get(pk, {})
+            joined = len(set(current) & universe_ids)
+            if joined >= 0.5 * min(len(universe_ids), max(len(current), 1)):
+                continue
+            best = _best_joining_key(df, universe_ids, _join_key)
+            if best is None or best[3] <= joined:
+                continue
+            col, rule, loan_rule, hits = best
+            # Both sides in a comparable form, then back to the loan's own id.
+            forms: Dict[str, List[str]] = {}
+            for uid in universe_ids:
+                forms.setdefault(_join_key(uid, loan_rule), []).append(uid)
+            translate = {f: ids[0] for f, ids in forms.items()
+                         if f and len(ids) == 1}
+            key_cols[pk] = col
+            ld = load_debug.setdefault(pk, {})
+            ld.update({"key_column": col, "normalisation_rule": rule,
+                       "key_resolution_basis": "overlap_with_loan_universe",
+                       "key_reselected_from": ld.get("key_column", ""),
+                       "key_matches_before": joined, "key_matches_after": hits})
+            _index_frame(pk, df, col, rule, translate)
 
     # Record universe candidates that lost selection (dominated / lower precedence).
     for pk in universe_pks:
@@ -1457,6 +1650,31 @@ def _build_lender_tape(
         "duplicate_raw_keys_collapsed": duplicate_raw_keys_collapsed,
         "excluded_sources": excluded_sources,
         "excluded_row_counts": sum(e.get("row_count", 0) for e in excluded_sources),
+        # EVERY FILE THIS BUILD OPENED, and the role it opened it as. Without
+        # this, "no universe source and nothing excluded" is indistinguishable
+        # from "no file was opened at all", and the operator was told the first
+        # when it could as easily have been the second.
+        "considered_sources": [
+            {"source_file": pk[0], "source_sheet": pk[1],
+             "artefact_role": ld.get("artefact_role", ""),
+             "inferred_reporting_period": ld.get("inferred_reporting_period", ""),
+             "period_eligible": bool(ld.get("period_eligible", True)),
+             "is_universe_source": bool(ld.get("is_universe_source")),
+             "key_column": key_cols.get(pk, ""),
+             "key_count": int(ld.get("key_count", 0) or 0),
+             "rows_raw": int(ld.get("rows_raw", 0) or 0),
+             # A file the approved mapping names but the delivery does not
+             # contain reads identically to one that was read and found empty.
+             "file_in_inventory": bool(ld.get("file_in_inventory")),
+             "frame_loaded": bool(ld.get("frame_loaded"))}
+            for pk, ld in sorted(load_debug.items())],
+        # Every file in the pack, opened or not, as onboarding classified it.
+        "pack_files": [{"source_file": name, "artefact_role": role}
+                       for name, role in
+                       sorted((period_gate.get("role_by_file") or {}).items())],
+        # The roles that count as the loan listing, so the sentence that says a
+        # file did not qualify can say what would have.
+        "universe_roles": sorted(universe_roles),
         "pipeline_sources_excluded_from_lender_tape":
             [e.get("source_file", "") for e in pipeline_excluded],
         # Filled in by build_central_tapes from the pipeline_mi 04c domain.
@@ -1774,7 +1992,14 @@ def build_central_tapes(
         # the run-period funded / current-book source(s) only; future-period or
         # other-period files contribute no rows or values. Gated to MI modes;
         # regulatory (Annex 2) keeps the legacy generic universe.
-        spe_cfg = spe.load_config()
+        # The SAME client identity onboarding resolved eligibility under — the
+        # tenant and the source portfolio, in that order. This config is the
+        # fallback the builder re-computes eligibility with when 04c has no row
+        # for a (file, sheet); loading it without a client made that fallback
+        # disagree with the recorded answer for any client with a filing
+        # convention of its own.
+        spe_cfg = spe.load_config(client_id=(run_summary.get("client_name", ""),
+                                             run_summary.get("client_id", "")))
         if spe_cfg.get("enabled", True):
             run_id = getattr(run_paths, "run_id", "") or run_summary.get("run_id", "")
             input_dir = getattr(run_paths, "input_dir", "") or run_summary.get("input_dir", "")
@@ -1825,6 +2050,8 @@ def build_central_tapes(
         loan_key_hints=loan_key_hints, alias_loan_cols=alias_loan_cols,
         entity_keys=entity_keys, debug_dir=project_dir, period_gate=period_gate,
         enrichment_fields=enrichment_fields, static_field_specs=static_field_specs,
+        columns_by_file=_columns_by_file(project_dir),
+        set_aside=run_summary.get("set_aside_columns") or [],
     )
 
     central_dir = Path(run_paths.central_dir)
@@ -2022,3 +2249,127 @@ def build_central_tapes(
         "gap_count": summary["gap_count"],
         "mapped_field_count": summary["canonical_fields_populated"],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Why the lender tape came out empty
+# --------------------------------------------------------------------------- #
+
+def explain_empty_lender_tape(result: Dict[str, Any]) -> List[str]:
+    """Say why no loan tape was built, from what the build already recorded.
+
+    The build knows precisely what happened — which file it chose as the loan
+    listing, under which key column and normalisation rule, how many raw rows it
+    read, how many survived as identifiers, and which sources it excluded and
+    why. All of it was assembled into ``universe_debug`` and then dropped on the
+    floor: the caller reported ``onboarding did not produce a central lender
+    tape`` and the operator's screen translated that into a guess about a
+    missing loan listing.
+
+    Compare the sibling blocker three lines above it, which names the file role
+    and the column to look for. One of them can be acted on.
+
+    Returns operator sentences, most specific first. Never raises: a diagnosis
+    that fails must not replace the failure it is diagnosing.
+    """
+    try:
+        summary = (result or {}).get("lender_summary") or {}
+        debug = summary.get("universe_debug") or {}
+        said: List[str] = []
+
+        excluded = [e for e in (debug.get("excluded_sources") or [])
+                    if isinstance(e, dict)]
+        chosen = str(debug.get("selected_universe_source_file") or "")
+        raw = int(debug.get("raw_universe_rows") or 0)
+        canonical = int(debug.get("canonical_universe_rows") or 0)
+
+        if not chosen and excluded:
+            # Every file was set aside, so there was nothing to build from. The
+            # period gate is the usual reason and the one an operator can act on.
+            period = str(debug.get("run_reporting_period") or "")
+            for e in excluded[:4]:
+                found = str(e.get("inferred_reporting_period") or "")
+                said.append(
+                    f"{e.get('source_file') or 'a file'} was set aside"
+                    + (f" ({e.get('reason')})" if e.get("reason") else "")
+                    + (f": Trakt read it as covering {found}" if found else "")
+                    + (f", and this delivery is for {period}" if period else "")
+                    + f". It holds {e.get('row_count') or 0} row(s).")
+        elif not chosen:
+            # NOTHING WAS SET ASIDE AND NOTHING WAS CHOSEN. That is not one
+            # situation, it is three: no file was opened at all; files were
+            # opened but none was read as the loan listing; or one was and it
+            # yielded no loan identifier. Naming the first of them as if it
+            # were the only one is the guess this function exists to replace,
+            # so say which of the three it is, from what the build recorded.
+            considered = [c for c in (debug.get("considered_sources") or [])
+                          if isinstance(c, dict)]
+            roles = [str(r) for r in (debug.get("universe_roles") or []) if r]
+            wanted = (", ".join(roles) if roles
+                      else "a funded or current-book report")
+            if not considered:
+                pack = [str(f.get("source_file") or "")
+                        for f in (debug.get("pack_files") or [])
+                        if isinstance(f, dict) and f.get("source_file")]
+                said.append(
+                    "No file in this delivery was opened. Trakt opens a file "
+                    "only where a column it was asked to fill was mapped to "
+                    "that file, so nothing here was reached by the approved "
+                    "mapping."
+                    + (f" The delivery holds: {', '.join(pack[:6])}."
+                       if pack else " The delivery appears to hold no files."))
+            else:
+                missing = [c for c in considered
+                           if not c.get("file_in_inventory")
+                           or not c.get("frame_loaded")]
+                for c in missing[:4]:
+                    said.append(
+                        f"{c.get('source_file') or 'a file'} is named by the "
+                        "approved mapping but "
+                        + ("was not found in this delivery."
+                           if not c.get("file_in_inventory")
+                           else "could not be read from this delivery."))
+                for c in [c for c in considered if c not in missing][:4]:
+                    role = str(c.get("artefact_role") or "")
+                    said.append(
+                        f"{c.get('source_file') or 'a file'} was opened and "
+                        + (f"read as a {role}" if role
+                           else "not recognised as any known kind of file")
+                        + (f", giving {c.get('key_count') or 0} loan "
+                           f"identifier(s) from '{c.get('key_column')}'"
+                           if c.get("key_column")
+                           else ", and no loan identifier column was found in it")
+                        + ".")
+                if len(missing) < len(considered):
+                    said.append(
+                        "None of them is the loan listing — the one file that "
+                        "says which loans exist. Trakt takes that from a file "
+                        f"read as {wanted}, and every other file fills columns "
+                        "onto it.")
+        elif canonical == 0 and raw > 0:
+            key = str(debug.get("selected_universe_key_column") or "")
+            rule = str(debug.get("selected_universe_normalisation_rule") or "")
+            said.append(
+                f"{chosen} was read as the loan listing and {raw} row(s) came "
+                f"back, but none produced a usable loan identifier"
+                + (f" from '{key}'" if key else "")
+                + (f" under the {rule} rule" if rule else "") + ".")
+        elif canonical == 0:
+            said.append(
+                f"{chosen} was chosen as the loan listing but no rows were read "
+                "from it.")
+
+        # Whatever the reason, say what was excluded — a file the operator
+        # mapped and confirmed, left out of the delivery, is news.
+        if chosen and excluded:
+            names = ", ".join(str(e.get("source_file") or "") for e in excluded[:4])
+            said.append(f"{len(excluded)} file(s) were not used: {names}.")
+
+        if debug.get("period_gate_active") and debug.get("run_reporting_period"):
+            said.append(
+                "This delivery is gated to the reporting period "
+                f"{debug['run_reporting_period']}; a file Trakt reads as another "
+                "period is set aside rather than mixed into it.")
+        return said
+    except Exception:                                    # pragma: no cover
+        return []

@@ -51,7 +51,7 @@ _OFF = {"0", "off", "false", "no"}
 
 #: Bump when a change alters what a cached builder PRODUCES. Every key embeds
 #: it, so an upgraded deployment cannot serve values built by the old code.
-METHODOLOGY_VERSION = "1"
+METHODOLOGY_VERSION = "2"  # 2: stage run-off pipeline forecast
 
 #: Distinguishes "cached a legitimate None" from "absent".
 _MISSING = object()

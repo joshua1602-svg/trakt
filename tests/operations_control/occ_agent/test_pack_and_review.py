@@ -302,13 +302,36 @@ def test_every_answer_in_the_review_package_says_where_it_came_from(service,
         "nothing is recorded as having come from the client"
 
 
-def test_the_review_package_states_that_mappings_are_learned_later(service,
-                                                                   reviewed):
+def test_the_review_package_states_what_the_approval_does_to_the_mappings(
+        service, reviewed):
+    """This asserted the opposite, against a fixture that disproved it.
+
+    It pinned "Field mappings are NOT part of this configuration and were not
+    collected ... Approving this activation does not approve any mapping" — on
+    a case that has been through the rehearsal and settled its mappings, which
+    ``confirm_activation`` then carries into the governed store. The sentence
+    was written when a mapping was first proposed during the first live
+    ingestion and was never revisited, so the test went on holding shut a door
+    that had moved: an approver was told they were signing a SMALLER thing than
+    they were signing.
+
+    What the note must do is describe THIS case. A case that has settled
+    mappings says so; a case that has not still reads the old way, because that
+    sentence was right for that case all along.
+    """
     package = service.build_review_package(reviewed)
-    assert package.mapping_note == _review.MAPPING_NOTE
-    assert "were not collected" in package.mapping_note
-    assert "first representative delivery" in package.mapping_note
+    assert package.activation["mappings"] > 0, "fixture settled no mappings"
+    assert package.mapping_note == _review.mapping_note(
+        package.activation["mappings"], package.client_name)
+    assert "ARE part of this approval" in package.mapping_note
+    assert "does not approve any mapping" not in package.mapping_note
     assert "Field mappings" in package.document()
+
+
+def test_a_case_that_settled_no_mappings_still_says_they_come_later(service,
+                                                                    reviewed):
+    assert _review.mapping_note(0, "Northstar") == _review.MAPPING_NOTE_NONE
+    assert "first representative delivery" in _review.mapping_note(0, "N")
 
 
 def test_the_review_package_shows_what_activation_would_do(service, reviewed):
@@ -330,21 +353,29 @@ def test_the_review_package_reports_the_pack_honestly(service, reviewed):
 # --------------------------------------------------------------------------- #
 
 def test_access_requirements_become_operator_actions():
+    """One action per person: create the account.
+
+    This asserted four kinds, fanned out from a role enum and three booleans
+    the client was asked to set. Under a managed service none of those are the
+    client's to decide — the OCC is operated by Trakt and reports reach people
+    through the platform — so the questions went and the actions derived from
+    them went with them. Extra keys are passed here deliberately: a case
+    answered before the change must not resurrect the old fan-out.
+    """
     actions = _review.access_actions([
         {"user_name": "Dana Fox", "user_email": "dana@northstar.example",
          "user_role": "approver", "scope_note": "direct_101",
          "occ_access_required": True, "dashboard_access_required": True,
          "report_recipient": True},
     ])
-    kinds = {a.kind for a in actions}
-    assert kinds == {"occ_access", "dashboard_access", "report_distribution",
-                     "approval_role"}
+    assert [a.kind for a in actions] == ["user_account"]
+    assert "dana@northstar.example" in actions[0].detail
     assert all(a.status == "not_provisioned" for a in actions)
 
 
 def test_nothing_claims_access_was_provisioned():
     actions = _review.access_actions([
-        {"user_name": "Dana Fox", "occ_access_required": True}])
+        {"user_name": "Dana Fox", "user_email": "dana@northstar.example"}])
     text = " ".join(a.detail for a in actions).lower()
     assert "not done by activating" in text or "not provisioned" in text
     assert "granted" not in text

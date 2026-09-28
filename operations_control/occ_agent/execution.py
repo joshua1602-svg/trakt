@@ -56,7 +56,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 import yaml
@@ -75,6 +75,10 @@ from .run import (
     STAGE_HUMAN_INPUT_REQUIRED,
     STAGE_SIMULATED,
 )
+from . import base_mi_gate as _base_mi_gate
+from . import cross_file as _cross_file
+from . import llm_mapping as _llm
+from . import workbook as _workbook
 from .policy import CAP_LIVE_PIPELINE_TRIGGER, SyntheticPolicy
 
 REPO = Path(__file__).resolve().parents[2]
@@ -94,6 +98,12 @@ LOW_CONFIDENCE = 0.90
 #: Mapper tiers that are exact or contract-backed. A match at one of these is
 #: not "inferred" whatever its numeric confidence.
 _TRUSTED_TIERS = frozenset({"exact", "normalized", "alias"})
+
+#: What every validation finding sentence carries and nothing else does. It is
+#: how a rerun tells its own observations apart from the artefact notes beside
+#: them, so it can replace the last run's figures rather than stack on top of
+#: them. See :meth:`SyntheticOnboardingAdapters._finding_sentence`.
+MATERIALITY_MARK = "— materiality "
 
 
 class SyntheticExecutionError(OpsError):
@@ -128,11 +138,16 @@ class SyntheticOnboardingAdapters(AgentAdapters):
     def __init__(self, *, artefact_paths: Sequence[Path],
                  policy: SyntheticPolicy, sandbox: Path,
                  asset_type: str = "equity_release",
+                 confirmed_product_profile: str = "",
                  regime: str = "",
                  registry_path: Path = REGISTRY_PATH,
                  aliases_dir: Path = ALIASES_DIR,
                  issue_policy_path: Path = ISSUE_POLICY_PATH,
                  approved_mappings: Optional[Dict[str, str]] = None,
+                 llm_policy: Optional["_llm.Policy"] = None,
+                 confirm_every_mapping: bool = False,
+                 client_defaults: Optional[Dict[str, Any]] = None,
+                 source_units: Optional[Dict[str, str]] = None,
                  case_id: str = "", tenant: str = ""):
         self.artefact_paths = [Path(p) for p in artefact_paths]
         self.policy = policy
@@ -142,14 +157,115 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         self.registry_path = Path(registry_path)
         self.aliases_dir = Path(aliases_dir)
         self.issue_policy_path = Path(issue_policy_path)
+        #: canonical field -> the scale the LENDER writes it on, where the
+        #: operator has said. Canonical is percentage POINTS; a lender sending
+        #: 0.35 for 35% is on another scale, not wrong. See
+        #: :func:`percentage_scaled_fields`.
+        self.source_units = {str(k): str(v) for k, v in
+                             (source_units or {}).items() if v}
         #: source column -> canonical field, from human-approved decisions.
         self.approved_mappings = dict(approved_mappings or {})
+        #: THE FIRST TIME A LENDER'S TAPE IS READ, NOTHING MATCHES ITSELF.
+        #:
+        #: A governed alias says the NAME is one the platform has seen before.
+        #: It does not say this client means the same thing by it, and nobody
+        #: has ever said they do — so on a first onboarding a trusted match is
+        #: a PROPOSAL, and the human's reading of this lender's columns is the
+        #: artefact the onboarding exists to produce. Promotion then carries it
+        #: into governed rules at activation and production applies it every
+        #: month after, without asking again.
+        #:
+        #: Off for an amendment: those mappings are already governed and
+        #: already answered, and re-asking would make a change to one report a
+        #: re-approval of the whole tape.
+        self.confirm_every_mapping = bool(confirm_every_mapping)
+        #: Columns matched confidently that are waiting on that approval,
+        #: keyed ``(source file, source column)``. The pack routinely carries
+        #: the same column name in more than one file — a loan identifier is
+        #: in every extract — and keying on the name alone made one file's
+        #: proposal answer for all of them.
+        self.proposed_mappings: Dict[Tuple[str, str], str] = {}
         self.case_id = case_id
         self.tenant = tenant
         self.records: List[StageRecord] = []
         self.mapping_report: List[Dict[str, Any]] = []
+        #: Fields more than one file in the pack carries, and whether those
+        #: files agree. Reported, never blocking — see :mod:`.cross_file`.
+        self.cross_file: List[Dict[str, Any]] = []
+        #: Findings the product profile excuses for base MI. Reported, never
+        #: hidden: "not applicable to this product" is an answer, and an
+        #: operator who cannot see it cannot question it.
+        self.excused_findings: List[Dict[str, Any]] = []
+        #: Findings that passed the run but want a human's eye, each said in
+        #: full rather than counted. A warning-severity check is no longer
+        #: promoted to a wall by volume alone, so this is where a systematic
+        #: disagreement across a whole book now arrives, and it has to be
+        #: legible from the case rather than only from the control log.
+        self.review_findings: List[str] = []
+        #: The product the operator has confirmed this book to be, when they
+        #: have. Empty until then, and nothing is excused without it.
+        self.confirmed_product_profile: str = str(confirmed_product_profile
+                                                  or "")
+        #: The confirmation to put to them, when one is outstanding.
+        self.product_profile_decision: Optional[Dict[str, Any]] = None
+        #: What the REGULATORY return still wants once the asset pack and the
+        #: client configuration have been asked. Never blocks the MI: the two
+        #: are separate verdicts and the pipeline has always carried them as
+        #: two flags. See :func:`base_mi_gate.regime_outstanding`.
+        self.regime_pending: List[Dict[str, Any]] = []
+        #: The client's own standing answers — the originator's name, LEI and
+        #: country of establishment are captured once at onboarding and written
+        #: here, not restated per loan on a monthly extract.
+        self.client_defaults: Dict[str, Any] = dict(client_defaults or {})
+        #: Which file each consolidated column came from, and which files could
+        #: not be joined. A tape built from four files rather than one has to
+        #: say so: "where did this balance come from?" is the first question an
+        #: approver asks, and the answer must not be inferable only from the
+        #: absence of a column. See :func:`consolidate_pack`.
+        self.consolidation: Dict[str, Any] = {}
+        #: file -> {column: canonical field}, kept past the onboard stage so a
+        #: later refusal can say which file mapped the field it is refusing.
+        #: See :func:`why_absent`.
+        self.resolved_by_file: Dict[str, Dict[str, str]] = {}
+        #: What the asset pack's closed-account rule filled, and what it found
+        #: contradicting it. A value the platform wrote rather than read has to
+        #: be visible as such. See :func:`_closed_account_zeroing`.
+        self.closed_accounts: Dict[str, Any] = {}
+        #: What the platform's own derivation step did to the tape — LTV scale
+        #: normalisation, balance coherence, geography, reporting date. Kept so
+        #: the stage can say it rather than leaving a changed value unexplained.
+        self.derivations: Dict[str, Any] = {}
+        #: The governed budget for asking a model about a column the
+        #: deterministic tiers could not settle — see :mod:`.llm_mapping`.
+        self.llm_policy: _llm.Policy = llm_policy or _llm.Policy.load()
+        #: What the model was asked, what it proposed, and why not where not.
+        #: A model that quietly did not run and one that had nothing to say
+        #: look identical from the outside; they are not the same thing.
+        self.llm: Dict[str, Any] = _llm.Outcome().to_dict()
+        #: Reporting-period labels turned into the cut-off dates they stand
+        #: for (``August`` -> ``2026-08-31``), per column. Recorded so the
+        #: transform is visible rather than silent — see
+        #: :func:`_canonicalise_period_cutoffs`.
+        self.period_cutoffs: Dict[str, Any] = {}
         self.validation_report: List[Dict[str, Any]] = []
         self._assert_inside_sandbox()
+
+    def _approved_for(self, source_file: str, column: str) -> Optional[str]:
+        """What an operator already said about this column OF THIS FILE.
+
+        ``None`` means nobody has answered; ``""`` means they answered "do not
+        use it", which is not the same thing and must not collapse into it.
+
+        Keyed on the pair because a pack carries the same column name in
+        several files and an answer given about one of them is an answer about
+        one of them. The bare column name is still accepted as a fallback, so
+        answers recorded before decisions were file-scoped keep working — a
+        case mid-onboarding must not lose what a person already confirmed.
+        """
+        qualified = mapping_key(source_file, column)
+        if qualified in self.approved_mappings:
+            return self.approved_mappings[qualified]
+        return self.approved_mappings.get(column)
 
     def _assert_inside_sandbox(self) -> None:
         """Every input must already live inside the case sandbox.
@@ -199,6 +315,10 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         alias_map = load_aliases_from_dir(self.aliases_dir)
         mapper = HeaderMapper(canonical_fields, alias_map)
 
+        # The file the canonical tape is built from. Named before profiling so
+        # every mapping-report row can say whether it came from that file.
+        primary = self._primary_tape()
+
         # 1. Real source profiling, per file.
         profiles: Dict[str, List[Dict[str, Any]]] = {}
         for path in self.artefact_paths:
@@ -211,44 +331,241 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                     "source_file": path.name, "source_column": "",
                     "canonical_field": "", "tier": "unreadable",
                     "confidence": 0.0,
-                    "note": f"could not be profiled ({type(exc).__name__})"})
+                    "note": f"could not be profiled ({type(exc).__name__})",
+                    "primary": path == primary, "source_sheet": ""})
 
-        # 2. Real header mapping, per column.
-        primary = self._primary_tape()
+        # 2. Real header mapping, per column, for EVERY file in the pack.
+        #
+        #    The canonical tape is still built from the primary tape alone —
+        #    that is this adapter's contract and step 4 below is unchanged. But
+        #    the mapping REPORT used to cover the primary tape only, so a pack
+        #    of three files produced one file's worth of rows and the other two
+        #    appeared nowhere. That is a reporting gap, not a modelling one: the
+        #    real onboarding orchestrator loads every structured file in the
+        #    inventory (``_load_structured_dataframes``) and the central tape
+        #    builder consolidates a loan-domain field "even when its
+        #    authoritative source is the cashflow extract, because domain
+        #    membership follows the canonical field, not the file". An operator
+        #    checking what Trakt made of a delivery has to see all of it.
         frame = _read_table(primary)
         decisions: List[Dict[str, Any]] = []
         resolved: Dict[str, str] = {}
-        for column in [str(c) for c in frame.columns]:
-            approved = self.approved_mappings.get(column)
-            if approved is not None:
-                if approved and approved != "__ignore__":
-                    resolved[column] = approved
+        #: The same readings, kept PER FILE, because the tape is now built from
+        #: the whole pack rather than from the primary alone. ``resolved`` stays
+        #: the primary's own map: the ambiguity and coverage steps below ask
+        #: "what does the tape file claim?", which is a different question from
+        #: "what feeds the tape?" and is still answered per file.
+        resolved_by_file: Dict[str, Dict[str, str]] = {}
+        #: Every file's frame, kept so the pack can be compared against itself
+        #: at step 3b rather than re-read.
+        frames: Dict[str, Any] = {}
+        #: file -> {column: canonical field} for every claim this run makes or
+        #: proposes. Two columns IN ONE FILE claiming a field is an ambiguity;
+        #: two files carrying the same field is ordinary and is reconciled at
+        #: step 3b, so the clash is looked for within a file and not across the
+        #: pack.
+        claims: Dict[str, Dict[str, str]] = {}
+        for path in self.artefact_paths:
+            is_primary = path == primary
+            table = _workbook.read_table(path)
+            if table.frame is None:
+                continue          # already reported as unreadable at step 1
+            file_frame = frame if is_primary else table.frame
+            frames[path.name] = file_frame
+            claims.setdefault(path.name, {})
+            for column in [str(c) for c in file_frame.columns]:
+                approved = self._approved_for(path.name, column)
+                if approved is not None:
+                    if approved and approved != "__ignore__":
+                        claims[path.name][column] = approved
+                        resolved_by_file.setdefault(path.name, {})[column] = \
+                            approved
+                        if is_primary:
+                            resolved[column] = approved
+                    self.mapping_report.append({
+                        "source_file": path.name, "source_column": column,
+                        "canonical_field": approved, "tier": "operator_approved",
+                        "confidence": 1.0, "note": "confirmed by an operator",
+                        "primary": is_primary, "source_sheet": table.sheet})
+                    continue
+                canonical, tier, confidence = mapper.map_one(column)
+                trusted = (tier in _TRUSTED_TIERS
+                           or float(confidence) >= LOW_CONFIDENCE)
                 self.mapping_report.append({
-                    "source_file": primary.name, "source_column": column,
-                    "canonical_field": approved, "tier": "operator_approved",
-                    "confidence": 1.0, "note": "confirmed by an operator"})
-                continue
-            canonical, tier, confidence = mapper.map_one(column)
-            trusted = tier in _TRUSTED_TIERS or float(confidence) >= LOW_CONFIDENCE
-            self.mapping_report.append({
-                "source_file": primary.name, "source_column": column,
-                "canonical_field": canonical or "", "tier": tier,
-                "confidence": round(float(confidence), 4),
-                "note": "" if trusted else "below the confidence threshold"})
-            if canonical and trusted:
-                resolved[column] = canonical
-            elif canonical:
-                decisions.append(_mapping_decision(
-                    column, canonical, tier, float(confidence),
-                    frame[column], primary.name))
+                    "source_file": path.name, "source_column": column,
+                    "canonical_field": canonical or "", "tier": tier,
+                    "confidence": round(float(confidence), 4),
+                    "note": ("" if trusted
+                             else "below the confidence threshold"),
+                    "primary": is_primary, "source_sheet": table.sheet})
+                # EVERY FILE'S COLUMNS ARE PUT TO A PERSON, NOT ONLY THE TAPE'S.
+                #
+                # This adapter builds its canonical tape from the primary file,
+                # and for a long time that was also the limit of what it ASKED
+                # about: a column in the cashflow or property extract was
+                # matched, reported as "matched automatically", and never
+                # shown to anyone. That made one delivery read two ways —
+                # forty-five columns proposed and thirty-six settled by the
+                # platform on its own — and the thirty-six were settled by
+                # exactly the alias registry that the proposal exists to stop
+                # trusting unread.
+                #
+                # It also under-read the delivery. Production does not work
+                # from the primary tape alone: the central tape builder
+                # consolidates a loan-domain field "even when its
+                # authoritative source is the cashflow extract, because domain
+                # membership follows the canonical field, not the file". A
+                # mapping approved here is promoted to a governed rule scoped
+                # to the PORTFOLIO, not to this adapter's tape — so an
+                # operator's reading of the property extract's columns is
+                # worth exactly as much as their reading of the tape's, and
+                # both are wanted before anything is applied every month.
+                if canonical and trusted and self.confirm_every_mapping:
+                    # A first onboarding. The match is firm and still nobody
+                    # has said it is right FOR THIS CLIENT, so it waits — and
+                    # the waiting is the point: what a person confirms here is
+                    # what gets promoted and applied every month after.
+                    self.proposed_mappings[(path.name, column)] = canonical
+                    claims[path.name][column] = canonical
+                    decisions.append(_mapping_proposal(
+                        column, canonical, tier, float(confidence),
+                        file_frame[column], path.name, primary=is_primary))
+                elif canonical and trusted:
+                    claims[path.name][column] = canonical
+                    resolved_by_file.setdefault(path.name, {})[column] = \
+                        canonical
+                    if is_primary:
+                        resolved[column] = canonical
+                elif canonical:
+                    decisions.append(_mapping_decision(
+                        column, canonical, tier, float(confidence),
+                        file_frame[column], path.name, primary=is_primary))
+
+        # 2b. THE MODEL'S SECOND OPINION, ON WHAT DETERMINISTIC MATCHING COULD
+        #     NOT SETTLE.
+        #
+        #     Zero-cost first, which the loop above already is: the tiered
+        #     mapper runs to exhaustion and everything it settles is settled.
+        #     What reaches the model is only what it could not place — on a
+        #     real hundred-column tape, the thirty columns that matched nothing
+        #     and were previously reported as unreadable with no proposal
+        #     against any of them, leaving an operator to name each canonical
+        #     field from memory.
+        #
+        #     A suggestion is never a mapping. It does not enter `resolved`, it
+        #     cannot reach the tape, and it arrives as a decision that says in
+        #     its own words that a model proposed it — so confirming one is a
+        #     person's act, and they can see what they are confirming.
+        self.llm = _llm.Outcome().to_dict()
+        unsettled = _llm.unresolved(self.mapping_report, self.llm_policy)
+        if unsettled:
+            outcome = _llm.suggest(
+                unsettled, frame, policy=self.llm_policy,
+                registry_path=self.registry_path, aliases_dir=self.aliases_dir,
+                asset_type=self.asset_type)
+            self.llm = outcome.to_dict()
+            # Scoped to the primary tape: the model is only ever asked about
+            # that file, and a same-named column in another file has its own
+            # question, which is not this one.
+            already = {str(d.get("source_column") or "") for d in decisions
+                       if str(d.get("source_file") or "") == primary.name}
+            for column, suggestion in outcome.by_column.items():
+                for row in self.mapping_report:
+                    if (row.get("primary")
+                            and row.get("source_column") == column):
+                        row["llm_field"] = suggestion.field_name
+                        row["llm_confidence"] = round(
+                            float(suggestion.confidence), 4)
+                        row["llm_reasoning"] = suggestion.reasoning
+                if column in already or column not in frame.columns:
+                    # A column the deterministic pass already raised a question
+                    # about keeps that question; the suggestion is recorded
+                    # beside it rather than asked twice.
+                    continue
+                decisions.append(_llm.decision(
+                    suggestion, source_file=primary.name,
+                    populated=_populated(frame[column]),
+                    rows=int(len(frame))))
+            # Narrated when the model ran, and when it was switched ON and
+            # still did not — an operator expecting proposals is owed the
+            # reason none arrived. Not narrated where it is simply switched
+            # off, which is a standing fact about the environment rather than
+            # something that happened during this run; `run.llm` carries it
+            # either way. The outcome stays DETERMINISTIC: nothing here was
+            # simulated, and a model declining to answer is not a simulation.
+            if outcome.asked or (self.llm_policy.enabled
+                                 and outcome.skipped_because):
+                self._record(StageRecord(
+                    stage="onboard",
+                    outcome=STAGE_DETERMINISTIC_COMPLETED,
+                    component="engine.gate_1_alignment.llm_mapper_agent."
+                              "LLMFieldMapper",
+                    summary=(f"Asked a model about {outcome.asked} column"
+                             f"{'s' if outcome.asked != 1 else ''} Trakt could "
+                             f"not match on its own; it proposed "
+                             f"{len(outcome.by_column)}. Nothing it suggested "
+                             "is used until you confirm it."
+                             if outcome.asked else
+                             f"No model was asked: {outcome.skipped_because}."),
+                    metrics={"unsettled_columns": len(unsettled),
+                             "asked": outcome.asked,
+                             "proposed": len(outcome.by_column)}))
 
         # 3. A canonical field claimed by two columns is an ambiguity a human
         #    must settle — the engine has no basis to prefer one.
-        for canonical, columns in _duplicates(resolved).items():
-            for column in columns:
-                resolved.pop(column, None)
-            decisions.append(_ambiguity_decision(canonical, columns, frame,
-                                                 primary.name))
+        #
+        #    PROPOSALS COUNT HERE TOO. On a first onboarding a confident match
+        #    is proposed rather than resolved, so a clash between two of them
+        #    would otherwise be invisible until after the set was approved —
+        #    and an operator who approves fifteen mappings only to be told two
+        #    of them collide has been asked to approve something that was never
+        #    coherent. The clash is a real question and it is asked FIRST; the
+        #    two columns stop being proposals, because "is this right?" has no
+        #    answer while two columns claim the same field.
+        #    AND IT IS ASKED PER FILE. The same fact arriving in two files
+        #    under two names is not an ambiguity — it is the ordinary shape of
+        #    a delivery, and step 3b reconciles it. Only two columns of ONE
+        #    file claiming one field is a question the engine cannot answer.
+        for file_name, claimed in claims.items():
+            file_frame = frames.get(file_name)
+            if file_frame is None:
+                continue
+            for canonical, columns in _duplicates(claimed).items():
+                for column in columns:
+                    if file_name == primary.name:
+                        resolved.pop(column, None)
+                    self.proposed_mappings.pop((file_name, column), None)
+                decisions = [d for d in decisions
+                             if not (d.get("source_file") == file_name
+                                     and d.get("source_column") in columns)]
+                decisions.append(_ambiguity_decision(
+                    canonical, columns, file_frame, file_name,
+                    primary=(file_name == primary.name)))
+
+        # 3b. WHERE THE PACK DISAGREES WITH ITSELF.
+        #
+        #     The same fact usually arrives in more than one file under
+        #     different names, and when the files agree that is free
+        #     reconciliation. When they disagree the central tape builder
+        #     raises a blocking conflict — after activation, which is the one
+        #     place a rehearsal exists to have looked first. Reported here,
+        #     never blocking: the remedy is a source-precedence rule, which is
+        #     not an artefact this surface can write, so presenting it as an
+        #     answerable question would be asking for something an operator
+        #     cannot give from this screen.
+        comparisons = _cross_file.compare(self.mapping_report, frames)
+        self.cross_file = [c.to_dict() for c in comparisons]
+        conflicts = _cross_file.findings(comparisons)
+        if conflicts:
+            self._record(StageRecord(
+                stage="onboard", outcome=STAGE_HUMAN_INPUT_REQUIRED,
+                component="operations_control.occ_agent.cross_file",
+                summary=(f"{len(conflicts)} field"
+                         f"{'s' if len(conflicts) != 1 else ''} disagree "
+                         "between the files in this delivery. Name which "
+                         "file to believe before it is built."),
+                metrics={"fields_in_several_files": len(comparisons),
+                         "fields_disagreeing": len(conflicts)}))
 
         if decisions:
             _write_decisions(work_dir, decisions)
@@ -269,8 +586,20 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                 message="mapping review pending")
 
         # 4. Build the mapped tape + the handoff manifest.
-        mapped = frame.rename(columns=resolved)
-        mapped = mapped[[c for c in mapped.columns if c in set(resolved.values())]]
+        #
+        #    FROM THE WHOLE PACK, not from the primary file alone. Every file's
+        #    columns are mapped, confirmed and promoted into governed rules, and
+        #    until now every file but one was then left out of the delivery it
+        #    was mapped for — so a lender shipping its balances in a separate
+        #    principal-and-interest extract got a tape with no balance and a
+        #    CORE001 refusal for a column the client had in fact supplied.
+        #    See :func:`consolidate_pack` for the join and its rules.
+        frames.setdefault(primary.name, frame)
+        mapped, self.consolidation = consolidate_pack(
+            frames, resolved_by_file, primary.name)
+        self.resolved_by_file = resolved_by_file
+        self.period_cutoffs = _canonicalise_period_cutoffs(
+            mapped, self.artefact_paths)
         tape = work_dir / "18_central_lender_tape.csv"
         mapped.to_csv(tape, index=False)
         handoff = work_dir / "24_onboarding_handoff_manifest.json"
@@ -282,20 +611,61 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             "source_files": [p.name for p in self.artefact_paths],
             "mapped_columns": len(resolved),
             "canonical_tape": str(tape),
+            # Lineage for the consolidation: which file each column that is NOT
+            # the primary tape's came from, and which files could not be
+            # attached. The tape itself carries values, not provenance.
+            "consolidation": self.consolidation,
             "runtime_mode": "synthetic",
         }, indent=2), encoding="utf-8")
         (work_dir / "source_profiles.json").write_text(
             json.dumps(profiles, indent=2, default=str), encoding="utf-8")
 
+        read_it_as = ""
+        for column, detail in self.period_cutoffs.items():
+            pairs = ", ".join(f"{label} as {iso}"
+                              for label, iso in sorted(
+                                  detail.get("labels", {}).items())[:3])
+            if pairs:
+                read_it_as = (f" Read the reporting month in "
+                              f"{column.replace('_', ' ')} as a cut-off date: "
+                              f"{pairs}.")
+        # WHERE THE TAPE'S COLUMNS CAME FROM, on the record rather than
+        # inferable. A tape consolidated from four files is a different object
+        # from one read out of a single extract, and an approver signing the
+        # delivery is entitled to see which file each field was taken from and
+        # which files could not be attached at all.
+        brought_in = self.consolidation.get("added") or {}
+        joined_from = sorted({str(f) for f in brought_in.values()})
+        consolidated = ""
+        if brought_in:
+            consolidated = (
+                f" {len(brought_in)} column"
+                f"{'s' if len(brought_in) != 1 else ''} came from "
+                f"{len(joined_from)} other file"
+                f"{'s' if len(joined_from) != 1 else ''} in the pack, joined on "
+                "the loan identifier.")
+        # A file that could NOT be joined is a blocker's worth of news even
+        # though the stage completes: its columns are mapped and confirmed, and
+        # they are not in the delivery.
+        unjoined = [str(f.get("note") or "")
+                    for f in (self.consolidation.get("files") or [])
+                    if not f.get("joined")]
         self._record(StageRecord(
             stage="onboard", outcome=STAGE_DETERMINISTIC_COMPLETED,
             component="engine.onboarding_agent.file_profiler + "
                       "engine.gate_1_alignment.semantic_alignment.HeaderMapper",
             summary=f"Read {len(self.artefact_paths)} file"
                     f"{'s' if len(self.artefact_paths) != 1 else ''} and "
-                    f"matched {len(resolved)} columns.",
+                    f"matched {len(resolved)} columns on the loan tape."
+                    f"{consolidated}{read_it_as}",
+            blockers=[n for n in unjoined if n],
             metrics={"rows": int(len(mapped)), "mapped_columns": len(resolved),
-                     "source_columns": int(len(frame.columns))}))
+                     "consolidated_columns": len(brought_in),
+                     "tape_columns": int(len(mapped.columns)),
+                     "source_columns": int(len(frame.columns)),
+                     "period_labels_dated": sum(
+                         len(d.get("labels", {}))
+                         for d in self.period_cutoffs.values())}))
         return StepResult(ok=True, output_path=str(tape),
                           manifest_path=str(handoff),
                           readiness={"loan_count": int(len(mapped)),
@@ -333,6 +703,57 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                               blockers=[f"canonical typing failed "
                                         f"({type(exc).__name__})"],
                               message="transform failed")
+        # WHAT THE ASSET CLASS ANSWERS ABOUT A CLOSED ACCOUNT.
+        #
+        # A loan redeemed in the period is absent from the lender's balances
+        # extract — there is no balance to report — so the consolidated tape
+        # carries a blank and validation refuses it as a missing mandatory
+        # value. Nothing is missing: the borrower repaid, and a repaid loan's
+        # balance is nought. That is the product's answer, stated in the asset
+        # pack, and read here rather than decided here.
+        #
+        # The platform's own function, called by the platform's own
+        # `derive_fields` too, so the rehearsal and production cannot drift
+        # into two readings of the same rule.
+        self.closed_accounts = _closed_account_zeroing(frame, self.asset_type)
+        # THE PLATFORM'S OWN DERIVATIONS, which this stage skipped entirely.
+        #
+        # It called the platform's `apply_types` and the platform's validators
+        # and then built the tape validation would judge WITHOUT the step
+        # production runs in between — so the rehearsal judged a thinner tape
+        # than the platform builds, and refused deliveries the platform accepts.
+        # The same drift as `base_mi_gate`, one gate further on.
+        #
+        # It is not only a filler of blanks, which is how it was waved away.
+        # `_resolve_ltv` brings a SUPPLIED loan-to-value onto the canonical
+        # percentage-point scale, reconciling it against balance and valuation:
+        # a lender who states LTV as a 0-1 fraction has every row fail LTV002
+        # against a rule that expects percentage points, at an error rate the
+        # policy then escalates from REVIEW to BLOCKING. Nothing was wrong with
+        # the delivery; the scale had simply never been normalised.
+        #
+        # Reported, never fatal: a derivation that cannot run must leave the
+        # tape as the lender sent it and let validation speak, rather than take
+        # a delivery down.
+        try:
+            # THE LENDER'S OWN FILE NAMES, not Trakt's intermediate tape.
+            #
+            # Step 4 of the derivation resolves a bare period label — "August"
+            # — against a year it reads out of the filename. Handed
+            # `18_central_lender_tape.csv` it finds none and falls back to a
+            # hard-coded 2025, so a delivery whose own files state no year, and
+            # whose period column holds a label, would be stamped 2025 rather
+            # than left alone. The onboard stage answers the same question and
+            # answers it correctly — `_run_year` over the delivery's own names,
+            # returning None rather than guessing — and the two passes
+            # disagreeing about one field is how a wrong date becomes data.
+            self.derivations = _derive_fields(
+                frame, spec.source_portfolio_type or "",
+                self.artefact_paths[0].name if self.artefact_paths else "",
+                default_year=_run_year(self.artefact_paths),
+                source_units=self.source_units)
+        except Exception as exc:            # noqa: BLE001 — reported, not fatal
+            self.derivations = {"error": f"{type(exc).__name__}: {exc}"}
         typed = frame
         typed_fields = report.get("fields") or {}
         parse_failures = {name: spec.get("parse_failures", 0)
@@ -357,10 +778,22 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             component="engine.gate_2_transform.canonical_transform.apply_types",
             summary=f"Typed {len(typed_fields)} canonical column"
                     f"{'s' if len(typed_fields) != 1 else ''} across "
-                    f"{len(typed)} records.",
+                    f"{len(typed)} records.{_closed_sentence(self.closed_accounts)}",
             metrics={"rows": int(len(typed)),
                      "typed_columns": len(typed_fields),
-                     "parse_failures": parse_failures}))
+                     "closed_accounts": self.closed_accounts,
+                     "derivations": self.derivations,
+                     "parse_failures": parse_failures},
+            # A closed account STATING a balance is a contradiction: the
+            # lender says the loan is repaid and also says money is owed on it.
+            # The value is left exactly as they wrote it, and named here
+            # because only they can say which of the two is right.
+            blockers=[
+                f"{n} loan{'s' if n != 1 else ''} with a closed account status "
+                f"still state a {f.replace('_', ' ')}. The value the lender "
+                "sent has been kept; ask them which is right."
+                for f, n in sorted(
+                    (self.closed_accounts.get("contradicted") or {}).items())]))
         return StepResult(ok=True, output_path=str(typed_csv),
                           manifest_path=str(manifest_path),
                           readiness={"ready_for_validation": True},
@@ -369,6 +802,31 @@ class SyntheticOnboardingAdapters(AgentAdapters):
     # ------------------------------------------------------------------ #
     # validate — real canonical + business rules + real materiality
     # ------------------------------------------------------------------ #
+    def _finding_sentence(self, r: Dict[str, Any]) -> str:
+        """One validation finding, said so an operator can act on it.
+
+        WHY, NOT ONLY WHAT. A line naming a field an operator has mapped and
+        confirmed is unanswerable on its own: their screen says 100%, this line
+        says nought records, and what happened to the file in between is
+        recorded on a different stage. Where the consolidation knows, it says
+        so here. See :func:`why_absent` and :func:`rule_in_words`.
+
+        Blocking and review findings are said identically but for the
+        materiality they carry, because they differ in what the operator must
+        do about them, not in what happened.
+        """
+        field = str(r.get("field_name") or "")
+        issue = str(r.get("issue_type") or "")
+        materiality = str(r.get("materiality") or "").upper() or "REVIEW"
+        subject, checks = rule_in_words(issue, field)
+        said = (f"{subject}: {issue} affects {r.get('affected_rows')} "
+                f"record(s) ({r.get('error_rate')}%)"
+                f"{MATERIALITY_MARK}{materiality}")
+        if checks:
+            said = f"{said}. The check: {checks}"
+        because = why_absent(field, self.resolved_by_file, self.consolidation)
+        return f"{said}. {because}" if because else said
+
     def validate(self, spec: PortfolioSpec, transformation_manifest: str,
                  work_dir: Path) -> StepResult:
         from engine.gate_3_validation import aggregate_validation_results as agg
@@ -377,6 +835,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             get_core_required_fields,
             load_registry,
             select_fields_for_portfolio,
+            validate_core_presence,
         )
         tx_dir = Path(transformation_manifest).parent
         typed_csv = tx_dir / "31_transformed_canonical_tape.csv"
@@ -384,27 +843,42 @@ class SyntheticOnboardingAdapters(AgentAdapters):
 
         issue_policy = _load_yaml(self.issue_policy_path)
 
-        # Canonical: core-required fields must be present and populated. Emitted
-        # in the canonical validator's own schema (rule_id/severity/field/row/
-        # message) so the platform's normaliser handles it unchanged.
+        # Canonical: core-required fields must be present and populated —
+        # through THE PLATFORM'S OWN CHECK, not a second copy of it.
+        #
+        # This used to re-implement the check inline and hard-code
+        # `severity: "error"` on every finding. The real validator asks each
+        # field's `applicability` block first, and the registry says, for
+        # instance:
+        #
+        #   maturity_date:
+        #     applicability:
+        #       equity_release:
+        #         allowed_missing: true
+        #         severity_if_missing: warning
+        #         nd_default: ND2
+        #         reason: "Lifetime mortgage / equity release products do not
+        #                  have a fixed contractual maturity."
+        #
+        # So a lifetime mortgage with no maturity date is a WARNING on the
+        # platform's own ingestion route and was BLOCKING here — the Agent
+        # refusing deliveries the platform accepts, for reasons the
+        # configuration had already answered. The same applied to the
+        # originator's LEI, which the governed client configuration supplies at
+        # projection and the Annex 2 preflight enforces separately.
+        #
+        # APPLICABILITY IS KEYED ON THE ASSET CLASS ("equity_release"), not on
+        # how the book was acquired ("direct" / "acquired"). Passing the
+        # portfolio type found nothing and fell through to the strict default,
+        # which is the second half of the same defect.
         registry = load_registry(self.registry_path)
         fields_meta = select_fields_for_portfolio(
             registry, spec.source_portfolio_type or "direct")
-        canonical_rows: List[Dict[str, Any]] = []
-        for field_name in get_core_required_fields(fields_meta):
-            if field_name not in frame.columns:
-                canonical_rows.append({
-                    "rule_id": "CORE001", "severity": "error",
-                    "field": field_name, "row": -1,
-                    "message": f"{field_name} is not present"})
-                continue
-            blank = frame[field_name].isna() | (
-                frame[field_name].astype(str).str.strip() == "")
-            for idx in frame.index[blank]:
-                canonical_rows.append({
-                    "rule_id": "CORE002", "severity": "error",
-                    "field": field_name, "row": int(idx),
-                    "message": f"{field_name} is empty"})
+        canonical_rows: List[Dict[str, Any]] = [
+            v.__dict__ if hasattr(v, "__dict__") else dict(v)
+            for v in validate_core_presence(
+                frame, get_core_required_fields(fields_meta), fields_meta,
+                self.asset_type or spec.source_portfolio_type or "direct")]
 
         # Business rules: the real rule engine.
         try:
@@ -433,26 +907,108 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                    if len(combined) else pd.DataFrame())
         self.validation_report = (summary.to_dict("records")
                                   if len(summary) else [])
-        blocking = [r for r in self.validation_report
-                    if str(r.get("materiality")).upper() == "BLOCKING"]
+        # WHAT ACTUALLY STOPS THIS RUN, as the product profile decides it.
+        #
+        # Nothing in the platform's ingestion route gates on materiality — that
+        # gate is the Agent's alone, and it used to stop on every BLOCKING
+        # finding without asking what the product needs. So a lifetime mortgage
+        # was refused for having no maturity date, while the same files loaded
+        # through the platform went through.
+        #
+        # `config/asset/product_profiles.yaml` answers this per field, per
+        # product, and has all along. An excused finding is still reported and
+        # still on the record; it simply stops being a reason to refuse.
+        # Nothing is excused when a regime is being prepared: `base_mi` speaks
+        # for management information, and the regulatory return needs more.
+        blocking, excused = _base_mi_gate.split(
+            self.validation_report, asset_class=self.asset_type,
+            regime=self.regime or "",
+            confirmed_profile_id=self.confirmed_product_profile)
+        # WHAT THE REGULATOR STILL WANTS IS A SEPARATE VERDICT FROM WHETHER THE
+        # MI IS SOUND. A field Annex 2 needs and base MI does not has nothing
+        # to do with the management information, and holding the MI for it
+        # means a lender waiting on one LEI cannot see their own book. Asked of
+        # the asset pack and the client configuration first, so `maturity_date`
+        # — answered ND5 because a lifetime mortgage has no term — is never put
+        # to the operator as something the lender owes us.
+        self.regime_pending = _base_mi_gate.regime_outstanding(
+            excused, regime=self.regime or "", asset_class=self.asset_type,
+            client_defaults=self.client_defaults,
+            registry_path=self.registry_path)
+        # The question that has to be answered before anything is excused:
+        # "is this book a lifetime mortgage?". On the asset class alone the
+        # platform PROPOSES a profile rather than applying it, and that guard
+        # is not worked around here — until an operator confirms it, every
+        # required field keeps blocking. Asked on a REGULATORY run too: the
+        # profile decides what base MI needs either way, and suppressing the
+        # question on a regime run left the operator with seven blockers, no
+        # explanation and nothing to answer.
+        pending = _base_mi_gate.needs_confirmation(
+            self.asset_type, self.confirmed_product_profile)
+        if pending is not None and blocking:
+            self.product_profile_decision = _base_mi_gate.confirmation_decision(
+                pending, [str(r.get("field_name") or "") for r in blocking])
+        self.excused_findings = excused
+        if self.regime_pending:
+            # REPORTED, NEVER BLOCKING. The stage completes, the MI goes on,
+            # and the regulatory return is held instead — see the handoff
+            # manifest's `ready_for_projection`, which has always been a flag
+            # of its own beside `ready_for_transformation_validation`.
+            self._record(StageRecord(
+                stage="validate", outcome=STAGE_DETERMINISTIC_COMPLETED,
+                component="operations_control.occ_agent.base_mi_gate",
+                summary=(f"{len(self.regime_pending)} field"
+                         f"{'s' if len(self.regime_pending) != 1 else ''} the "
+                         f"{self.regime} return needs "
+                         f"{'are' if len(self.regime_pending) != 1 else 'is'} "
+                         "outstanding. The management information is "
+                         "unaffected and goes on; the regulatory return waits "
+                         "for them."),
+                metrics={"regime_pending": len(self.regime_pending)},
+                blockers=[_base_mi_gate.regime_sentence(r)
+                          for r in self.regime_pending]))
         review = [r for r in self.validation_report
                   if str(r.get("materiality")).upper() == "REVIEW"]
+        review_said = [self._finding_sentence(r) for r in review]
+        self.review_findings = list(review_said)
+        if excused:
+            self._record(StageRecord(
+                stage="validate", outcome=STAGE_DETERMINISTIC_COMPLETED,
+                component="engine.onboarding_agent.product_profile",
+                summary=(f"{len(excused)} required field"
+                         f"{'s' if len(excused) != 1 else ''} "
+                         "not needed for management information on this "
+                         "product. Still required for the regulatory return."),
+                metrics={"excused": len(excused)},
+                blockers=[_base_mi_gate.sentence(r) for r in excused]))
 
         val_dir = tx_dir / "validation"
         val_dir.mkdir(parents=True, exist_ok=True)
         val_manifest = val_dir / "40_validation_manifest.json"
         val_manifest.write_text(json.dumps({
             "ready_for_validation_complete": not blocking,
+            # TWO VERDICTS, WRITTEN AS TWO FLAGS. The MI is ready when nothing
+            # base MI needs is missing; the regulatory return is ready only
+            # when the regulator's own fields are answered too. Conflating them
+            # is what stopped a sound delivery for want of an LEI.
+            "ready_for_projection": bool(self.regime) and not self.regime_pending,
+            "regime_pending": [
+                {"field_name": str(r.get("field_name") or ""),
+                 "regime_code": str(r.get("regime_code") or ""),
+                 "regime": str(r.get("regime") or "")}
+                for r in self.regime_pending],
             "findings": self.validation_report,
             "runtime_mode": "synthetic",
         }, indent=2, default=str), encoding="utf-8")
 
         if blocking:
-            blockers = [
-                f"{r.get('field_name')}: {r.get('issue_type')} affects "
-                f"{r.get('affected_rows')} record(s) "
-                f"({r.get('error_rate')}%) — materiality BLOCKING"
-                for r in blocking]
+            # WHY, NOT ONLY WHAT. A refusal naming a field an operator has
+            # mapped and confirmed is unanswerable on its own: their screen
+            # says 100%, this line says nought records, and what happened to
+            # the file in between is recorded on a different stage. Where the
+            # consolidation knows, it says so here — in the same words a
+            # review finding uses. See :meth:`_finding_sentence`.
+            blockers = [self._finding_sentence(r) for r in blocking]
             self._record(StageRecord(
                 stage="validate", outcome=STAGE_HARD_BLOCKED,
                 component="engine.gate_3_validation.validate_business_rules + "
@@ -475,7 +1031,16 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             summary=("All checks passed." if not review else
                      f"{len(review)} finding(s) need review but do not block."),
             metrics={"blocking": 0, "review": len(review),
-                     "rows": int(len(frame))}))
+                     "rows": int(len(frame))},
+            # SAY WHICH ONES. A review finding used to be a number on a stage
+            # that had passed, which is survivable only while the number is
+            # small. Now that a warning-severity check can no longer be
+            # promoted to a wall by volume alone, this is where a systematic
+            # disagreement across a whole book arrives — and a count of one is
+            # indistinguishable from every loan in the delivery disagreeing
+            # with its own stated figure. Each one is named, in the same words
+            # the refusal would have used.
+            blockers=review_said))
         return StepResult(ok=True, output_path=str(typed_csv),
                           manifest_path=str(val_manifest),
                           readiness={"ready_for_validation_complete": True},
@@ -637,9 +1202,84 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 
 
 def _read_table(path: Path) -> pd.DataFrame:
-    if path.suffix.lower() == ".csv":
-        return pd.read_csv(path, low_memory=False)
-    return pd.read_excel(path)
+    """The client's tape, read the way the rest of the platform reads one.
+
+    Delegates to :mod:`operations_control.occ_agent.workbook`, which picks a
+    workbook's data sheet and re-detects a header below row one. A plain
+    ``pd.read_excel(path)`` took the first sheet and row one, which for a real
+    lender extract is the summary tab and a title block.
+    """
+    table = _workbook.read_table(path)
+    if table.frame is None:
+        raise SyntheticExecutionError(f"{path.name} could not be read")
+    return table.frame
+
+
+def _run_year(paths: Sequence[Path]) -> Optional[int]:
+    """The reporting year the delivery is for, read from its own file names.
+
+    A bare month label cannot be turned into a cut-off date without one, and
+    the year is not something to guess at: ``None`` means "no year was stated",
+    and the caller then leaves the value exactly as the client wrote it.
+    """
+    from engine.onboarding_agent import run_context as _rc
+    for path in paths:
+        for found in _rc.dates_from_filename(path.name) or []:
+            try:
+                return int(str(found)[:4])
+            except (TypeError, ValueError):   # pragma: no cover — guard
+                continue
+    return None
+
+
+def _canonicalise_period_cutoffs(mapped: "pd.DataFrame",
+                                 paths: Sequence[Path]) -> Dict[str, Any]:
+    """Turn a reporting-period LABEL into the cut-off date it stands for.
+
+    THE DEFECT THIS CLOSES. A lender's monthly extract identifies its period in
+    a ``Month Run`` column carrying ``August``. ``month run`` is a governed
+    alias of ``data_cut_off_date`` (``config/system/aliases_mandatory.yaml``),
+    so the column maps correctly — and then canonical typing reads ``August``
+    as a date, fails, and writes a blank. Every row of a 568-row book came out
+    missing its cut-off date, and the run stopped on a field the client had in
+    fact supplied.
+
+    The platform already knows the answer. ``central_tape_builder`` performs
+    exactly this step for exactly these fields, turning ``August`` into
+    ``2026-08-31`` against the run year and keeping the raw label in lineage.
+    The Agent built its tape without it — the same drift, once more, between a
+    stage body here and the platform's own build.
+
+    So this calls the builder's own function rather than restating it. What it
+    will not do is invent: ``31/08/2026`` is normalised, ``August`` resolves
+    only where the delivery's file names state a year, and anything that
+    resolves to nothing is left untouched for a human to look at.
+    """
+    from engine.onboarding_agent.central_tape_builder import (
+        _PERIOD_CUTOFF_FIELDS,
+        _canonicalise_period_cutoff,
+    )
+    year = _run_year(paths)
+    applied: Dict[str, Any] = {}
+    for column in [c for c in mapped.columns if c in _PERIOD_CUTOFF_FIELDS]:
+        resolved: Dict[str, str] = {}
+        def _canonical(value: Any) -> Any:
+            raw = "" if value is None else str(value).strip()
+            if not raw:
+                return value
+            if raw in resolved:
+                return resolved[raw] or value
+            iso, method, _basis = _canonicalise_period_cutoff(raw, year)
+            resolved[raw] = iso
+            if iso and method == "period_label_to_month_end":
+                # Only the label conversion is reported: re-normalising a date
+                # a client already wrote as a date is not news to anyone.
+                applied.setdefault(column, {"method": method, "run_year": year,
+                                            "labels": {}})
+                applied[column]["labels"][raw] = iso
+            return iso or value
+        mapped[column] = mapped[column].map(_canonical)
+    return applied
 
 
 def _duplicates(resolved: Dict[str, str]) -> Dict[str, List[str]]:
@@ -654,12 +1294,528 @@ def _populated(series: "pd.Series") -> int:
     return int(series.notna().sum() - (series.astype(str).str.strip() == "").sum())
 
 
+#: The canonical field every file in a pack must carry for its columns to join
+#: the loan tape. The platform's own key names are wider than this
+#: (``central_tape_builder._LOAN_KEY_NAMES``), but by the time this runs the
+#: columns have already been mapped, so the CANONICAL name is the only one that
+#: matters — whatever the lender called it.
+LOAN_KEY = "loan_identifier"
+
+#: Where a secondary file carries more than one row per loan, this field picks
+#: which row speaks for the loan. A per-period extract is the ordinary case:
+#: a principal-and-interest file carries a row per loan per reporting period,
+#: and the loan tape wants the latest.
+PERIOD_FIELD = "data_cut_off_date"
+
+#: Below this, two files' keys are not the same identifier under any rule the
+#: platform knows, and joining them would be a guess. Reported, never forced.
+KEY_OVERLAP_FLOOR = 0.5
+
+
+def _key_rule(spine: List[str], other: List[str]) -> Tuple[str, str]:
+    """``(rule, rule_for_other)`` — how these two files' loan ids compare.
+
+    A LENDER'S FILES DO NOT SPELL THE LOAN ID THE SAME WAY, and the platform has
+    known this all along. ``entity_key_resolver`` names the real cases from real
+    packs: ``Loan Policy Number`` of ``760341`` is the same loan as
+    ``Account Number`` of ``76034101`` — a stable trailing ``01`` — and
+    ``76034101`` read from an Excel numeric column arrives as ``76034101.0``.
+
+    A bare string comparison joins NEITHER, and the failure is silent: every
+    lookup misses, the column is added full of blanks or not at all, and the
+    tape looks assembled. That is worse than not consolidating, because it
+    cannot be seen.
+
+    So the rule is chosen by the platform's own detector rather than restated
+    here — ``_detect_global_suffix`` over the two key spaces, then
+    ``_canonical_rule_for`` per side, which strips a suffix only when it
+    dominates AND does not collapse distinct ids into one. Both are the
+    functions ``resolve_entity_keys`` itself uses.
+    """
+    from engine.onboarding_agent.entity_key_resolver import (
+        _canonical_rule_for,
+        _detect_global_suffix,
+        _numeric_set,
+    )
+    spine_num, other_num = _numeric_set(spine), _numeric_set(other)
+    if not spine_num or not other_num:
+        return "exact", "exact"
+    suffix = _detect_global_suffix([spine_num, other_num])
+    spine_rule, _, _ = _canonical_rule_for(spine_num, suffix)
+    other_rule, _, _ = _canonical_rule_for(other_num, suffix)
+    return spine_rule, other_rule
+
+
+def _keys(values: "pd.Series", rule: str) -> "pd.Series":
+    """One file's loan ids as comparison keys. Never mutates the source: the
+    original value stays on the tape for lineage, as the resolver requires."""
+    from engine.onboarding_agent.entity_key_resolver import normalise_key
+    return values.map(lambda v: normalise_key(v, rule))
+
+
+def _mapped_frame(frame: "pd.DataFrame", resolved: Dict[str, str]
+                  ) -> "pd.DataFrame":
+    """One file's columns, renamed to canonical and narrowed to the mapped set.
+
+    Two source columns mapped to one canonical field would collide on rename,
+    which pandas resolves by keeping both under one name — so the first is
+    taken and the clash is left to the ambiguity decision that already exists
+    for it.
+    """
+    seen: Dict[str, str] = {}
+    for column, canonical in resolved.items():
+        if canonical and canonical != "__ignore__" and canonical not in seen:
+            seen[canonical] = column
+    keep = [c for c in seen.values() if c in frame.columns]
+    out = frame[keep].copy()
+    out.columns = [next(k for k, v in seen.items() if v == c) for c in keep]
+    return out
+
+
+def _one_row_per_loan(frame: "pd.DataFrame", keys: "pd.Series", file_name: str
+                      ) -> Tuple[Optional["pd.DataFrame"], str]:
+    """``(frame, note)`` — a secondary file collapsed to one row per loan.
+
+    A LOAN TAPE HAS ONE ROW PER LOAN, and a secondary extract routinely does
+    not: a principal-and-interest file carries a row per loan per reporting
+    period. Joining it as-is would fan the tape out — every loan repeated once
+    per period — and every downstream count, concentration and average would be
+    wrong in a way that looks like data rather than like a bug.
+
+    So a file with repeated keys is collapsed, and only in a way that can be
+    justified: the latest reporting period wins where the file says what period
+    each row is, and where it does not the file contributes NOTHING and says so.
+    Picking an arbitrary row would be inventing an answer about which month the
+    balance came from.
+    """
+    if not keys.duplicated().any():
+        return frame, ""
+    if PERIOD_FIELD not in frame.columns:
+        return None, (
+            f"{file_name} carries more than one row per loan and no "
+            f"{PERIOD_FIELD.replace('_', ' ')}, so Trakt cannot tell which row "
+            "speaks for the loan. Map its reporting date, or say which file is "
+            "authoritative for these fields.")
+    order = pd.to_datetime(frame[PERIOD_FIELD], errors="coerce")
+    if order.isna().all():
+        return None, (
+            f"{file_name} carries more than one row per loan and its "
+            f"{PERIOD_FIELD.replace('_', ' ')} could not be read as a date, so "
+            "Trakt cannot tell which row speaks for the loan.")
+    ranked = frame.assign(_occ_key=keys.to_numpy(), _occ_period=order.to_numpy())
+    ranked = ranked.sort_values("_occ_period", na_position="first")
+    collapsed = ranked.drop_duplicates("_occ_key", keep="last")
+    return collapsed, (
+        f"{file_name} carries more than one row per loan; the latest "
+        f"{PERIOD_FIELD.replace('_', ' ')} was taken for each.")
+
+
+def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[str, str]],
+                     primary_name: str) -> Tuple["pd.DataFrame", Dict[str, Any]]:
+    """EVERY file's mapped columns, as one canonical loan tape.
+
+    WHAT THIS REPLACES. The tape was built from the primary file alone — the
+    first file in the pack with "loan" in its name — and every other file's
+    mappings were recorded, promoted into governed rules, and then left out of
+    the delivery they were mapped for. A lender that ships its balances in a
+    separate principal-and-interest extract therefore got a tape with no
+    balance, and validation refused it on ``current_principal_balance``:
+    CORE001, "column not present", nought records affected, because the column
+    was never built rather than because the client never sent it.
+
+    Production does not work that way and never did. ``central_tape_builder``
+    consolidates a loan-domain field "even when its authoritative source is the
+    cashflow extract, because domain membership follows the canonical field,
+    not the file" — so the rehearsal was refusing a delivery the platform would
+    have accepted, which is the one thing it must never do.
+
+    THE RULES, AND WHY EACH IS THE SAFE DIRECTION.
+
+    * The PRIMARY file is the spine. It carries loan identity, so it decides
+      which loans exist; a secondary file can fill a column but never add a row.
+      A loan that appears only in the cashflow extract is a reconciliation
+      question, not a loan.
+    * The PRIMARY wins a contested field, and a secondary fills only what the
+      spine leaves BLANK. That is the loan-domain precedence
+      ``central_tape_builder._order_sources`` applies by default, and it means
+      consolidation can add facts but never overwrite one.
+    * A file with no mapped loan identifier contributes nothing, and says so.
+      There is nothing to join on, and joining on row order would silently
+      attach one borrower's balance to another's loan.
+    * A file with repeated keys is collapsed by the latest reporting period, or
+      contributes nothing — see :func:`_one_row_per_loan`.
+
+    Returns the tape and a report naming, per file, what it contributed and
+    what it could not.
+    """
+    spine_resolved = resolved_by_file.get(primary_name) or {}
+    spine = _mapped_frame(frames[primary_name], spine_resolved)
+    report: Dict[str, Any] = {"primary": primary_name, "files": [], "added": {}}
+    if LOAN_KEY not in spine.columns:
+        report["files"].append({
+            "source_file": primary_name, "joined": False,
+            "note": (f"{primary_name} has no mapped loan identifier, so the "
+                     "other files in the pack cannot be joined to it.")})
+        return spine, report
+
+    for file_name, resolved in sorted(resolved_by_file.items()):
+        if file_name == primary_name or file_name not in frames:
+            continue
+        other = _mapped_frame(frames[file_name], resolved)
+        if LOAN_KEY not in other.columns:
+            report["files"].append({
+                "source_file": file_name, "joined": False,
+                "note": (f"{file_name} has no mapped loan identifier, so its "
+                         "columns cannot be attached to a loan.")})
+            continue
+        spare = [c for c in other.columns
+                 if c != LOAN_KEY
+                 and (c not in spine.columns or _populated(spine[c]) == 0)]
+        if not spare:
+            report["files"].append({
+                "source_file": file_name, "joined": True, "added": [],
+                "note": (f"{file_name} carries nothing the loan tape was "
+                         "missing.")})
+            continue
+        # HOW THE TWO FILES SPELL THE SAME LOAN. Chosen by the platform's own
+        # detector, not assumed — see :func:`_key_rule`.
+        spine_rule, other_rule = _key_rule(
+            [str(v) for v in spine[LOAN_KEY].tolist()],
+            [str(v) for v in other[LOAN_KEY].tolist()])
+        spine_keys = _keys(spine[LOAN_KEY], spine_rule)
+        other_keys = _keys(other[LOAN_KEY], other_rule)
+        wanted = {k for k in spine_keys if k}
+        overlap = (len({k for k in other_keys if k} & wanted) / len(wanted)
+                   if wanted else 0.0)
+        if overlap < KEY_OVERLAP_FLOOR:
+            # NOT THE SAME IDENTIFIER, and forcing it would be a guess. Said
+            # out loud: a join that silently matches nothing leaves a column of
+            # blanks and a tape that looks assembled, which is worse than not
+            # consolidating at all because it cannot be seen.
+            report["files"].append({
+                "source_file": file_name, "joined": False,
+                "overlap": round(overlap, 4), "key_rule": other_rule,
+                "primary_key_rule": spine_rule,
+                "note": (f"{file_name} and {primary_name} agree on "
+                         f"{overlap:.0%} of their loan identifiers, so Trakt "
+                         "cannot tell they are the same loans. Check the "
+                         "column each file identifies a loan by.")})
+            continue
+        # THE PERIOD COLUMN TRAVELS WITH THE NARROWING, even when the spine
+        # already carries it. `spare` is what this file would ADD, and a
+        # cashflow extract's reporting date is precisely what it does not add:
+        # the loan extract states the same date, so the column is excluded as
+        # redundant. Narrowing to `spare` alone therefore took away the one
+        # column `_one_row_per_loan` needs to say which of a loan's monthly rows
+        # speaks for it — and the file was dropped with "no data cut off date",
+        # against an operator who had mapped it. It is carried here and attached
+        # to nothing: only `spare` is written to the spine below.
+        for_collapse = [LOAN_KEY, *spare]
+        if PERIOD_FIELD in other.columns and PERIOD_FIELD not in for_collapse:
+            for_collapse.append(PERIOD_FIELD)
+        collapsed, note = _one_row_per_loan(
+            other[for_collapse], other_keys, file_name)
+        if collapsed is None:
+            report["files"].append({"source_file": file_name, "joined": False,
+                                    "note": note})
+            continue
+        lookup = collapsed.set_index("_occ_key") if "_occ_key" in \
+            collapsed.columns else collapsed.set_index(other_keys.to_numpy())
+        added: List[str] = []
+        #: Mapped, joined, and every value that reached the spine was blank.
+        #: Silently skipped until now, which is the one failure mode nobody can
+        #: see: the file reads as joined, the column is simply absent, and
+        #: validation refuses the field as though the client had never sent it.
+        blank: List[str] = []
+        for column in spare:
+            values = spine_keys.map(lookup[column])
+            if _populated(values) == 0:
+                blank.append(column)
+                continue
+            spine[column] = values.to_numpy()
+            added.append(column)
+        # BOTH SIDES OF THE COMPARISON, because a rule named on its own does
+        # not say how the match was made. ERE's pack is the case: the cashflow
+        # extract shares the loan extract's long key and the property extract
+        # carries the short one, so the SPINE is stripped for the second join
+        # and left alone for the first. "How were these matched?" is answered
+        # by the pair, not by one half of it.
+        # THE LOANS THIS FILE DID NOT COVER. A join at 99.8% is a join, and the
+        # loans in the remaining 0.2% get a blank rather than a value — which
+        # validation then refuses as a missing mandatory value, per row, with
+        # no hint that the cause is a loan the lender's own extract does not
+        # carry. That is a reconciliation question for the lender, not a data
+        # fault, and the two need different actions. A few identifiers are kept
+        # so it can be looked up rather than hunted for.
+        unmatched = sorted({k for k in spine_keys if k}
+                           - {k for k in other_keys if k})
+        report["files"].append({"source_file": file_name, "joined": True,
+                                "added": sorted(added), "blank": sorted(blank),
+                                "note": note,
+                                "overlap": round(overlap, 4),
+                                "unmatched": len(unmatched),
+                                "unmatched_examples": unmatched[:5],
+                                "key_rule": other_rule,
+                                "primary_key_rule": spine_rule})
+        for column in added:
+            report["added"][column] = file_name
+    return spine, report
+
+
+#: The scales a lender can write a percentage on. Canonical is POINTS.
+SOURCE_UNITS = ("percentage_points", "fraction")
+
+
+def percentage_scaled_fields(registry_path: Path = REGISTRY_PATH) -> List[str]:
+    """Canonical fields where "points or a fraction?" is a real question.
+
+    Read from the registry's own ``unit: percentage_points`` declaration — the
+    governed percentage contract — rather than listed here, so a field that
+    joins or leaves that contract does not need this module edited too.
+    """
+    try:
+        import yaml as _yaml
+        reg = _yaml.safe_load(Path(registry_path).read_text(encoding="utf-8"))
+        fields = ((reg or {}).get("fields") or {})
+        return sorted(name for name, meta in fields.items()
+                      if str((meta or {}).get("unit") or "")
+                      == "percentage_points")
+    except Exception:                       # pragma: no cover — config guard
+        return []
+
+
+def _derive_fields(frame: "pd.DataFrame", portfolio_type: str,
+                   filename: str,
+                   source_units: Optional[Dict[str, str]] = None,
+                   default_year: Optional[int] = None) -> Dict[str, Any]:
+    """The platform's own derivation step, run on the rehearsal's tape.
+
+    ``config`` is empty by design: every key it reads is an OVERRIDE — a
+    declared percentage unit, an acquired-LTV disclosure, a static reporting
+    date — and a rehearsal that invented one would be rehearsing something
+    other than this delivery. With none of them, the derivation reconciles
+    against the tape's own balances and valuations, which is what a client
+    without those overrides gets in production.
+
+    ``closed_account`` is deliberately absent: it has already run above, before
+    balance coherence, which is where a repaid loan's nought has to be written
+    for the coherence step to see it.
+    """
+    from engine.gate_2_transform.canonical_transform import derive_fields
+    # A DECLARED UNIT IS AUTHORITATIVE and short-circuits the reconciliation,
+    # which is the point of declaring one: reconciliation needs a balance and a
+    # valuation to compare against, and a book that has neither — or whose
+    # ratios are genuinely small enough to read either way — cannot be settled
+    # by arithmetic. The operator's answer can.
+    config: Dict[str, Any] = {}
+    declared = {f: {"source_unit": u} for f, u in (source_units or {}).items()
+                if u}
+    if declared:
+        config["aliases"] = declared
+    # `infer_year` reads a year out of `filename`; `default_year` is what it
+    # falls back to. Both now come from the delivery's own names, so this pass
+    # and the onboard pass cannot reach different answers about the same
+    # period — and where the delivery states no year at all, None is passed on
+    # rather than a guess, which is the onboard pass's rule too.
+    return derive_fields(frame, portfolio_type, filename,
+                         dayfirst=True, infer_year=True, derive_month=False,
+                         default_year=default_year, config=config) or {}
+
+
+def _closed_sentence(outcome: Dict[str, Any]) -> str:
+    """What the closed-account rule did, for the stage an operator reads.
+
+    A value the platform wrote is not the same as one the lender sent, and the
+    tape does not distinguish them. Silence here would make a derived nought
+    indistinguishable from a reported one.
+    """
+    filled = (outcome or {}).get("filled") or {}
+    if not filled:
+        return ""
+    rows = max(int(n) for n in filled.values())
+    fields = ", ".join(f.replace("_", " ") for f in sorted(filled))
+    return (f" {rows} loan{'s' if rows != 1 else ''} with a closed account "
+            f"status had no balance, which the asset class answers as nought: "
+            f"{fields} set to 0.")
+
+
+def _closed_account_zeroing(frame: "pd.DataFrame", asset_class: str
+                            ) -> Dict[str, Any]:
+    """Apply the asset pack's closed-account answer, and say what it did.
+
+    Never raises: a configuration that cannot be read must leave the tape
+    exactly as the lender sent it and refuse as it would have before, rather
+    than take a delivery down.
+    """
+    try:
+        import yaml as _yaml
+        from engine.gate_2_transform.canonical_transform import (
+            zero_balances_on_closed_accounts,
+        )
+        name = str(asset_class or "").strip().lower().replace(" ", "_")
+        if name not in ("equity_release", "erm", "rre"):
+            return {}
+        pack = REPO / "config" / "asset" / "product_defaults_ERM.yaml"
+        if not pack.exists():
+            return {}
+        cfg = (_yaml.safe_load(pack.read_text(encoding="utf-8")) or {})
+        closed = cfg.get("closed_account") or {}
+        if not closed.get("statuses"):
+            return {}
+        return zero_balances_on_closed_accounts(
+            frame, statuses=closed.get("statuses") or [],
+            zero_fields=closed.get("zero_fields") or [])
+    except Exception:                       # pragma: no cover — config guard
+        return {}
+
+
+def rule_in_words(issue_type: str, field_name: str) -> Tuple[str, str]:
+    """``(what to call it, what it checks)`` for a business-rule finding.
+
+    A BLOCKER HAS TO SAY WHAT IT IS ABOUT. This is what an operator was handed:
+
+        PORTFOLIO: LTV002 affects 567 record(s) (99.82%) — materiality BLOCKING
+
+        "These error messages are not intuitive enough and also do not allow
+         the operator to fix."
+
+    Neither word in front of the colon means anything to them. ``PORTFOLIO`` is
+    not a field — ``normalise_business_violations`` sets it as "a placeholder
+    until expansion", and the expansion step is never run — and ``LTV002`` is
+    an identifier whose meaning lives in a Python list nobody reading a screen
+    can open.
+
+    The rule states both, and has all along: ``description`` says what it
+    checks, ``required_columns`` says which fields it is about. Read here
+    rather than restated, so a rule that changes cannot leave the sentence
+    behind.
+
+    Returns the placeholder unchanged when the rule is not one of these, so a
+    canonical finding (CORE001, CORE002) reads exactly as it did.
+    """
+    try:
+        from engine.gate_3_validation.validate_business_rules import RULES
+    except Exception:                       # pragma: no cover — import guard
+        return field_name, ""
+    rule = next((r for r in RULES
+                 if str(r.get("rule_id") or "") == str(issue_type or "")), None)
+    if rule is None:
+        return field_name, ""
+    fields = [str(c) for c in (rule.get("required_columns") or [])]
+    said = str(rule.get("description") or "").strip()
+    # "DISABLED: ..." is a note to whoever maintains the rule, not to an
+    # operator, and a rule that never runs cannot be the one that stopped them.
+    if said.upper().startswith("DISABLED"):
+        said = ""
+    subject = ", ".join(f.replace("_", " ") for f in fields) if fields else ""
+    return (subject or field_name), said
+
+
+def why_absent(field: str, resolved_by_file: Dict[str, Dict[str, str]],
+               consolidation: Dict[str, Any]) -> str:
+    """What became of the mapping for ``field``, for an operator reading a
+    refusal about it.
+
+    "CORE001 affects 0 record(s)" says a column is not on the tape. It does not
+    say why, and the operator's own screen says they mapped it and confirmed it
+    at 100%. Both are true at once whenever consolidation drops a file, and the
+    reason is recorded where nobody reading the blocker is looking — so the
+    refusal was unanswerable and the only way forward was to guess.
+
+    The consolidation knows exactly what happened. This says it, on the line
+    that stops the run:
+
+      * nobody mapped it — nothing to add, the field was genuinely not supplied
+      * the file it was mapped in could not be joined, and why
+      * the file joined and every value that reached the tape was blank, which
+        means the loans matched but this column is empty for them
+
+    Returns "" when there is nothing to add, so a finding about a field nobody
+    mapped reads exactly as it did before.
+    """
+    holders = sorted(file_name for file_name, resolved
+                     in (resolved_by_file or {}).items()
+                     if field in (resolved or {}).values())
+    if not holders:
+        return ""
+    primary = str((consolidation or {}).get("primary") or "")
+    by_file = {str(f.get("source_file") or ""): f
+               for f in ((consolidation or {}).get("files") or [])}
+    said: List[str] = []
+    for file_name in holders:
+        if file_name == primary:
+            # The spine's own column. It is on the tape by construction, so a
+            # presence failure here is emptiness rather than absence.
+            said.append(f"{file_name} maps a column to it, and it is the loan "
+                        "tape itself — so the column is there and the values "
+                        "are not.")
+            continue
+        entry = by_file.get(file_name)
+        if entry is None:
+            said.append(f"{file_name} maps a column to it but was not read.")
+        elif not entry.get("joined"):
+            said.append(str(entry.get("note") or
+                            f"{file_name} could not be joined to the loan "
+                            "tape."))
+        elif field in (entry.get("blank") or []):
+            said.append(f"{file_name} was joined to the loan tape and every "
+                        f"value it carried for this field was blank.")
+        elif field in (entry.get("added") or []) and entry.get("unmatched"):
+            # PRESENT, AND BLANK FOR THE LOANS THAT FILE DOES NOT CARRY. The
+            # symptom is a per-row "missing mandatory value" and the cause is a
+            # loan the lender's own extract is missing — which is a question
+            # for them, not a fault to fix here. Without this, a delivery is
+            # refused over a number with no name attached to it.
+            count = int(entry.get("unmatched") or 0)
+            examples = [str(v) for v in (entry.get("unmatched_examples") or [])]
+            shown = (f" ({', '.join(examples)}"
+                     f"{', …' if count > len(examples) else ''})"
+                     if examples else "")
+            said.append(
+                f"{count} loan{'s' if count != 1 else ''} on the loan tape "
+                f"{'have' if count != 1 else 'has'} no row in {file_name}"
+                f"{shown}, so this field is blank for "
+                f"{'them' if count != 1 else 'it'}.")
+        elif field not in (entry.get("added") or []):
+            said.append(f"{file_name} maps a column to it and the loan tape "
+                        "already had the field, so nothing was taken from it.")
+    return " ".join(s for s in said if s)
+
+
+#: How a source file and a source column are written as one key, wherever a
+#: mapping is held by the pair rather than by the column name alone. A pack
+#: routinely carries "Loan ID" in every extract; keying on the name alone made
+#: one answer speak for all of them.
+KEY_SEPARATOR = "::"
+
+
+def mapping_key(source_file: str, column: str) -> str:
+    return f"{source_file}{KEY_SEPARATOR}{column}"
+
+
+def _decision_id(prefix: str, subject: str, source_file: str,
+                 primary: bool) -> str:
+    """A decision id that is unique across the pack, not just within a file.
+
+    The PRIMARY tape keeps the unqualified id it has always had. That is not
+    tidiness: a case part-way through its onboarding has answers recorded
+    against those ids, and renaming them would orphan every one. Columns in the
+    other files — which were never asked about before this, so have no answers
+    to orphan — carry their file in the id, because "Pool" in the property
+    extract and "Pool" in the tape are two different questions.
+    """
+    if primary:
+        return f"{prefix}_{_slug(subject)}"
+    return f"{prefix}_{_slug(source_file)}__{_slug(subject)}"
+
+
 def _mapping_decision(column: str, canonical: str, tier: str,
                       confidence: float, series: "pd.Series",
-                      source_file: str) -> Dict[str, Any]:
+                      source_file: str, *, primary: bool = True
+                      ) -> Dict[str, Any]:
     """A low-confidence match, in the existing pending-decision shape."""
     return {
-        "decision_id": f"map_{_slug(column)}",
+        "decision_id": _decision_id("map", column, source_file, primary),
         "decision_type": "mapping_confirmation",
         "target_field": canonical,
         "source_column": column,
@@ -679,16 +1835,60 @@ def _mapping_decision(column: str, canonical: str, tier: str,
     }
 
 
+#: A confident match on a first onboarding, waiting for the human reading that
+#: makes it this client's mapping rather than the platform's guess at one.
+#: Distinct from ``mapping_confirmation`` so the surfaces can tell them apart:
+#: a proposal is answered in the TABLE, as part of one approval over the set,
+#: and a confirmation is a question about a column nothing settled.
+DECISION_MAPPING_PROPOSAL = "mapping_proposal"
+
+
+def _mapping_proposal(column: str, canonical: str, tier: str,
+                      confidence: float, series: "pd.Series",
+                      source_file: str, *, primary: bool = True
+                      ) -> Dict[str, Any]:
+    """A firm match that has not yet been read by a person.
+
+    It carries the same subject as a confirmation — a source column and the
+    field it would feed — because that is what promotion turns into a governed
+    rule, and one approval over seventy columns has to leave seventy records
+    behind or the audit says a person approved "the mappings" and cannot say
+    which.
+    """
+    return {
+        "decision_id": _decision_id("map", column, source_file, primary),
+        "decision_type": DECISION_MAPPING_PROPOSAL,
+        "target_field": canonical,
+        "source_column": column,
+        "source_file": source_file,
+        "status": "pending",
+        "blocking": True,
+        "recommended_action": "accept_mapping",
+        "available_actions": ["accept_mapping", "choose_alternative",
+                              "mark_unavailable"],
+        "confidence": round(confidence, 4),
+        "basis": "deterministic",
+        "issue": f"'{column}' reads as {canonical.replace('_', ' ')}.",
+        "evidence_summary": (f"matched at tier '{tier}' with confidence "
+                             f"{confidence:.2f}; "
+                             f"{_populated(series)} of {len(series)} records "
+                             "carry a value. This is the first delivery from "
+                             "this client, so it is proposed rather than "
+                             "applied."),
+    }
+
+
 def _ambiguity_decision(canonical: str, columns: List[str],
                         frame: "pd.DataFrame",
-                        source_file: str) -> Dict[str, Any]:
+                        source_file: str, *, primary: bool = True
+                        ) -> Dict[str, Any]:
     """Two columns claiming one canonical field. Always a human decision."""
     counts = {c: _populated(frame[c]) for c in columns}
     detail = "; ".join(f"'{c}' carries values for {n} of {len(frame)} records"
                        for c, n in counts.items())
     preferred = max(counts, key=lambda c: (counts[c], c))
     return {
-        "decision_id": f"amb_{_slug(canonical)}",
+        "decision_id": _decision_id("amb", canonical, source_file, primary),
         "decision_type": "mapping_ambiguity",
         "target_field": canonical,
         "source_column": preferred,

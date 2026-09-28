@@ -36,6 +36,25 @@ _YOUNGEST_AGE = "youngest_borrower_age"
 _ORIG_LTV_BUCKET = "original_ltv_bucket"
 _LTV_BUCKET = "ltv_bucket"
 _ORIG_LTV = "original_loan_to_value"
+#: The amount originally advanced — the market-standard base for a balance
+#: factor, where the tape carries it.
+_ORIG_PRINCIPAL = "original_principal_balance"
+#: Cumulative amount advanced per loan to date — INCLUDING the initial
+#: advance (ERE's convention), not further advances alone.
+_FURTHER_ADVANCE = "further_advance_amount"
+_STATUS = "account_status"
+
+
+def _exit_status(df: pd.DataFrame) -> Optional[pd.Series]:
+    """``deceased`` / ``redeemed`` / ``in_force`` per row, or None without a
+    status column. ERE's tape reports Inforce, Deceased and Redeemed."""
+    if _STATUS not in df.columns or not df[_STATUS].notna().any():
+        return None
+    raw = df[_STATUS].astype(str).str.strip().str.lower()
+    out = pd.Series("in_force", index=df.index, dtype=object)
+    out[raw.str.contains("deceas|death|died", regex=True, na=False)] = "deceased"
+    out[raw.str.contains("redeem|repaid|redemption", regex=True, na=False)] = "redeemed"
+    return out
 _ORIG_CHANNEL = "origination_channel"
 _BROKER = "broker_channel"
 
@@ -339,8 +358,10 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
 # maps "policy completion date" to it). It is a property of the loan, not of
 # the reporting period, so a loan belongs to exactly one vintage for life.
 # --------------------------------------------------------------------------- #
-_LOAN_ID_CANDIDATES = ("loan_id", "loan_identifier", "loan_policy_number",
-                       "account_number")
+# ``loan_identifier`` first, matching the platform assembler's loan key and
+# ``evolution._LOAN_ID_COLS``: the canonical key is the one every cut carries.
+_LOAN_ID_CANDIDATES = ("loan_identifier", "unique_identifier", "loan_id",
+                       "loan_policy_number", "account_number")
 
 
 def loan_id_column(df: pd.DataFrame) -> Optional[str]:
@@ -355,11 +376,94 @@ def loan_id_column(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
-def _ids(df: pd.DataFrame, id_col: str) -> pd.Series:
-    return df[id_col].astype("string").str.strip()
+def series_id_column(frames: List[Dict[str, Any]]) -> Optional[str]:
+    """The ONE loan-id column used for a whole run of reporting periods.
+
+    Chosen from the first period that has one, then held. Choosing per period
+    let the key switch column between cuts (a ``loan_id`` populated only from
+    some month on), and a loan keyed differently on either side of the switch
+    was counted as a new loan — every vintage formed before it doubled.
+    """
+    for fr in frames:
+        df = fr.get("df")
+        if df is not None and len(df):
+            col = loan_id_column(df)
+            if col is not None:
+                return col
+    return None
 
 
-def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M"
+#: Every column that may carry a loan's identity in some cut. A regulatory-regime
+#: cut (ESMA Annex 2) can key a loan on its exposure identifier while the lender
+#: tape keys it on the loan reference, so the linking column is chosen per cut.
+_LINK_CANDIDATES = _LOAN_ID_CANDIDATES + (
+    "original_underlying_exposure_identifier", "underlying_exposure_identifier",
+    "new_underlying_exposure_identifier")
+
+
+def frame_id_columns(frames: List[Dict[str, Any]]
+                     ) -> Tuple[List[Optional[str]], List[Dict[str, Any]]]:
+    """The id column for EACH cut, chosen by what actually links, plus linkage.
+
+    The first cut uses the series key (:func:`series_id_column`). Every later
+    cut uses whichever candidate column shares the most ids with the loans
+    already seen — so a cut that keys the same loans in a different column is
+    followed, not read as a whole new book. When no column links, the series
+    key is kept and the linkage block says so.
+
+    Linkage, per cut: the column used and the share of the previous cut's
+    loans found in this one. A share near zero between consecutive monthly
+    cuts is not redemption; it means the cuts cannot be joined.
+    """
+    base = series_id_column(frames)
+    cols: List[Optional[str]] = []
+    linkage: List[Dict[str, Any]] = []
+    seen: set = set()
+    prior: Optional[set] = None
+    for fr in frames:
+        df = fr.get("df")
+        if df is None or not len(df):
+            cols.append(None)
+            continue
+        present = [c for c in _LINK_CANDIDATES
+                   if c in df.columns and df[c].notna().any()]
+        chosen = base if base in present else (present[0] if present else None)
+        if seen and present:
+            best = max(present, key=lambda c: len(set(_ids(df, c).dropna()) & seen))
+            if len(set(_ids(df, best).dropna()) & seen) > len(
+                    set(_ids(df, chosen).dropna()) & seen if chosen else set()):
+                chosen = best
+        cols.append(chosen)
+        here = set(_ids(df, chosen).dropna()) if chosen else set()
+        linkage.append({
+            "reportingDate": fr.get("reporting_date"),
+            "idColumn": chosen,
+            "loans": len(here),
+            "linkedFromPriorPct": (round(len(here & prior) / len(prior) * 100, 1)
+                                   if prior else None),
+        })
+        seen |= here
+        prior = here
+    return cols, linkage
+
+
+def _ids(df: pd.DataFrame, id_col: Optional[str]) -> pd.Series:
+    """Loan ids as comparable strings, or all-missing when the column is absent.
+
+    The same loan must key identically in every cut. A cut whose id column
+    was read as float (one blank cell is enough) renders ``1000`` as
+    ``"1000.0"``, so a trailing ``.0`` is dropped; blanks and null spellings
+    are missing, never an id.
+    """
+    if id_col is None or id_col not in getattr(df, "columns", ()):
+        return pd.Series(pd.NA, index=df.index, dtype="string")
+    ids = (df[id_col].astype("string").str.strip()
+           .str.replace(r"\.0+$", "", regex=True))
+    return ids.mask(ids.isin(["", "nan", "NaN", "None", "<NA>"]))
+
+
+def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M",
+                     id_cols: Optional[List[Optional[str]]] = None
                      ) -> Tuple[Dict[str, str], List[Dict[str, Any]]]:
     """Map every loan id to its vintage, plus any late corrections observed.
 
@@ -373,13 +477,14 @@ def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M"
     # cost of the whole surface. One concat + drop_duplicates does the same
     # work, and keeps the "first assignment wins" rule explicit.
     seen: List[pd.DataFrame] = []
-    for fr in frames:
+    if id_cols is None:
+        id_cols, _ = frame_id_columns(frames)
+    for fr, id_col in zip(frames, id_cols):
         df = fr.get("df")
         if df is None or not len(df):
             continue
-        id_col = loan_id_column(df)
         labels = _vintage_series(df, grain)
-        if id_col is None or labels is None:
+        if id_col is None or id_col not in df.columns or labels is None:
             continue
         part = pd.DataFrame({
             "loan": _ids(df, id_col).to_numpy(),
@@ -434,48 +539,72 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
                 "reason": f"no {_ORIG_DATE} on the funded tape, so loans cannot "
                           "be assigned to an origination vintage"}
 
-    entry, corrections = cohort_entry_map(frames, grain)
-    seen: set = set()
-    rows: Dict[str, Dict[str, Any]] = {}
-    for fr in usable:
-        df = fr["df"]
-        id_col = loan_id_column(df)
-        if id_col is None:
-            continue
-        ids = _ids(df, id_col)
-        fresh = (~ids.isin(seen) & ids.notna()).to_numpy()
-        if not fresh.any():
-            continue
-        newly = df[fresh].copy()
-        seen.update(ids[fresh].dropna().tolist())
-        # Group this period's new arrivals by the vintage they were assigned.
-        newly["_assigned_vintage"] = ids[fresh].map(entry).to_numpy()
-        for label, sub in newly.groupby("_assigned_vintage", dropna=True):
-            row = rows.setdefault(str(label), {
-                "vintage": str(label), "originalLoanCount": 0,
-                "originalBalance": 0.0, "firstSeen": fr.get("reporting_date"),
-            })
-            row["originalLoanCount"] += int(len(sub))
-            if _BALANCE in sub.columns:
-                row["originalBalance"] += float(coerce_numeric(sub[_BALANCE]).sum())
-            row.setdefault("_ltv", []).append(sub)
+    id_cols, linkage = frame_id_columns(usable)
+    _entry, corrections = cohort_entry_map(usable, grain, id_cols)
+
+    # Each vintage is measured in ONE reporting cut: the first that falls on or
+    # after the vintage's formation end, i.e. once it has stopped admitting
+    # loans. Membership is that cut's own origination dates, so no loan is
+    # matched across cuts — a cut that re-keys its loan identifiers (the live
+    # 2025-12 cut did) can no longer count a vintage twice. Accumulating "new"
+    # identifiers across cuts is what doubled every 2025 vintage.
+    labelled = []
+    for fr, id_col in zip(usable, id_cols):
+        labels = _vintage_series(fr["df"], grain)
+        if labels is not None:
+            labelled.append((fr, id_col, labels.astype("string")))
+    all_vintages = sorted({str(v) for _fr, _c, lab in labelled
+                           for v in lab.dropna().unique()})
 
     out: List[Dict[str, Any]] = []
-    for label, row in rows.items():
-        parts = row.pop("_ltv", [])
-        entry_rows = pd.concat(parts) if parts else None
-        if entry_rows is not None and _BALANCE in entry_rows.columns:
-            w = entry_rows[_BALANCE]
-            if _ORIG_LTV in entry_rows.columns:
-                row["waOriginalLtv"] = _weighted_avg_pct(
-                    entry_rows[_ORIG_LTV], w, entry_rows[_ORIG_LTV])
-            if _LTV in entry_rows.columns:
-                row["waEntryLtv"] = _weighted_avg_pct(
-                    entry_rows[_LTV], w, entry_rows[_LTV])
-            if _RATE in entry_rows.columns:
-                row["waRate"] = _weighted_avg_pct(
-                    entry_rows[_RATE], w, entry_rows[_RATE])
-        row["originalBalance"] = round(row["originalBalance"], 2)
+    for label in all_vintages:
+        end = _formation_end(label, grain)
+        present = [(fr, c, lab) for fr, c, lab in labelled if (lab == label).any()]
+        if not present:
+            continue
+        anchored = [t for t in present
+                    if end and str(t[0].get("reporting_date") or "")[:10] >= end]
+        fr, id_col, lab = anchored[0] if anchored else present[-1]
+        df = fr["df"]
+        sub = df[(lab == label).fillna(False).to_numpy()]
+        if id_col is not None:
+            ids = _ids(sub, id_col)
+            sub = sub[~(ids.notna() & ids.duplicated()).to_numpy()]
+        row: Dict[str, Any] = {
+            "vintage": label,
+            "originalLoanCount": int(len(sub)),
+            "originalBalance": (round(float(coerce_numeric(sub[_BALANCE]).sum()), 2)
+                                if _BALANCE in sub.columns else 0.0),
+            "firstSeen": present[0][0].get("reporting_date"),
+            "measuredAt": fr.get("reporting_date"),
+            # Still admitting loans at the latest cut: the count can yet grow.
+            "forming": not anchored,
+        }
+        if _ORIG_PRINCIPAL in sub.columns and _has_values(sub, _ORIG_PRINCIPAL):
+            row["originalAdvance"] = round(
+                float(coerce_numeric(sub[_ORIG_PRINCIPAL]).sum()), 2)
+        # Each profile measure is read from the measuring cut, or — where that
+        # cut does not carry it (the live 2025-12 cut has no LTVs) — from the
+        # next cut holding the same vintage that does. The loans are the same;
+        # only the column was missing.
+        later = [t for t in labelled
+                 if str(t[0].get("reporting_date") or "") >= str(fr.get("reporting_date") or "")
+                 and (t[2] == label).any()]
+        for key, col, pct in (("waOriginalLtv", _ORIG_LTV, True),
+                              ("waEntryLtv", _LTV, True),
+                              ("waRate", _RATE, True),
+                              ("waEntryAge", _YOUNGEST_AGE, False)):
+            for t_fr, _t_col, t_lab in later:
+                t_sub = t_fr["df"][(t_lab == label).fillna(False).to_numpy()]
+                if col not in t_sub.columns or not _has_values(t_sub, col) \
+                        or _BALANCE not in t_sub.columns:
+                    continue
+                w = t_sub[_BALANCE]
+                row[key] = (_weighted_avg_pct(t_sub[col], w, t_sub[col]) if pct
+                            else _weighted_avg(t_sub[col], w))
+                if t_fr is not fr:
+                    row.setdefault("profileFrom", {})[key] = t_fr.get("reporting_date")
+                break
         out.append(row)
     out.sort(key=lambda r: r["vintage"])
     return {
@@ -485,12 +614,17 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
         "vintages": out,
         "totalLoanCount": sum(r["originalLoanCount"] for r in out),
         "lateCorrections": corrections,
+        # Which id column joined each cut, and how much of the prior cut it
+        # found — the evidence that each loan was counted once.
+        "idLinkage": linkage,
         "lineage": {
             "source": "governed funded reporting periods, by origination vintage",
             "metric": "loans and balance ENTERING the book in each vintage",
-            "note": "Formation counts each loan once, in the period it was "
-                    "originated — not the book outstanding at a reporting date. "
-                    "Portfolio evolution is a separate view.",
+            "note": "Each vintage is counted in the first reporting cut after it "
+                    "stops originating (measuredAt), from that cut's origination "
+                    "dates — so each loan is counted once without matching "
+                    "identifiers across cuts. Not the book outstanding at a "
+                    "reporting date; portfolio evolution is a separate view.",
         },
     }
 
@@ -546,9 +680,17 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
                 "reason": "the funded tape carries no loan identifier, so a "
                           "static pool cannot be followed"}
 
-    entry, _ = cohort_entry_map(frames, grain)
-    members = {loan for loan, label in entry.items() if label == str(vintage)}
-    if not members:
+    id_cols, linkage = frame_id_columns(usable)
+    # Membership comes from each cut's OWN origination dates, not from loan
+    # ids carried across cuts: a cut that re-keys its identifiers still holds
+    # the same loans, so the pool neither doubles nor "exits" wholesale.
+    members_by_cut = []
+    for fr, id_col in zip(usable, id_cols):
+        labels = _vintage_series(fr["df"], grain)
+        mask = ((labels.astype("string") == str(vintage)).fillna(False).to_numpy()
+                if labels is not None else None)
+        members_by_cut.append(mask)
+    if not any(m is not None and m.any() for m in members_by_cut):
         return {**base, "available": False, "periods": [],
                 "reason": f"no loans were originated in {vintage}"}
 
@@ -561,45 +703,113 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
     periods: List[Dict[str, Any]] = []
     original_count: Optional[int] = None
     original_balance: Optional[float] = None
+    original_advance: Optional[float] = None
     prior_ids: Optional[set] = None
-    for fr in usable:
+    prior_count: Optional[int] = None
+    prior_cum: int = 0
+    # Loans ever reported deceased: a death stays the exit's cause when the
+    # estate later repays and the status moves on to Redeemed.
+    ever_deceased: set = set()
+    for fr, id_col, mask in zip(usable, id_cols, members_by_cut):
         df = fr["df"]
-        id_col = loan_id_column(df)
-        if id_col is None:
+        if mask is None:
             continue
-        ids = _ids(df, id_col)
-        present = ids.isin(members)
-        if not present.any() and original_count is None:
+        if not mask.any() and original_count is None:
             continue  # the vintage has not formed yet
         reporting_date = str(fr.get("reporting_date") or "")
         forming = bool(formation_end and reporting_date
                        and reporting_date[:10] < formation_end)
-        sub = df[present.values]
-        here = set(ids[present].dropna().tolist())
+        sub = df[mask]
+        ids = _ids(sub, id_col)
+        sub = sub[~(ids.notna() & ids.duplicated()).to_numpy()]
+        here = set(_ids(sub, id_col).dropna().tolist())
+        rows_in_tape = int(len(sub))
+        status = _exit_status(sub)
+        if status is not None:
+            sub_ids = _ids(sub, id_col)
+            ever_deceased |= set(sub_ids[status == "deceased"].dropna().tolist())
+            died = (status == "deceased") | ((status == "redeemed")
+                                            & sub_ids.isin(ever_deceased))
+            repaid = (status == "redeemed") & ~died
+            in_force = ~(died | repaid)
+            count = int(in_force.sum())
+        else:
+            died = repaid = None
+            count = rows_in_tape
         balance = (float(coerce_numeric(sub[_BALANCE]).sum())
                    if _BALANCE in sub.columns and len(sub) else 0.0)
         if original_count is None and not forming:
-            original_count, original_balance = len(here), balance
-        # Exits only mean something once the pool is fixed. While the vintage is
-        # still forming, a loan absent last period may simply not have completed
-        # yet, so it is not an exit.
-        exits = (sorted(prior_ids - here)
-                 if prior_ids is not None and not forming else [])
+            original_count, original_balance = rows_in_tape, balance
+            if _ORIG_PRINCIPAL in sub.columns and _has_values(sub, _ORIG_PRINCIPAL):
+                original_advance = float(coerce_numeric(sub[_ORIG_PRINCIPAL]).sum())
+        # Exits only mean something once the pool is fixed. They are named by
+        # identifier where this cut links to the previous one; where it does
+        # not (fewer than half the previous cut's ids found, e.g. a re-keyed
+        # cut) the ids cannot say who left, so the fall in count is used and
+        # the period says so.
+        rekeyed = bool(prior_ids) and len(prior_ids & here) < 0.5 * len(prior_ids)
+        by_cause: Optional[Dict[str, int]] = None
+        if status is not None and original_count and not forming:
+            # Exits by cause from the statuses THIS cut reports — no loan is
+            # matched across cuts, so a re-keyed cut changes nothing here. A
+            # loan that has left the tape altogether is counted separately.
+            by_cause = {
+                "deaths": int(died.sum()),
+                "voluntaryRepayments": int(repaid.sum()),
+                "leftTape": max(original_count - rows_in_tape, 0),
+            }
+            cum = sum(by_cause.values())
+            exits = max(cum - prior_cum, 0) if prior_count is not None else cum
+            prior_cum = cum
+        elif prior_count is None or forming:
+            exits = 0
+        elif not rekeyed:
+            exits = len(prior_ids - here)
+        else:
+            exits = max(prior_count - count, 0)
         row: Dict[str, Any] = {
             "period": (fr.get("reporting_date") or fr.get("run_id") or "")[:7],
             "reportingDate": fr.get("reporting_date"),
             "monthsSinceEntry": _months_between(vintage, fr.get("reporting_date")),
-            "survivingLoanCount": len(here),
+            "survivingLoanCount": count,
             "currentBalance": round(balance, 2),
             "forming": forming,
-            "loanRetention": (round(len(here) / original_count, 4)
+            "loanRetention": (round(count / original_count, 4)
                               if original_count and not forming else None),
             "balanceRetention": (round(balance / original_balance, 4)
                                  if original_balance and not forming else None),
-            "exitsInPeriod": len(exits),
-            "cumulativeExits": (original_count - len(here)
+            "exitsInPeriod": exits,
+            "cumulativeExits": (sum(by_cause.values()) if by_cause is not None
+                                else max(original_count - count, 0)
                                 if original_count and not forming else 0),
+            "idsRekeyed": rekeyed and by_cause is None,
         }
+        if by_cause is not None:
+            row["exitsByCause"] = by_cause
+        # Balance split: what was advanced (original + cumulative further
+        # advances) and what has rolled up on it, over loans still carrying a
+        # balance. Read per cut, so it needs no matching across cuts.
+        if _ORIG_PRINCIPAL in sub.columns and _has_values(sub, _ORIG_PRINCIPAL) \
+                and _BALANCE in sub.columns:
+            bal = coerce_numeric(sub[_BALANCE]).fillna(0.0)
+            live = bal > 0
+            orig = coerce_numeric(sub.loc[live, _ORIG_PRINCIPAL]).fillna(0.0)
+            advanced = float(orig.sum())
+            # The field is the loan's cumulative total advanced, initial
+            # advance included, so further advances are what it holds ABOVE
+            # the original advance. A blank or zero field means none; it never
+            # makes a further advance negative.
+            if _FURTHER_ADVANCE in sub.columns:
+                total = coerce_numeric(sub.loc[live, _FURTHER_ADVANCE]).fillna(0.0)
+                further = float((total - orig).clip(lower=0.0).sum())
+            else:
+                further = 0.0
+            row["balanceSplit"] = {
+                "originalAdvance": round(advanced, 2),
+                "furtherAdvances": round(further, 2),
+                "rolledUpInterest": round(float(bal[live].sum()) - advanced - further, 2),
+                "furtherAdvancesReported": _FURTHER_ADVANCE in sub.columns,
+            }
         if len(sub) and _BALANCE in sub.columns:
             w = sub[_BALANCE]
             if _LTV in sub.columns:
@@ -607,7 +817,7 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
             if _RATE in sub.columns:
                 row["waRate"] = _weighted_avg_pct(sub[_RATE], w, df[_RATE])
         periods.append(row)
-        prior_ids = here
+        prior_ids, prior_count = here, count
 
     return {
         **base,
@@ -616,9 +826,12 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         "formationEnd": formation_end,
         "poolAnchored": original_count is not None,
         "formingPeriods": sum(1 for r in periods if r.get("forming")),
+        "idLinkage": linkage,
         "originalLoanCount": original_count,
         "originalBalance": (round(original_balance, 2)
                             if original_balance is not None else None),
+        "originalAdvance": (round(original_advance, 2)
+                            if original_advance is not None else None),
         "periods": periods,
         "singlePeriod": len(periods) <= 1,
         "lineage": {
@@ -653,3 +866,87 @@ def _months_between(vintage: str, reporting_date: Optional[str]) -> Optional[int
     except (ValueError, TypeError):
         return None
     return (rd.year - start.year) * 12 + (rd.month - start.month)
+
+
+def cohort_matrix(frames: List[Dict[str, Any]], *, grain: str = "M",
+                  client_id: str = "", portfolio_id: str = "") -> Dict[str, Any]:
+    """Every vintage side by side, by months on book — the static-pool grid.
+
+    Rows are vintages, columns months since origination. Each cell is read
+    from that vintage's own static pool (:func:`cohort_static_pool`), so the
+    grid and the single-vintage table cannot disagree:
+
+      * ``balanceFactor``      balance / the vintage's base. The base is the
+                               amount originally advanced where the tape carries
+                               it, else the balance when the pool was fixed
+                               (``basis`` says which);
+      * ``cumulativeExitRate`` share of the fixed pool's loans that have left;
+      * ``deathRate`` / ``voluntaryRepaymentRate`` — cumulative exits by
+                               cause, where the tape reports account status;
+      * ``survivingLoanCount`` (in force) and ``waLtv``.
+
+    Forming periods (the vintage still originating) carry no cell.
+    """
+    base = {
+        "dataset": "cohort_matrix",
+        "portfolioId": portfolio_id or client_id,
+        "cohortBasis": _ORIG_DATE,
+        "grain": (grain or "M").upper(),
+    }
+    formation = cohort_formation(frames, grain=grain, client_id=client_id,
+                                 portfolio_id=portfolio_id)
+    if not formation.get("available"):
+        return {**base, "available": False, "reason": formation.get("reason"),
+                "vintages": [], "monthsOnBook": []}
+    rows: List[Dict[str, Any]] = []
+    months: set = set()
+    for v in formation["vintages"]:
+        pool = cohort_static_pool(frames, vintage=v["vintage"], grain=grain,
+                                  client_id=client_id, portfolio_id=portfolio_id)
+        if not pool.get("available") or not pool.get("originalLoanCount"):
+            continue
+        advance = pool.get("originalAdvance")
+        denom = advance or pool.get("originalBalance")
+        cells: Dict[str, Dict[str, Any]] = {}
+        for p in pool["periods"]:
+            mob = p.get("monthsSinceEntry")
+            if p.get("forming") or mob is None:
+                continue
+            months.add(int(mob))
+            cells[str(int(mob))] = {
+                "period": p["period"],
+                "survivingLoanCount": p["survivingLoanCount"],
+                "balanceFactor": (round(p["currentBalance"] / denom, 4) if denom else None),
+                "cumulativeExitRate": round(
+                    p["cumulativeExits"] / pool["originalLoanCount"], 4),
+                "waLtv": p.get("waLtv"),
+                "idsRekeyed": bool(p.get("idsRekeyed")),
+            }
+            cause = p.get("exitsByCause")
+            if cause:
+                n = pool["originalLoanCount"]
+                cells[str(int(mob))]["deathRate"] = round(cause["deaths"] / n, 4)
+                cells[str(int(mob))]["voluntaryRepaymentRate"] = round(
+                    cause["voluntaryRepayments"] / n, 4)
+        rows.append({
+            "vintage": v["vintage"],
+            "originalLoanCount": pool["originalLoanCount"],
+            "base": round(denom, 2) if denom else None,
+            "basis": "original_advance" if advance else "balance_when_pool_fixed",
+            "cells": cells,
+        })
+    return {
+        **base,
+        "available": bool(rows),
+        "reason": None if rows else "no vintage has a fixed static pool yet",
+        "monthsOnBook": sorted(months),
+        "vintages": rows,
+        "lineage": {
+            "source": "governed funded reporting periods (fixed static pools)",
+            "metric": "each vintage by months on book: balance factor, cumulative "
+                      "exit rate, surviving loans, WA LTV",
+            "note": "Balance factor above 1.0 is interest roll-up and any further "
+                    "advances on drawdown products. Missing months are reporting "
+                    "periods not loaded, not zero.",
+        },
+    }

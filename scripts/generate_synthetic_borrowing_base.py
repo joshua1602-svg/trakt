@@ -46,7 +46,7 @@ import numpy as np
 import pandas as pd
 
 SEED = 20251130
-CLIENT_ID = "ere_funding_uk"
+CLIENT_ID = "ERE"
 REPORTING_DATE = "2025-11-30"
 
 #: Region label -> share of the book. Labels are the Schedule 8 wording, which

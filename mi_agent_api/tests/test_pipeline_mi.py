@@ -330,8 +330,13 @@ class TestForecastReadiness(unittest.TestCase):
 
     def test_completion_probability_from_config_not_invented(self):
         # Probabilities come from config/client/pipeline_expected_funding.yaml.
+        # KFI is top of funnel (not forecast); forecast stages take the config.
         kfi = self.out[self.out["pipeline_stage"] == "KFI"]
-        self.assertTrue((kfi["completion_probability"] == 0.20).all())
+        self.assertTrue((kfi["completion_probability"] == 0.0).all())
+        live = self.out[self.out["completion_probability_source"] == "configured_stage_rate"]
+        self.assertTrue(set(live["pipeline_stage"]) <= {"APPLICATION", "OFFER"})
+        self.assertTrue((live[live["pipeline_stage"] == "OFFER"]
+                         ["completion_probability"] == 0.75).all())
         self.assertTrue(self.report["weighted_expected_funded_amount"] <
                         self.report["expected_funded_amount"])
 

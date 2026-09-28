@@ -39,7 +39,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
 
 from ..engine import OpsError
 from ..onboarding.case import OnboardingCase
@@ -47,6 +47,7 @@ from ..onboarding.catalogue import Catalogue, catalogue
 from ..onboarding.service import STEPS
 from . import extraction as _extraction
 from . import states as _states
+from .extraction import ADD, REMOVE
 from .input_roles import artefact_vocabulary
 from .run import SyntheticRun
 
@@ -128,6 +129,14 @@ class Interpretation:
     streams: List[str] = field(default_factory=list)
     #: Semantic input roles the instruction said the client would send.
     expected_artefacts: List[str] = field(default_factory=list)
+    #: ``section.field`` -> ``{"add": [...], "remove": [...]}`` for a
+    #: multi-valued answer that AMENDS the list the case already holds rather
+    #: than replacing it. "They also need Annex 2" and "remove Annex 2" are
+    #: the same list of one product until the verb is carried with it — the
+    #: first dropped MI, the second set the products TO the one being taken
+    #: away. What the amendment comes to is worked out against the case, in
+    #: :mod:`.planning`, so the operator is shown the real before and after.
+    set_changes: Dict[str, Dict[str, List[Any]]] = field(default_factory=dict)
     #: ``section.field`` -> one of PROVENANCE_SOURCES.
     provenance: Dict[str, str] = field(default_factory=dict)
     #: ``section.field`` -> 0..1, for anything read with less than certainty.
@@ -147,7 +156,7 @@ class Interpretation:
     def empty(self) -> bool:
         return not (self.steps or self.reporting_period or self.delivery
                     or self.streams or self.stream_delivery
-                    or self.expected_artefacts)
+                    or self.expected_artefacts or self.set_changes)
 
     @property
     def complete(self) -> bool:
@@ -350,9 +359,52 @@ class DeterministicInterpreter:
                         out.streams.append(stream)
                 out.provenance[hit.ref.path] = PROV_HUMAN
                 continue
+            if (hit.operation and hit.ref.section != DELIVERY_SECTION
+                    and hit.ref.type in _extraction.MULTI_VALUED):
+                # An amendment, not an answer. It is kept OUT of the answer
+                # itself so that "they need MI and investor reporting but not
+                # static pools" states two products and withdraws a third,
+                # rather than stating all three.
+                spec = out.set_changes.setdefault(
+                    hit.ref.path, {ADD: [], REMOVE: []})
+                bucket = spec[hit.operation]
+                bucket.extend(v for v in (hit.value
+                                          if isinstance(hit.value, list)
+                                          else [hit.value])
+                              if v not in bucket)
+                out.provenance[hit.ref.path] = PROV_HUMAN
+                continue
             target = (out.delivery if hit.ref.section == DELIVERY_SECTION
                       else blocks.setdefault(hit.ref.section, {}))
-            target[hit.ref.key] = hit.value
+            if (hit.ref.type in _extraction.MULTI_VALUED
+                    and isinstance(hit.value, list)):
+                # A MULTI-VALUED FIELD MENTIONED TWICE HOLDS BOTH.
+                #
+                # The extractor emits one hit per span it can claim, and how
+                # many spans one sentence produces depends on wording the
+                # speaker is not choosing deliberately:
+                #
+                #   "...the originator and reporting entity"
+                #        -> one hit, ['reporting_entity', 'originator']
+                #   "...the originator and THE reporting entity"
+                #        -> two hits, ['originator'] then ['reporting_entity']
+                #
+                # A plain assignment made the second overwrite the first, so
+                # the definite article silently dropped a role. Silently is the
+                # problem: the reply confirmed the roles it kept, an operator
+                # read their own sentence back in it, and the missing one only
+                # surfaced later as a field that had gone optional.
+                #
+                # Merging is the only reading that can be right. Two hits on
+                # one multi-valued path are two things the sentence said, and a
+                # field that holds several values has no reason to prefer the
+                # last. Order is kept and duplicates dropped so a value
+                # repeated across spans lands once.
+                merged = [v for v in (target.get(hit.ref.key) or [])]
+                merged += [v for v in hit.value if v not in merged]
+                target[hit.ref.key] = merged
+            else:
+                target[hit.ref.key] = hit.value
             out.provenance[hit.ref.path] = (
                 PROV_HUMAN if hit.confidence >= 1.0 else PROV_AGENT)
             if hit.confidence < 1.0:
@@ -445,13 +497,25 @@ class DeterministicInterpreter:
             client["client_name"] = name
             out.provenance["client.client_name"] = PROV_HUMAN
 
-        named = self._entities(raw, name, consumed)
+        named, assumed = self._entities(raw, name, consumed)
         if named:
             # A cued entity answer ("the LEI is …") describes the entity the
             # sentence is about, which is the first one it named — but only for
             # a field no named entity has already answered. "The servicer is
             # Meridian Servicing" answers Meridian's role, and must not also
             # land on the client's row.
+            #
+            # `assumed` is deliberately NOT subtracted here. Letting cued roles
+            # override the originator fallback fixes "Onboard X. X is the
+            # originator and the reporting entity." — where the guess beat the
+            # stated pair — but the cued roles are read from the WHOLE
+            # instruction with no idea whose they are, so
+            # "…X is the originator. Halewood Servicing Limited is the
+            # servicer." then put `servicer` on X's row. A silent omission
+            # traded for a false statement about a legal entity is not a fix.
+            # Name-first phrasing needs per-clause attribution, which is a
+            # larger change; role-first ("The reporting entity is X") reads
+            # both roles correctly today.
             cued = blocks.pop("entities", None) or {}
             spoken = {key for row in named for key in row}
             for key, value in cued.items():
@@ -470,15 +534,20 @@ class DeterministicInterpreter:
         return consumed
 
     def _entities(self, raw: str, client_name: str,
-                  consumed: set) -> List[Dict[str, Any]]:
+                  consumed: set) -> Tuple[List[Dict[str, Any]], Set[str]]:
         """Counterparties named with their role, plus the client as originator.
 
         The roles are the catalogue's own option list for ``entities.roles``.
+
+        Returns the rows, and the keys of row 0 that were PROPOSED rather than
+        read — see the originator fallback at the foot of this method. The
+        caller needs the distinction: a proposal must never outrank something
+        the instruction actually said.
         """
         f = self.catalogue.field("entities", "roles")
         roles = [str(o.get("value")) for o in ((f.options if f else None) or [])]
         rows: List[Dict[str, Any]] = []
-        seen: set = set()
+        by_name: Dict[str, Dict[str, Any]] = {}
         for role in roles:
             word = role.replace("_", " ")
             m = re.search(_ROLE_RE.format(role=re.escape(word),
@@ -486,18 +555,35 @@ class DeterministicInterpreter:
             if not m:
                 continue
             legal_name = _trim_name(m.group(1))
-            if not legal_name or legal_name.lower() in seen:
+            if not legal_name:
                 continue
-            seen.add(legal_name.lower())
             consumed.add(_clause_of(raw, m.start()))
-            rows.append({"legal_name": legal_name, "roles": [role]})
-        if client_name and client_name.lower() not in seen \
+            existing = by_name.get(legal_name.lower())
+            if existing is not None:
+                # ONE ENTITY, EVERY ROLE IT WAS GIVEN.
+                #
+                # De-duplicating by name was right about the ROW — one company
+                # is one row — and wrong about the ROLES: the first role an
+                # entity matched claimed it and every later one was dropped, so
+                # an originator that is also the reporting entity could only
+                # ever be one of them. `entities.roles` is multi-valued exactly
+                # because that combination is the ordinary case, and the
+                # structural rules require both.
+                if role not in existing["roles"]:
+                    existing["roles"].append(role)
+                continue
+            row = {"legal_name": legal_name, "roles": [role]}
+            by_name[legal_name.lower()] = row
+            rows.append(row)
+        if client_name and client_name.lower() not in by_name \
                 and not any("originator" in r["roles"] for r in rows):
             # The client is the originator unless the instruction named someone
-            # else. Proposed like any other value, and shown for confirmation.
+            # else. Proposed like any other value, and shown for confirmation —
+            # so `roles` here is a guess, and is reported as one.
             rows.insert(0, {"legal_name": client_name,
                             "roles": ["originator"]})
-        return rows
+            return rows, {"roles"}
+        return rows, set()
 
     # -- 2. a follow-up ------------------------------------------------- #
     def interpret_action(self, text: str, run: SyntheticRun,
@@ -527,6 +613,8 @@ class DeterministicInterpreter:
                 change = ProposedChange(
                     action=action, summary=summary, material=material,
                     requires_confirmation=material,
+                    payload=({"reason": raw[:MAX_VALUE_CHARS]}
+                             if action in _CARRIES_A_REASON else {}),
                     basis="explicit instruction")
                 change.validate()
                 return change
@@ -585,7 +673,7 @@ class DeterministicInterpreter:
             interpretation = self.interpret_instruction(raw)
         except InterpretationError:
             return None
-        if not _says_something(interpretation, case):
+        if not _says_something(interpretation):
             return None
         return ProposedChange(
             action=_states.ACTION_ANSWER,
@@ -597,42 +685,50 @@ class DeterministicInterpreter:
                    else "part of the message could not be read"))
 
 
-def _says_something(interpretation: Interpretation,
-                    case: OnboardingCase) -> bool:
+def _says_something(interpretation: Interpretation) -> bool:
     """Whether a follow-up says anything worth proposing as a change.
 
-    This used to refuse a follow-up whose only content was the client's NAME,
-    on the reasoning that a bare proper-noun run is usually a false positive
-    ("send it to Northstar") and the client is named by then anyway.
+    WHAT THE EXTRACTOR BOUND IS WHAT THE OPERATOR SAID. This asks one question
+    now — did reading the message produce anything? — and nothing else.
 
-    Both halves were wrong in the case that matters. Correcting the client's
-    name is the single most likely correction an operator makes — it is the
-    first thing the agent reads and the first thing it can get wrong — and
-    refusing it left them with a case named after a verb phrase and no way to
-    fix it. "Trakt could not tell what to do with that" was the response to the
-    one instruction it most needed to understand.
+    IT USED TO SECOND-GUESS THE READING, and the exclusions were precisely the
+    corrections an operator makes most. A follow-up whose only content was a
+    portfolio's ``display_name`` was discarded; so was one whose only content
+    was an entity's ``legal_name`` or ``roles``. The reasoning was that a bare
+    proper-noun run is usually a false positive — "send it to Northstar" — and
+    those fields are answered by then anyway.
 
-    The false positive the guard existed for is now handled where it belongs:
+    Both halves are wrong for exactly the message that matters. The agent reads
+    the opening instruction and proposes a portfolio name and an entity role
+    from it; when it reads either wrongly, correcting it is a message that says
+    ONLY that field, which is the shape this refused. The operator got "Trakt
+    could not tell what to do with that" in reply to the one instruction it
+    most needed to understand — and, because the reply named no field, no way
+    to tell that the message had been read correctly and then discarded.
+
+    The client's own name was carved out of this guard for that reason once
+    already. These two are the same defect, one field over, and removing them
+    piecemeal would only leave the next one waiting.
+
+    The false positive the guard existed for is handled where it belongs:
     :class:`~operations_control.occ_agent.extraction.Candidate.names` will not
-    bind a free-text value on a bare topic cue at all, so "send it to
-    Northstar" yields nothing to propose rather than being caught here.
+    bind a free-text value on a bare topic cue, so "send it to Northstar",
+    "email the pack to ERE Funding Limited" and "the portfolio looks fine" all
+    yield nothing to propose rather than being caught here. That is asserted in
+    ``tests/test_agent_accepts_a_correction.py``, so the protection cannot
+    quietly move back to a guess about which fields count.
     """
     if interpretation.reporting_period or interpretation.delivery:
         return True
     if interpretation.streams or interpretation.expected_artefacts:
         return True
-    for step, payload in (interpretation.steps or {}).items():
-        if step == "entities":
-            for item in (payload.get("entities") or []):
-                if set(item) - {"legal_name", "roles"}:
-                    return True
-        elif step == "portfolios":
-            for item in (payload.get("portfolios") or []):
-                if set(item) - {"display_name"}:
-                    return True
-        elif payload:
-            return True
-    return False
+    if interpretation.set_changes:
+        # An amendment says something even when it adds no answer of its own:
+        # "remove ESMA Annex 2" leaves ``steps`` empty and is the whole point
+        # of the message.
+        return True
+    return any(bool(payload)
+               for payload in (interpretation.steps or {}).values())
 
 
 #: Where one delivery statement ends and the next begins. A comma counts:
@@ -752,10 +848,29 @@ def _clause_of(text: str, position: int) -> str:
     return text[start + 1:end].strip()
 
 
+#: The two acts that END a case, and so are the two whose reason is worth
+#: keeping. Both are read back months later by whoever asks why this client was
+#: started and never finished, and a default sentence is the one answer that
+#: cannot help them. The operator's own words go through verbatim: the
+#: instruction is part of the record, not noise to be stripped out of it.
+#:
+#: Deliberately just these two. Every other action leaves the case open, so
+#: what was said at the time is recoverable from the case itself.
+_CARRIES_A_REASON = (_states.ACTION_CANCEL, _states.ACTION_WITHDRAW)
+
 #: (pattern, action, operator summary, material). Ordered — first match wins.
 _ACTION_RULES: Tuple[Tuple[str, str, str, bool], ...] = (
-    (r"\bcancel (this )?(case|run)\b", _states.ACTION_CANCEL,
-     "Cancel this practice case.", True),
+    # The words the SCREEN uses, not only the ones the code does. The Agent tab
+    # heads its list "Practice cases" and the governed dialog calls the same act
+    # "Cancel this onboarding", so both reach cancel. "cancel (this )?(case|run)"
+    # failed all three of those phrasings, which left the one operator the
+    # reader should never fail — the one who says what the screen says.
+    #
+    # Still deliberately narrow: a noun from the closed set has to follow, so
+    # "cancel the pack before it goes out" is a different act and stays
+    # unrecognised rather than abandoning the case.
+    (r"\bcancel (this |the )?(practice )?(case|run|onboarding)\b",
+     _states.ACTION_CANCEL, "Cancel this practice case.", True),
     (r"\bwithdraw\b", _states.ACTION_WITHDRAW,
      "Withdraw the onboarding.", True),
     (r"\b(draft|prepare|generate|build)\b.*\b(pack|questionnaire|email|"

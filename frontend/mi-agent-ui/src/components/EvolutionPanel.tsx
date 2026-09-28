@@ -284,10 +284,12 @@ function pct1(v: number | null | undefined): string {
  * this milestone to date) — and shows the weekly completion velocity below it as
  * a labelled operational/forecast input, NOT as "conversion". Hidden until
  * expanded to keep the card calm. */
-function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWeek }: {
+function ConversionDisclosure({ stage, conversion, cohortPct, cohortSize, enhanced, latestWeek }: {
   stage: string;
   conversion: FunnelConversion;
   cohortPct: number | null;
+  /** Cases in the KFI cohort — the denominator of ``cohortPct``. */
+  cohortSize?: number | null;
   /** Phase 2A: append the governed evidence block. Off by default. */
   enhanced?: boolean;
   latestWeek?: string | null;
@@ -330,7 +332,7 @@ function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWe
           )}
           {enhanced && (
             <ConversionContext stage={stage} conversion={conversion}
-              cohortPct={cohortPct} latestWeek={latestWeek} />
+              cohortPct={cohortPct} cohortSize={cohortSize} latestWeek={latestWeek} />
           )}
         </div>
       )}
@@ -345,8 +347,8 @@ function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWe
  * disclosure. Renders
  * compact in the 2×2 grid and larger inside the focus modal (``large``). */
 export function FunnelStageCard({
-  stage, label, points, flowPoints, summary, conversion, cohortPct, showCumulative, large, onExpand,
-  enhanced, latestWeek, tooltipContent, onActivePoint, onPointClick,
+  stage, label, points, flowPoints, summary, conversion, cohortPct, cohortSize, showCumulative,
+  large, onExpand, enhanced, latestWeek, tooltipContent, onActivePoint, onPointClick,
 }: {
   stage: string;
   label: string;
@@ -356,6 +358,8 @@ export function FunnelStageCard({
   conversion: FunnelConversion | null;
   /** Latest cumulative cohort % for this stage (the canonical conversion). */
   cohortPct: number | null;
+  /** Cases in the KFI cohort behind ``cohortPct``. */
+  cohortSize?: number | null;
   showCumulative: boolean;
   /** Larger chart for the focus modal. */
   large?: boolean;
@@ -444,12 +448,19 @@ export function FunnelStageCard({
                 formatter={(v: number, name: string) => [gbpCompact(Number(v)), name]}
                 contentStyle={{ background: "#0a0b0d", border: "1px solid #262a31", fontSize: 12 }}
                 {...(tooltipContent ? { content: tooltipContent } : {})} />
-              {avgFlow != null && (
-                <ReferenceLine yAxisId="flow" y={avgFlow} stroke="#e0a458" strokeDasharray="4 3"
-                  label={{ value: "5-wk avg flow", fill: "#e0a458", fontSize: 9, position: "insideTopRight" }} />
-              )}
               <Bar yAxisId="flow" dataKey="flow" name="Weekly flow (£)"
                 fill={THEME.cyan} radius={[2, 2, 0, 0]} />
+              {/* Drawn AFTER the bars: recharts paints children in order, so
+                  a reference line declared first sat behind the bars and its
+                  label was hidden wherever a bar reached it. The dark halo
+                  keeps the label legible where it crosses a bar. */}
+              {avgFlow != null && (
+                <ReferenceLine yAxisId="flow" y={avgFlow} stroke="#e0a458" strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  label={{ value: "5-wk avg flow", fill: "#e0a458", fontSize: 10, fontWeight: 600,
+                    position: "insideTopRight", stroke: "#0a0b0d", strokeWidth: 3,
+                    paintOrder: "stroke" }} />
+              )}
               {showCumulative && (
                 <Line yAxisId="stock" type="monotone" dataKey="stock" name="Stock (£)"
                   stroke={THEME.mint} strokeWidth={2} dot={false} />
@@ -501,7 +512,8 @@ export function FunnelStageCard({
         </div>
       )}
       {conversion && <ConversionDisclosure stage={stage} conversion={conversion}
-        cohortPct={cohortPct} enhanced={enhanced} latestWeek={latestWeek} />}
+        cohortPct={cohortPct} cohortSize={cohortSize} enhanced={enhanced}
+        latestWeek={latestWeek} />}
     </div>
   );
 }
@@ -830,7 +842,9 @@ export function EvolutionPanel({
   const [funnel, setFunnel] = useState<PipelineFunnelEvolution | null>(null);
   const [loading, setLoading] = useState(false);
   const [stageMode, setStageMode] = useState<StageViewMode>("amount");
-  const [includeKfi, setIncludeKfi] = useState(true);
+  // Off by default: KFI stock dwarfs the downstream stages, which then read
+  // as flat lines along the axis. KFI is one click away.
+  const [includeKfi, setIncludeKfi] = useState(false);
   // Origination funnel: overlay the stock line on the weekly-flow bars.
   const [showCumulative, setShowCumulative] = useState(false);
   // Which origination stage (if any) is enlarged in the focus modal.
@@ -1064,7 +1078,7 @@ export function EvolutionPanel({
                     : "Conversion = cumulative % of the KFI cohort reaching each milestone to date. Cohort history is thin for this book, so a lagged stock-ratio approximation is shown until more weeks accrue.")
                 : `${stageMode === "amount" ? "Amount (£)" : "Case count"} for the main funnel`
                   + ` (KFI → Application → Offer → Completion).${hasWithdrawn ? " Withdrawn is tracked separately, not in the funnel." : ""}`
-                  + " Toggle 'Include KFI' off to read the smaller downstream stages."}
+                  + " KFI is off by default so the smaller downstream stages are readable; tick 'Include KFI' to add it."}
             </p>
           </div>
         </div>
@@ -1095,6 +1109,7 @@ export function EvolutionPanel({
                 summary={funnel?.summary?.[stage]}
                 conversion={funnel?.summary?.[stage]?.conversion ?? null}
                 cohortPct={cohortPctFor(stage)}
+                cohortSize={funnel?.cohortProgression?.cohortSize ?? null}
                 enhanced={enhancedHovers}
                 latestWeek={funnel?.weeks?.[(funnel?.weeks?.length ?? 1) - 1] ?? null}
                 showCumulative={showCumulative}
@@ -1119,6 +1134,7 @@ export function EvolutionPanel({
                 summary={funnel.summary?.[expandedStage]}
                 conversion={funnel.summary?.[expandedStage]?.conversion ?? null}
                 cohortPct={cohortPctFor(expandedStage)}
+                cohortSize={funnel.cohortProgression?.cohortSize ?? null}
                 enhanced={enhancedHovers}
                 latestWeek={funnel.weeks?.[(funnel.weeks?.length ?? 1) - 1] ?? null}
                 showCumulative={showCumulative}

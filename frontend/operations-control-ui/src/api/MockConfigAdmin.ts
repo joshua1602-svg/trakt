@@ -11,6 +11,7 @@ import type {
   CreateDraftInput,
   DiffLine,
   ImpactAnalysis,
+  LayerDrift,
   LayerOverview,
   PackageFile,
   ValidationResult,
@@ -58,6 +59,8 @@ const SEED_FILES: Record<ConfigLayer, Record<string, string>> = {
     "config/asset/product_profiles.yaml": "version: 2\ncapabilities:\n  - base_mi\n",
     "config/asset/product_defaults_ERM.yaml": "amortisation_type: none\n",
     "config/asset/issue_policy.yaml": "on_missing_value: review\n",
+    "config/asset/mi_geography.yaml":
+      "primary_basis_by_asset_class:\n  equity_release: borrower\n",
   },
 };
 
@@ -70,6 +73,7 @@ const FILE_LABELS: Record<string, string> = {
   "config/asset/product_profiles.yaml": "Product profiles",
   "config/asset/product_defaults_ERM.yaml": "Equity release defaults",
   "config/asset/issue_policy.yaml": "Issue handling policy",
+  "config/asset/mi_geography.yaml": "Reporting geography",
 };
 
 const LAYER_LABELS: Record<ConfigLayer, string> = {
@@ -276,6 +280,7 @@ export class MockConfigAdmin {
       package_hash: this.packageHash(active),
       file_count: Object.keys(active.files).length,
       files: this.fileList(active),
+      drift: this.drift(layer),
       draft: draft
         ? {
             version: draft.version,
@@ -572,6 +577,57 @@ export class MockConfigAdmin {
 
   auditTrail(): AuditTrail {
     return { entries: [...this.audit], chain_intact: true };
+  }
+
+  /**
+   * Whether the files this deployment carries are the version in force.
+   *
+   * The mock has no repository to compare against, so it reports a clean
+   * deployment unless a test says otherwise — `setDeployedFiles` stands in for
+   * a later deployment having landed an edit. The SENTENCE is the mock's job
+   * to get right, because that is what a screen renders.
+   */
+  private deployed: Partial<Record<ConfigLayer, Record<string, string>>> = {};
+
+  setDeployedFiles(layer: ConfigLayer, files: Record<string, string>): void {
+    this.deployed[layer] = files;
+  }
+
+  drift(layer: ConfigLayer): LayerDrift {
+    const active = this.active(layer);
+    const deployed = this.deployed[layer];
+    const changed = deployed
+      ? Object.entries(deployed)
+          .filter(([path, content]) => (active.files[path] ?? "") !== content)
+          .map(([path]) => ({ path, in_force: "sha-in-force", deployed: "sha-deployed" }))
+      : [];
+    const labels = changed.map((c) => label(c.path));
+    return {
+      layer,
+      active_version: active.version,
+      changed,
+      added: [],
+      removed: [],
+      differs: changed.length > 0,
+      changed_labels: labels,
+      sentence:
+        changed.length === 0
+          ? "Everything this deployment carries is the version in force."
+          : `${labels.join(", ")} ${changed.length === 1 ? "differs" : "differ"} from the version in force. ` +
+            `Trakt is using version ${active.version}; what is deployed is not in force until a new ` +
+            "version is created from it, checked and activated.",
+    };
+  }
+
+  createDraftFromDeployment(layer: ConfigLayer, notes = ""): { version: number; status: string } {
+    const files = this.deployed[layer];
+    if (!files || Object.keys(files).length === 0) {
+      throw new OpsError(`no deployed files found for layer '${layer}'`, "OPS_NO_DEPLOYED_FILES");
+    }
+    return this.createDraft(layer, {
+      edits: files,
+      notes: notes || "the configuration files as deployed",
+    });
   }
 
   createDraft(layer: ConfigLayer, input?: CreateDraftInput): { version: number; status: string } {

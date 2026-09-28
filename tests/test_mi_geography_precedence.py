@@ -313,45 +313,127 @@ def test_occ_does_not_need_a_second_geography_artefact():
 # These two were conflated in a filename and it cost a live book its
 # configuration. `config/client/config_client_ERM_UK.yaml` named the CLIENT
 # layer after the ASSET, so `mi_agent_api.currency.client_config_path`, which
-# resolves `config/client/config_client_{client_id}.yaml`, found nothing for the
+# resolved `config/client/config_client_{client_id}.yaml`, found nothing for the
 # client the platform actually runs — ERE — and every client-layer fact came
 # back unconfigured. The fix is ownership, not an alias: the client file is
 # named for the client, the asset pack owns the asset's behaviour, and the
 # effective configuration composes one under the other.
+#
+# WHERE THAT LAYER NOW LIVES. These tests originally asserted the locator found
+# the file in the REPOSITORY. It no longer does, and deliberately: the standing
+# client layer is the configuration OCC activated for the client, and reading a
+# repository file when no activation exists is how a client that has not been
+# onboarded silently inherits the incumbent's identity. The ownership claim is
+# unchanged — the client layer is named for the CLIENT and carries the client's
+# asset class, the asset pack owns what that class means — so the assertions
+# below make the same claim about the governed artefact instead of the file, and
+# add the case the old arrangement could not express: an unonboarded client
+# resolves to `unconfigured` rather than to somebody else's book.
 
 
-def test_the_client_layer_is_named_for_the_client():
-    """The locator's own arithmetic, against the shipped file.
+@pytest.fixture()
+def activated(tmp_path, monkeypatch):
+    """Activate a client configuration in a file-backed OCC container.
 
-    `client_config_path` builds the path from the client id. Asserting the file
-    exists AT THAT PATH is the whole defect: nothing about the lookup was ever
-    wrong, and an alias from ERM_UK to ERE would have left two names for one
-    client and no rule about which is right.
+    Writes to exactly the prefix OCC activation writes to, so what MI reads
+    here is what MI reads in a deployment.
+    """
+    def _activate(client_id: str, document: dict) -> None:
+        monkeypatch.setenv("TRAKT_STORAGE_BACKEND", "file")
+        monkeypatch.setenv("TRAKT_LOCAL_BLOB_ROOT", str(tmp_path / "blob"))
+        monkeypatch.delenv(ENV_CLIENT_CONFIG, raising=False)
+        monkeypatch.delenv(ENV_REGISTRY_PATH, raising=False)
+        monkeypatch.delenv("TRAKT_CLIENT_CONFIG_DEV_OVERRIDE", raising=False)
+        from apps.blob_trigger_app.storage import Storage
+        from operations_control.onboarding.artefacts import client_config_rel
+        from operations_control.onboarding.store import OnboardingStore
+        from operations_control.stores import OpsLayout, OpsStore
+        ops = OpsStore(Storage(tmp_path / "blob"),
+                       OpsLayout(container="operations-control"))
+        OnboardingStore(ops).write_artefact(
+            client_id, 1, client_config_rel(client_id),
+            yaml.safe_dump(document, sort_keys=False))
+        from mi_agent_api import currency
+        currency._load_client_config.cache_clear()
+    yield _activate
+    from mi_agent_api import currency
+    currency._load_client_config.cache_clear()
+
+
+#: What onboarding captures for an equity-release lender. Only the one key the
+#: geography basis turns on is load-bearing; the rest is there so the document
+#: is a plausible client layer rather than a fragment.
+_ERE_CLIENT_LAYER = {
+    "client": {"client_id": "ERE", "display_name": "ERE Funding"},
+    "portfolio": {"asset_class": "equity_release", "country": "GB",
+                  "base_currency": "GBP"},
+}
+
+
+def test_the_client_layer_is_named_for_the_client(activated):
+    """The locator's own arithmetic, against the governed artefact.
+
+    `client_config_path` builds the location from the client id, and the
+    artefact it lands on is named for the CLIENT. That was the whole defect:
+    nothing about the lookup was ever wrong, and an alias from ERM_UK to ERE
+    would have left two names for one client and no rule about which is right.
     """
     from mi_agent_api.currency import client_config_path
 
+    activated("ERE", _ERE_CLIENT_LAYER)
     location = client_config_path("ERE")
     assert location is not None, "ERE has no governed client configuration"
-    assert Path(location).name == "config_client_ERE.yaml"
-    assert Path(location).exists()
+    assert location.rsplit("/", 1)[-1] == "config_client_ERE.yaml"
+
+
+def test_the_repository_client_file_is_named_for_the_client():
+    """The authored copy carries the same ownership.
+
+    It is no longer what production reads, but it is what an operator edits
+    before onboarding owns the client, and a file named for the asset is how
+    this went wrong the first time.
+    """
+    shipped = _REPO_ROOT / "config/client/config_client_ERE.yaml"
+    assert shipped.exists()
+    doc = yaml.safe_load(shipped.read_text(encoding="utf-8"))
+    assert doc["client"]["client_id"] == "ERE"
+    assert doc["portfolio"]["asset_class"] == "equity_release"
 
 
 def test_ere_resolves_to_collateral_with_no_registry_and_no_environment(
-        monkeypatch):
+        activated):
     """The live case, with every escape hatch closed.
 
-    No ``TRAKT_MI_CLIENT_CONFIG`` pointing at the file by hand, no portfolio
+    No ``TRAKT_MI_CLIENT_CONFIG`` pointing at a file by hand, no portfolio
     registry entry, no explicit asset class passed in: just the client id the
-    live portfolio ``ERE/2026-06-30`` splits to. This is the assertion that was
-    impossible before the rename, and it is the one that matters — the
-    deployment sets neither variable.
+    live portfolio ``ERE/2026-06-30`` splits to, and the configuration OCC
+    activated for it. This is the assertion that was impossible before the
+    rename, and it is the one that matters — the deployment sets neither
+    variable.
     """
-    monkeypatch.delenv(ENV_CLIENT_CONFIG, raising=False)
-    monkeypatch.delenv(ENV_REGISTRY_PATH, raising=False)
+    activated("ERE", _ERE_CLIENT_LAYER)
     contract = geo.contract_for_scope(client_id="ERE")
     assert contract.asset_class == "equity_release"
     assert contract.primary_basis == geo.BASIS_COLLATERAL
     assert contract.source == geo.SOURCE_ASSET_DEFAULT
+
+
+def test_an_unonboarded_client_gets_no_basis_rather_than_the_incumbents(
+        activated):
+    """The state production is in between a client wipe and its onboarding.
+
+    The asset default is only reachable THROUGH the client layer — it is the
+    client's own `portfolio.asset_class` that selects which asset speaks. With
+    no activated configuration there is no such declaration, and the honest
+    answer is `unconfigured`. Answering `equity_release` here would mean a
+    client nobody has onboarded had quietly been handed the book, geography and
+    reporting conventions of the one that came before it.
+    """
+    activated("ERE", _ERE_CLIENT_LAYER)
+    contract = geo.contract_for_scope(client_id="NEWLENDER")
+    assert contract.asset_class is None
+    assert contract.primary_basis is None
+    assert contract.source == geo.SOURCE_NONE
 
 
 def test_the_erm_pack_owns_the_equity_release_geography():

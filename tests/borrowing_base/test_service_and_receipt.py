@@ -164,11 +164,11 @@ from mi_agent.borrowing_base.eligibility import derive_eligibility
 from mi_agent.borrowing_base.config import load_facility
 from mi_agent.borrowing_base.service import evaluate
 
-facility = load_facility("ere_funding_uk")
+facility = load_facility("ERE")
 df = pd.DataFrame({"loan_id": ["L0"],
                    "current_outstanding_balance": [100_000_000.0]})
 derive_eligibility(df, facility)
-snapshot = evaluate(df, facility=facility, client_id="ere_funding_uk")
+snapshot = evaluate(df, facility=facility, client_id="ERE")
 assert snapshot.measure("borrowing_base") == 103_000_000.0
 assert snapshot.measure("borrowing_base_headroom") == "NOT_CALCULABLE"
 for banned in BANNED:
@@ -233,10 +233,10 @@ class TestTheReceipt:
 
     def test_a_LOADED_facility_records_where_its_terms_came_from(self):
         from mi_agent.borrowing_base.config import load_facility
-        fac = load_facility("ere_funding_uk")
+        fac = load_facility("ERE")
         df = frame(BOOK)
         derivation = derive_eligibility(df, fac)
-        receipt = evaluate(df, facility=fac, client_id="ere_funding_uk",
+        receipt = evaluate(df, facility=fac, client_id="ERE",
                            eligibility_derivation=derivation).receipt
         assert receipt["facility_config_source"].startswith("platform_register:")
         assert receipt["facility_config_version"]

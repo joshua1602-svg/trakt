@@ -72,7 +72,9 @@ export function AgentCasesScreen() {
   const [instruction, setInstruction] = useState(
     () => INTENT_PROMPTS[params.get("intent") ?? ""] ?? "",
   );
-  /** Which action is running: "create", or the fixture id of a preset. */
+  /** The client whose live configuration is being amended, when one is. */
+  const [amendClient, setAmendClient] = useState("");
+  /** Which action is running: "create", "amend", or a preset's fixture id. */
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [createdNotOpened, setCreatedNotOpened] = useState(false);
   const busy = busyAction !== null;
@@ -131,6 +133,18 @@ export function AgentCasesScreen() {
     if (!text) return;
     if (live && !liveConfirmed) return;
     void start("create", () => client.createAgentCase(text, undefined, liveConfirmed));
+  }
+
+  /** An amendment to a client already live. Deliberately a separate act from
+   *  opening a new case: "onboard them" and "change what is in force for them"
+   *  are different decisions, and a single box for both is how one gets done
+   *  by accident. */
+  function amend() {
+    const id = amendClient.trim();
+    if (!id) return;
+    void start("amend", () =>
+      client.createAgentCase(instruction.trim(), undefined, liveConfirmed, id),
+    );
   }
 
   function runScenario(scenario: ScenarioSummary) {
@@ -231,6 +245,40 @@ export function AgentCasesScreen() {
               {copy.agent.modeLiveBadge}
             </span>
           )}
+        </button>
+      </section>
+
+      {/* Changing a client already live. Deliberately its own act rather than
+          a checkbox on the box above: "onboard them" and "change what is in
+          force for them" are different decisions, and one box for both is how
+          the wrong one gets done. */}
+      <section
+        role="group"
+        aria-label={copy.agent.amendHeading}
+        className="mt-4 rounded-2xl border border-stone-200 bg-white p-5"
+      >
+        <h2 className="text-sm font-semibold text-stone-900">{copy.agent.amendHeading}</h2>
+        <p className="mt-1 text-sm text-stone-500">{copy.agent.amendPrompt}</p>
+        <label htmlFor="amend-client" className="mt-3 block text-xs text-stone-500">
+          {copy.agent.amendLabel}
+        </label>
+        <input
+          id="amend-client"
+          className="mt-1 w-64 rounded-xl border border-stone-300 px-3 py-2 text-sm"
+          placeholder={copy.agent.amendPlaceholder}
+          value={amendClient}
+          onChange={(event) => setAmendClient(event.target.value)}
+        />
+        <button
+          type="button"
+          disabled={busy || !amendClient.trim()}
+          onClick={amend}
+          className="ml-3 mt-3 inline-flex items-center gap-2 rounded-xl border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-800 disabled:opacity-50"
+        >
+          {busyAction === "amend" && (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          )}
+          {busyAction === "amend" ? copy.agent.sending : copy.agent.amendStart}
         </button>
       </section>
 

@@ -145,9 +145,17 @@ class Validator:
 
         if not _present(value):
             if self.catalogue.is_required(f, answers, item):
+                # Required, but not necessarily required TO ACTIVATE. A field
+                # declaring `blocks_activation: false` is still asked and still
+                # reported; it just does not hold the whole onboarding — and
+                # with it the client's MI — behind a regulatory deadline that
+                # has not arrived. See Field.blocks_activation.
                 out.append(Problem(section.key, key,
                                    f"{f.label}{where} is needed.",
-                                   index=index, owner=owner))
+                                   index=index, owner=owner,
+                                   severity=(SEVERITY_BLOCKING
+                                             if f.blocks_activation
+                                             else SEVERITY_ADVISORY)))
             return out
 
         problem = validate_value(f, value)
@@ -323,10 +331,25 @@ class Validator:
         # Entity roles: a product that names an entity needs that entity.
         products = set(case.products)
         if "esma_annex2" in products and not case.entities_with_role("originator"):
+            # BLOCKING, and deliberately not advisory like the LEI it leads to.
+            #
+            # Naming the originator is a tick: the operator already knows which
+            # entity it is. Obtaining its LEI is a GLEIF lookup that takes as
+            # long as it takes. Those two costs were briefly treated as one and
+            # both made advisory, which did more damage than the delay it was
+            # meant to avoid: with no originator named, `entities.lei` — whose
+            # `required_when` is "roles contains originator" — is required of
+            # nobody, so it drops off the client's checklist as OPTIONAL and
+            # the one thing standing between this client and their first return
+            # is never actually asked for.
+            #
+            # So the cheap half is required and the slow half is not. Name the
+            # originator now; send the LEI when it arrives.
             out.append(Problem(
                 "entities", "roles",
                 "Regulatory reporting names an originator. Give one entity the "
-                "originator role."))
+                "originator role — until it is named, its Legal Entity "
+                "Identifier cannot be asked for."))
         if "investor_reporting" in products \
                 and not case.entities_with_role("reporting_entity"):
             out.append(Problem(

@@ -116,14 +116,49 @@ def _detect_file_type(path: Path) -> str:
 
 
 def _read_structured_headers(path: Path) -> Tuple[List[str], Optional[int], Optional[int], str]:
-    """Return (headers, row_count, col_count, sheet_name) for a structured file."""
+    """Return (headers, row_count, col_count, sheet_name) for a structured file.
+
+    THE SHEET THAT HOLDS THE DATA, NOT WHICHEVER COMES FIRST. A lender's loan
+    extract opens on a cover sheet — a "Summary" of seven rows in front of a
+    loan book of five hundred and sixty-eight — and this used to take
+    ``sheet_names[0]`` and record the cover sheet as what the file IS.
+
+    ``source_table_loader`` has always read EVERY sheet::
+
+        frames = [(sh, xl.parse(sh)) for sh in xl.sheet_names]
+
+    so period eligibility saw the loan sheet, dated it from its own
+    ``Month Run`` column and named it the loan listing — while the inventory,
+    which is what the central tape sources from, pointed at the cover sheet.
+    One workbook, two readings, and the layer that DECIDED was right while the
+    layer that ACTED was wrong: the tape was built from seven rows, or from
+    none at all when the cover sheet carried no loan identifier.
+
+    The widest sheet with the most rows wins, which separates a cover sheet
+    from a loan book without a word of lender-specific configuration. A
+    single-sheet workbook is unchanged. A workbook whose sheets are each a
+    real dataset still reports ONE of them — the loader keeps seeing them all,
+    and this narrows to the one the file is chiefly about.
+    """
     suffix = path.suffix.lower()
     try:
         if suffix in (".xlsx", ".xls"):
             xl = pd.ExcelFile(path)
-            sheet = xl.sheet_names[0]
-            df = xl.parse(sheet)
-            return list(df.columns), int(len(df)), int(len(df.columns)), str(sheet)
+            best: Optional[Tuple[int, int, str, pd.DataFrame]] = None
+            for name in xl.sheet_names:
+                try:
+                    df = xl.parse(name)
+                except Exception:          # a sheet that will not parse is not
+                    continue               # the one the file is about
+                rank = (int(len(df)), int(len(df.columns)))
+                if df.empty and df.columns.empty:
+                    continue
+                if best is None or rank > (best[0], best[1]):
+                    best = (rank[0], rank[1], str(name), df)
+            if best is None:
+                return [], None, None, ""
+            rows, cols, sheet, df = best
+            return list(df.columns), rows, cols, sheet
         df = pd.read_csv(path, low_memory=False)
         return list(df.columns), int(len(df)), int(len(df.columns)), ""
     except Exception:

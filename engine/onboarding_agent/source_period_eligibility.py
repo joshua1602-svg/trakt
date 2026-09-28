@@ -49,7 +49,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
@@ -104,17 +104,64 @@ _DEFAULTS: Dict[str, Any] = {
 }
 
 
-def load_config(config_path: str | Path = "") -> Dict[str, Any]:
+#: Where a client's own configuration lives, by client identifier.
+_CLIENT_CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "client"
+
+
+def client_candidates(client_id: "str | Sequence[str]") -> List[str]:
+    """The identifiers to look for a client block under, in order, de-duplicated.
+
+    THE PLATFORM CALLS TWO DIFFERENT THINGS ``client_id``. Onboarding's own
+    ``client_id`` argument is the SOURCE PORTFOLIO — the live adapter passes
+    ``source_portfolio_id`` into it and ``client_name`` carries the tenant, and
+    :mod:`onboarding_orchestrator` says so where it resolves mapping scope. So
+    a client block asked for under ``client_id`` alone was asked for under
+    ``direct_001``, never under ``ERE``, and no client ever overlaid anything
+    in the live path.
+
+    Rather than pick one name and be wrong wherever the other is the tenant,
+    a caller passes every identifier it holds. Tenant first, portfolio after,
+    so a portfolio that states its own convention outranks its tenant's.
+    """
+    raw = [client_id] if isinstance(client_id, str) else list(client_id or ())
+    out: List[str] = []
+    for ident in raw:
+        name = str(ident or "").strip()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+def load_config(config_path: str | Path = "",
+                client_id: "str | Sequence[str]" = "") -> Dict[str, Any]:
+    """System defaults, then the system file, then this client's own answers.
+
+    A FILING CONVENTION BELONGS TO THE CLIENT WHO FILES. Whether a file dated
+    the first of a month reports that month or closes the one before is a fact
+    about one lender's conventions, not about the platform — and
+    ``filename_delivery_offset_months`` lived only in the system file, so the
+    only way to state it for a client whose files close the prior month was to
+    restate it for every client whose files do not.
+
+    A client block therefore overlays the system one, key by key, exactly as
+    the system file overlays the defaults. A client that says nothing keeps
+    every system answer.
+
+    ``client_id`` may be one identifier or several — see :func:`client_candidates`.
+    """
     cfg = dict(_DEFAULTS)
-    path = Path(config_path) if config_path else _CONFIG_PATH
-    try:
-        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        block = doc.get("source_period_eligibility") or {}
-        if isinstance(block, dict):
-            for k, v in block.items():
-                cfg[k] = v
-    except Exception:
-        pass
+    paths = [Path(config_path) if config_path else _CONFIG_PATH]
+    for ident in client_candidates(client_id):
+        paths.append(_CLIENT_CONFIG_DIR / f"config_client_{ident}.yaml")
+    for path in paths:
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            block = doc.get("source_period_eligibility") or {}
+            if isinstance(block, dict):
+                for k, v in block.items():
+                    cfg[k] = v
+        except Exception:
+            continue
     return cfg
 
 
@@ -434,8 +481,30 @@ def _infer_source_period(
         # column exists but unparseable -> fall through to weaker signals
 
     # 3. Filename date (with configurable delivery offset).
+    #
+    # A FUNDED PACK MAY CLOSE THE PRIOR MONTH. A lender whose funded delivery is
+    # dated the first of a month is reporting the month that just ended — so
+    # `LoanExtract ... 2026_09_01` is August's book, and read verbatim it is
+    # September's, which is a future period and set aside from an August
+    # delivery: the loan tape is then built from nothing.
+    #
+    # The convention belongs to the DELIVERY, not to one role within it. Every
+    # file in that pack carries the same date — the loan extract, the cashflow
+    # extract, the collateral extract — and the cashflow and collateral files
+    # are enrichment roles, so scoping this to the funded-book roles alone
+    # would still have set aside the balances and the valuations and left a
+    # loan tape with no figures on it.
+    #
+    # Pipeline snapshots are the exception and keep the system answer: one
+    # dated the first was taken that day and means what it says, so shifting it
+    # would move a real date backwards.
     if fdates:
-        p = _shift_period(fdates[0][:7], int(cfg.get("filename_delivery_offset_months", 0) or 0))
+        offset = int(cfg.get("filename_delivery_offset_months", 0) or 0)
+        pipeline = {_norm_col(r) for r in (cfg.get("pipeline_roles") or [])}
+        if _norm_col(role) not in pipeline:
+            offset = int(cfg.get("funded_filename_delivery_offset_months",
+                                 offset) or 0)
+        p = _shift_period(fdates[0][:7], offset)
         return _result(p, "filename_date", 0.6, [p], raw=fdates[0])
 
     # 4. Period folder in the path.
@@ -513,6 +582,7 @@ def compute_eligibility(
     config: Optional[Dict[str, Any]] = None,
     config_path: str | Path = "",
     input_dir: str | Path = "",
+    client_id: "str | Sequence[str]" = "",
 ) -> List[SourcePeriodEligibility]:
     """Resolve **output-domain-aware** period eligibility for each source record.
 
@@ -522,7 +592,7 @@ def compute_eligibility(
     pipeline snapshot cadence. ``records``: ``[{file_name, file_path, sheet_name,
     artefact_role, detected_reporting_date, df (optional)}]``.
     """
-    cfg = config or load_config(config_path)
+    cfg = config or load_config(config_path, client_id=client_id)
     run_p, _run_cut = run_period(run_id, input_dir)
     run_year = int(run_p[:4]) if re.fullmatch(r"\d{4}-\d{2}", run_p) else None
     allow_unknown = bool(cfg.get("allow_unknown_period", True))
@@ -646,6 +716,7 @@ def resolve_and_write(
     config_path: str | Path = "",
     input_dir: str | Path = "",
     enable_conversion: bool = False,
+    client_id: "str | Sequence[str]" = "",
 ) -> Dict[str, Any]:
     """Load all (file, sheet) tables, resolve period eligibility, write 04c."""
     from . import source_table_loader as stl
@@ -663,6 +734,7 @@ def resolve_and_write(
             "detected_reporting_date": detected_by_file.get(t.file_name, ""),
             "df": t.df,
         })
-    rows = compute_eligibility(records, run_id, config_path=config_path, input_dir=input_dir)
+    rows = compute_eligibility(records, run_id, config_path=config_path,
+                               input_dir=input_dir, client_id=client_id)
     paths = write_artifacts(rows, out_dir)
     return {"rows": [r.as_dict() for r in rows], "paths": paths}

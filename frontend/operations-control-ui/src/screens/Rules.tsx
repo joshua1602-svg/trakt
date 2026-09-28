@@ -15,11 +15,33 @@ const SCOPE_LABELS: Record<string, string> = {
   global: copy.scopes.global,
 };
 
-function RuleRow({ rule }: { rule: Rule }) {
+function RuleRow({ rule, onRetired }: { rule: Rule; onRetired: () => void }) {
   const client = useOpsClient();
   const [open, setOpen] = useState(false);
   const [history, setHistory] = useState<Rule[] | null>(null);
   const [historyError, setHistoryError] = useState("");
+  /** Withdrawing is behind a reason box, not a bare button: this rule is read
+   *  on every future delivery, and what is typed here is the only thing that
+   *  explains the change months from now. */
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function retire() {
+    setBusy(true);
+    setError("");
+    try {
+      await client.retireRule(rule.rule_id, reason, rule.client_id || undefined);
+      setWithdrawing(false);
+      setReason("");
+      onRetired();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : copy.errors.generic);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (open && history === null) {
@@ -31,7 +53,8 @@ function RuleRow({ rule }: { rule: Rule }) {
   }, [open, history, client, rule.rule_id]);
 
   return (
-    <div className="rounded-xl border border-stone-200 bg-white">
+    <div data-rule={rule.rule_id} role="group" aria-label={rule.source_term}
+         className="rounded-xl border border-stone-200 bg-white">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -84,6 +107,60 @@ function RuleRow({ rule }: { rule: Rule }) {
                 </li>
               ))}
             </ul>
+          )}
+
+          {rule.status === "active" && (
+            <div className="mt-5 border-t border-stone-100 pt-4">
+              {!withdrawing ? (
+                <button
+                  type="button"
+                  onClick={() => setWithdrawing(true)}
+                  className="text-sm font-medium text-rose-700 hover:text-rose-800"
+                >
+                  {copy.rules.retire}
+                </button>
+              ) : (
+                <div role="group" aria-label={copy.rules.retireHeading}>
+                  <p className="text-sm text-stone-700">{copy.rules.retireHelp}</p>
+                  <label
+                    htmlFor={`retire-${rule.rule_id}`}
+                    className="mt-3 block text-xs text-stone-500"
+                  >
+                    {copy.rules.retireReason}
+                  </label>
+                  <textarea
+                    id={`retire-${rule.rule_id}`}
+                    rows={2}
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-stone-400">{copy.rules.retireReasonHelp}</p>
+                  {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy || !reason.trim()}
+                      onClick={() => void retire()}
+                      className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                    >
+                      {copy.rules.retireConfirm}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setWithdrawing(false);
+                        setError("");
+                      }}
+                      className="rounded-xl border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700"
+                    >
+                      {copy.rules.retireCancel}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -169,7 +246,8 @@ export function RulesScreen() {
             </p>
           )}
           {data.map((rule) => (
-            <RuleRow key={rule.rule_id} rule={rule} />
+            <RuleRow key={rule.rule_id} rule={rule}
+                     onRetired={() => void reload()} />
           ))}
         </div>
       )}

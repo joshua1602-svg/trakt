@@ -151,6 +151,8 @@ def run_onboarding(
     asset_config_path: str = "",
     product_profile: str = "",
     reporting_date: str = "",
+    set_aside_columns=None,
+    confirmed_mappings=None,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -233,7 +235,19 @@ def run_onboarding(
         from . import source_period_eligibility as _spe
         _spe.resolve_and_write(
             [i.to_dict() for i in inventory], run_id, out_dir,
-            input_dir=str(in_dir), enable_conversion=enable_file_conversion_fallback)
+            input_dir=str(in_dir), enable_conversion=enable_file_conversion_fallback,
+            # WHOSE FILES THESE ARE. A filing convention — whether a pack dated
+            # the first of a month closes the month before — belongs to the
+            # client, so the client's own configuration gets a say here.
+            #
+            # BOTH identities, because this function's ``client_id`` is the
+            # SOURCE PORTFOLIO (see the mapping-scope resolution below: the live
+            # adapter passes ``source_portfolio_id`` here and the tenant in
+            # ``client_name``). Asking for a client block under ``client_id``
+            # alone asked for ``config_client_direct_001.yaml`` and never for
+            # ``config_client_ERE.yaml``, so in the live path no client's own
+            # configuration was ever read.
+            client_id=(client_name, client_id))
     except Exception as _exc:  # never block onboarding on period eligibility
         import logging as _logging
         _logging.getLogger(__name__).warning("period eligibility skipped: %s", _exc)
@@ -313,6 +327,28 @@ def run_onboarding(
             inv_dicts = [dataclasses.asdict(i) for i in inventory]
             memory_ignored_columns |= _mm.ignored_column_keys(store, inv_dicts)
             project.client_memory_summary = _mm.summarize_application(mem_result, store)
+
+    # --- Columns an operator set aside (governed; see the Operations Control
+    # engine). They feed nothing: the deterministic candidate is cleared, as
+    # an ignore_column memory entry clears it, and the target-first review
+    # below is told to leave them out rather than rediscover them by name. ---
+    set_aside = {(str(f or "*"), str(c)) for f, c in (set_aside_columns or [])
+                 if str(c or "").strip()}
+    if set_aside:
+        from .target_coverage import without_set_asides as _without
+        for cand in project.mapping_candidates:
+            probe = {"source_file": getattr(cand, "source_file", ""),
+                     "source_column": getattr(cand, "source_column", "")}
+            if _without([probe], set_aside):
+                continue
+            cand.candidate_canonical_field = ""
+            cand.method = "set_aside_by_operator"
+            cand.requires_review = False
+            cand.reason = "An operator set this column aside; it feeds nothing."
+            memory_ignored_columns.add((probe["source_file"],
+                                        probe["source_column"]))
+    project.set_aside_columns = [
+        [f, c] for f, c in sorted(set_aside | memory_ignored_columns)]
 
     # --- PART 6 (docs): extract config-relevant facts under minimisation policy ---
     doc_policy = load_document_policy()
@@ -490,6 +526,8 @@ def run_onboarding(
                 regime_config_path=(regime_config_path or None),
                 asset_config_path=(asset_config_path or None),
                 precomputed_context=getattr(project, "resolved_context", None),
+                set_aside_columns=sorted(set_aside | memory_ignored_columns),
+                confirmed_mappings=confirmed_mappings,
             )
             ru = mr.get("resolver_usage", {})
             project.mapping_review_summary = {
@@ -503,7 +541,15 @@ def run_onboarding(
                 "llm_estimated_cost_gbp": ru.get("estimated_cost_gbp", 0.0),
             }
         except Exception as exc:  # never break the onboarding run on review failure
-            project.mapping_review_summary = {"error": str(exc)}
+            # BUT SAY WHERE. This stage writes 28a, 28c and 34 — three of the
+            # four artefacts `build_workflow_summary` requires — so when it
+            # fails the run fails, several steps later, reporting FAILED with
+            # an EMPTY `run_error` and "the first step did not finish cleanly".
+            # `str(exc)` alone was `'<=' not supported between instances of
+            # 'str' and 'float'`: a real fault, no file, no line.
+            from trakt_core import fault_report as _fault
+            project.mapping_review_summary = {
+                "error": str(exc), **_fault.fault_report(exc)}
         for name in (
             "27a_deterministic_context_guess.json", "27b_llm_context_resolution.json",
             "27_onboarding_context.json", "27_onboarding_context_summary.md",

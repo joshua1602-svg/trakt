@@ -19,6 +19,7 @@ import type {
   CaseSummary,
   AgentMail,
   MailIngestOutcome,
+  RegistryField,
 } from "./agentTypes";
 
 import type {
@@ -179,6 +180,7 @@ export class MockOpsClient implements OpsClient {
       workflow_type: "mi",
       dataset: "funded",
       dataset_label: "Funded book",
+      frequency: "monthly",
       status: "review_required",
       status_label: "Needs your review",
       status_sentence:
@@ -227,6 +229,7 @@ export class MockOpsClient implements OpsClient {
       workflow_type: "mi",
       dataset: "funded",
       dataset_label: "Funded book",
+      frequency: "monthly",
       status: "completed",
       status_label: "Done",
       status_sentence: "Trakt has finished with this input pack.",
@@ -578,7 +581,7 @@ export class MockOpsClient implements OpsClient {
       scope: "portfolio",
       client_id: "Alpine Capital",
       portfolio_id: "European Growth",
-      status: "approved",
+      status: "active",
       source_term: "Bk Cost",
       approved_meaning: "Purchase cost",
       description:
@@ -593,7 +596,7 @@ export class MockOpsClient implements OpsClient {
       scope: "client",
       client_id: "Birchwood Partners",
       portfolio_id: "",
-      status: "approved",
+      status: "active",
       source_term: "Cpn",
       approved_meaning: "Interest rate paid by a bond",
       description: "Birchwood files use “Cpn” for the interest a bond pays.",
@@ -607,7 +610,7 @@ export class MockOpsClient implements OpsClient {
       scope: "global",
       client_id: "",
       portfolio_id: "",
-      status: "approved",
+      status: "active",
       source_term: "31.12.2025",
       approved_meaning: "Dates written with the day first",
       description:
@@ -622,7 +625,7 @@ export class MockOpsClient implements OpsClient {
       scope: "client",
       client_id: "Cedar Rock Advisors",
       portfolio_id: "",
-      status: "approved",
+      status: "active",
       source_term: "NAV/Sh",
       approved_meaning: "Value of one share of the fund",
       description: "Cedar Rock statements shorten this in their monthly files.",
@@ -864,8 +867,9 @@ export class MockOpsClient implements OpsClient {
             question: "Publish this delivery as the latest official version?",
             scope_question: "Should Trakt remember this decision for future deliveries?",
             scope_note:
-              "Trakt records your answer so it is on the delivery's record. It does not " +
-              "publish anything on its own — every delivery is approved by a person.",
+              "A later delivery publishes on its own only when its source schema is the " +
+              "one approved here, no question is open and no exception was accepted. " +
+              "Anything else waits for a person.",
             scopes: [
               {
                 value: "delivery",
@@ -876,18 +880,18 @@ export class MockOpsClient implements OpsClient {
                 value: "portfolio",
                 label: "Yes — future deliveries for this portfolio",
                 explanation:
-                  "Your answer is recorded against this portfolio. Someone still approves " +
-                  "each delivery.",
+                  "Later deliveries for this portfolio with the same source schema publish " +
+                  "without asking. A changed schema or an open question still waits for you.",
               },
               {
                 value: "client",
                 label: "Yes — future deliveries for this client",
                 explanation:
-                  "Your answer is recorded against this client. Someone still approves " +
-                  "each delivery.",
+                  "Later deliveries for this client with the same source schema publish " +
+                  "without asking. A changed schema or an open question still waits for you.",
               },
             ],
-            default_scope: "delivery",
+            default_scope: "portfolio",
             consequence:
               `This will publish the ${periodWords(workflow.reporting_period)} ` +
               `${workflow.client_id} ${workflow.portfolio_id} delivery as the latest ` +
@@ -895,11 +899,11 @@ export class MockOpsClient implements OpsClient {
             scope_consequences: {
               delivery: "This decision applies only to this delivery.",
               portfolio:
-                `Your answer is also recorded against future deliveries for ` +
-                `${workflow.portfolio_id}, which are still approved one at a time.`,
+                `Later ${workflow.portfolio_id} deliveries with this source schema will ` +
+                `publish without asking.`,
               client:
-                `Your answer is also recorded against future deliveries for ` +
-                `${workflow.client_id}, which are still approved one at a time.`,
+                `Later ${workflow.client_id} deliveries with this source schema will ` +
+                `publish without asking.`,
             },
             version: publication?.version ?? null,
           },
@@ -1062,6 +1066,10 @@ export class MockOpsClient implements OpsClient {
       workflow_type: input.workflow_type,
       dataset: input.dataset,
       dataset_label: input.dataset === "pipeline" ? "Pipeline" : "Funded book",
+      // Canonicalised and defaulted server-side; the mock mirrors the two
+      // behaviours a screen can see.
+      frequency: (input.frequency || "monthly").trim().toLowerCase().replace(/[\s-]+/g, "_")
+        .replace(/^ad_hoc$/, "adhoc"),
       status: "receiving",
       status_label: "Receiving files",
       status_sentence: "Trakt is watching for the files to arrive.",
@@ -1463,7 +1471,7 @@ export class MockOpsClient implements OpsClient {
         scope: input.scope,
         client_id: review.client_id,
         portfolio_id: "",
-        status: "approved",
+        status: "active",
         source_term: review.title,
         approved_meaning: chosen?.label ?? input.value,
         description: input.reason || "Approved from a review decision.",
@@ -1623,6 +1631,27 @@ export class MockOpsClient implements OpsClient {
     };
   }
 
+  async retireRule(ruleId: string, reason: string,
+                   _clientId?: string): Promise<Rule> {
+    await this.wait();
+    if (!reason.trim()) {
+      throw new OpsError("Please say why this rule is being withdrawn.",
+                         "OPS_REASON_REQUIRED");
+    }
+    const rule = this.rules.find((r) => r.rule_id === ruleId);
+    if (!rule) {
+      throw new OpsError("That rule could not be found.");
+    }
+    if (rule.status !== "active") {
+      throw new OpsError(
+        "That rule is not in force, so there is nothing to withdraw.",
+        "OPS_RULE_NOT_ACTIVE");
+    }
+    // Not a delete: the row stays, marked withdrawn, and its history with it.
+    rule.status = "retired";
+    return deepCopy(rule);
+  }
+
   async getRuleHistory(ruleId: string): Promise<Rule[]> {
     await this.wait();
     const rule = this.rules.find((r) => r.rule_id === ruleId);
@@ -1701,6 +1730,24 @@ export class MockOpsClient implements OpsClient {
     await this.wait();
     this.requireAdmin();
     return this.config.createDraft(layer, input);
+  }
+
+  /**
+   * Stand in for a later deployment having landed an edited configuration
+   * file. Mock only: on the real platform the files come from the deployed
+   * repository, and nothing in the UI can put them there.
+   */
+  setDeployedConfigFiles(layer: ConfigLayer, files: Record<string, string>): void {
+    this.config.setDeployedFiles(layer, files);
+  }
+
+  async createConfigDraftFromDeployment(
+    layer: ConfigLayer,
+    notes = "",
+  ): Promise<{ version: number; status: string }> {
+    await this.wait();
+    this.requireAdmin();
+    return this.config.createDraftFromDeployment(layer, notes);
   }
 
   async validateConfigVersion(
@@ -1893,10 +1940,11 @@ export class MockOpsClient implements OpsClient {
   }
 
   async createAgentCase(instruction: string, fixtureId?: string,
-                        live?: boolean): Promise<AgentStatus> {
+                        live?: boolean,
+                        amendClient?: string): Promise<AgentStatus> {
     await this.wait();
     mockAgentLive.lastCreateLive = live === true;
-    return this.agent.create(instruction, fixtureId);
+    return this.agent.create(instruction, fixtureId, amendClient, live === true);
   }
 
   async getAgentCase(caseRef: string): Promise<AgentStatus> {
@@ -1915,6 +1963,56 @@ export class MockOpsClient implements OpsClient {
   ): Promise<AgentStatus> {
     await this.wait();
     return this.agent.answerDecision(caseRef, input);
+  }
+
+  async approveAgentMappings(caseRef: string, reason = ""): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.approveMappings(caseRef, reason);
+  }
+
+  async stageAgentMapping(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "confirm" | "amend" | "not_used" | "clear";
+      target_field?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.stageMapping(caseRef, input);
+  }
+
+  async agentFieldRegistry(caseRef: string): Promise<RegistryField[]> {
+    await this.wait();
+    return this.agent.fieldRegistry(caseRef);
+  }
+
+  async declareSourceUnit(
+    caseRef: string,
+    input: { field: string; unit: string; reason?: string },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.declareUnit(caseRef, input);
+  }
+
+  async resolveUnmappedColumn(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "use_existing" | "request_field" | "withdraw_request";
+      target_field?: string;
+      field_name?: string;
+      label?: string;
+      description?: string;
+      data_type?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.resolveUnmapped(caseRef, input);
   }
 
   async runAgentStep(
@@ -1957,6 +2055,19 @@ export class MockOpsClient implements OpsClient {
       caseRef,
       files.map((f) => f.name),
     );
+  }
+
+  async removeAgentArtefact(caseRef: string, artefactId: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.removeArtefact(caseRef, artefactId);
+  }
+
+  async recordAgentConcentration(
+    caseRef: string,
+    input: { status: string; response_text?: string; reason?: string },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.recordConcentration(caseRef, input);
   }
 
   async generateAgentAnswers(caseRef: string): Promise<AgentStatus> {

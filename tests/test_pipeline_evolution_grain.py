@@ -37,8 +37,10 @@ _FIXTURE = _ROOT / "tests" / "fixtures" / "pipeline_history_5w"
 
 #: The fixture's five governed extracts, from its movement table.
 WEEKS = ("2026-05-01", "2026-05-08", "2026-05-15", "2026-05-22", "2026-05-29")
-EXPECTED_AMOUNT = [2_300_000.0, 2_800_000.0, 3_600_000.0, 3_600_000.0, 3_600_000.0]
-EXPECTED_COUNT = [6, 7, 8, 8, 8]
+#: The OPEN pipeline: from 2026-05-22 two cases have completed and one has
+#: withdrawn, so they leave the series (they stay in the extract, not in it).
+EXPECTED_AMOUNT = [2_300_000.0, 2_800_000.0, 3_600_000.0, 2_400_000.0, 2_400_000.0]
+EXPECTED_COUNT = [6, 7, 8, 5, 5]
 
 #: The funded side: two synthetic month-end runs, so a monthly series has two
 #: points and a weekly one would have none.

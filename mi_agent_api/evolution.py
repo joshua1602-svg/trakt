@@ -25,6 +25,7 @@ from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 
 from . import snapshots as snap
 from . import pipeline_contract as pipeline_mod
+from .pipeline_prep import OPEN_STAGES as _OPEN_STAGES
 
 _BALANCE = "current_outstanding_balance"
 # Funded breakdown dimensions exposed over time (kept small + governed).
@@ -755,12 +756,23 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
         if cut_ym and edate and edate[:7] > cut_ym:
             continue
         try:
-            df, report = pipeline_mod.load_prepared_pipeline(
+            summary = pipeline_mod.load_extract_summary(
                 ext, historical_model=historical_model)
         except Exception:  # noqa: BLE001
             continue
-        amount = report.get("total_pipeline_amount")
-        weighted = report.get("weighted_expected_funded_amount")
+        weighted = summary.get("weighted_expected_funded_amount")
+        # The OPEN pipeline (KFI / Application / Offer), the same population as
+        # the snapshot tiles and the movement drill-down. Completed and
+        # withdrawn cases stay in the extract; they are not pipeline exposure.
+        if summary.get("has_stage"):
+            open_aggs = [agg for name, agg in summary["stages"].items()
+                         if name.strip().upper() in _OPEN_STAGES]
+            case_count = int(sum(agg["count"] for agg in open_aggs))
+            amount = (float(sum(agg["value"] or 0.0 for agg in open_aggs))
+                      if summary.get("has_balance") else None)
+        else:
+            case_count = int(summary["row_count"])
+            amount = summary.get("total_pipeline_amount")
         sources.append(ext.get("source_file", ""))
         dates.append(edate)
         periods.append({
@@ -769,14 +781,14 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
             "week": edate,
             "metrics": {
                 "pipeline_amount": (round(float(amount), 2) if amount is not None else None),
-                "pipeline_case_count": int(report.get("row_count", len(df))),
+                "pipeline_case_count": case_count,
                 "weighted_expected_funded_amount": (round(float(weighted), 2)
                                                     if weighted is not None else None),
             },
             "reconciliation": {
                 "dataset": "pipeline",
                 "extract_date": edate,
-                "total_records": int(report.get("row_count", len(df))),
+                "total_records": case_count,
                 "total_balance": (round(float(amount), 2) if amount is not None else None),
                 "coverage_by_balance_pct": 100.0,
                 "missing_measure_fields": [],
@@ -787,18 +799,13 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
         # Pipeline amount AND case count by stage for this extract (multi-line over
         # time, day-level dates). Both metrics are emitted so the UI can chart
         # amount or count, and derive Application/Offer/Completion conversion.
-        if "pipeline_stage" in df.columns:
-            stage_str = df["pipeline_stage"].astype(str)
-            amt = (coerce_numeric(df[_BALANCE]).groupby(stage_str).sum()
-                   if _BALANCE in df.columns else None)
-            cnt = stage_str.groupby(stage_str).size()
-            for stage, n in cnt.items():
-                if str(stage).strip() and str(stage) not in ("nan", "None"):
-                    val = float(amt.get(stage, 0.0)) if amt is not None else None
-                    by_stage.append({
-                        "period": (edate or ""), "week": edate, "stage": str(stage),
-                        "value": (round(val, 2) if val is not None else None),
-                        "count": int(n)})
+        for stage, agg in summary["stages"].items():
+            if stage.strip() and stage not in ("nan", "None"):
+                val = agg["value"]
+                by_stage.append({
+                    "period": (edate or ""), "week": edate, "stage": stage,
+                    "value": (round(val, 2) if val is not None else None),
+                    "count": agg["count"]})
 
     return {
         "dataset": "pipeline",
@@ -1020,21 +1027,22 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
             # — only ``pipeline_stage`` and ``current_outstanding_balance``,
             # which are byte-identical with and without it (asserted by
             # tests/test_funnel_model_invariance.py).
-            df, _report = pipeline_mod.load_prepared_pipeline(
+            summary = pipeline_mod.load_extract_summary(
                 ext, historical_model=historical_model)
         except Exception:  # noqa: BLE001
             continue
         weeks.append(edate)
         sources.append(ext.get("source_file", ""))
-        stage_col = df["pipeline_stage"].astype(str) if "pipeline_stage" in df.columns else None
-        bal = coerce_numeric(df[_BALANCE]) if _BALANCE in df.columns else None
         for stage in _FUNNEL_STAGES:
-            if stage_col is None:
+            if not summary["has_stage"]:
                 series[stage].append({"week": edate, "value": None, "count": 0})
                 continue
-            mask = stage_col.str.upper() == stage
-            value = round(float(bal[mask].sum()), 2) if bal is not None else None
-            series[stage].append({"week": edate, "value": value, "count": int(mask.sum())})
+            hits = [agg for name, agg in summary["stages"].items()
+                    if name.upper() == stage]
+            value = (round(float(sum(agg["value"] for agg in hits)), 2)
+                     if summary["has_balance"] else None)
+            series[stage].append({"week": edate, "value": value,
+                                  "count": int(sum(agg["count"] for agg in hits))})
 
     # Per-week weekly-flow series derived from the stock levels (bars chart this).
     flow_series: Dict[str, List[Dict[str, Any]]] = {}

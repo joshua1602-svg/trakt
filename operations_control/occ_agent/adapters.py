@@ -37,6 +37,8 @@ from typing import Any, Dict, List, Optional, Protocol
 
 from ..engine import OpsError
 from ..onboarding.case import APPROVED, OnboardingCase
+from . import field_promotion as _field_promotion
+from . import mapping_promotion as _mapping_promotion
 from .derive import ExecutionFacts
 from .policy import CAP_ACTIVATE_CONFIGURATION, SyntheticPolicy
 
@@ -88,6 +90,10 @@ class ActivationPreconditions:
     tenant: str = ""
     client_id: str = ""
     portfolio_id: str = ""
+    #: The book's asset class. Carried so a field an operator asks for is
+    #: proposed for THIS kind of book rather than for every client at once —
+    #: see :func:`field_promotion.field_entry`.
+    asset_class: str = ""
     configuration_valid: bool = False
     configuration_problems: List[str] = field(default_factory=list)
     artefacts_present: int = 0
@@ -163,6 +169,12 @@ class ActivationIntent:
     target_locations: List[str] = field(default_factory=list)
     actions: List[str] = field(default_factory=list)
     configuration_artefacts: List[str] = field(default_factory=list)
+    #: How many confirmed mappings this activation would write into the
+    #: client's governed rules, and how many requested fields it would raise as
+    #: a draft. Carried on the record rather than only in the prose, so the
+    #: approval note and the action list are counted once and cannot disagree.
+    mappings: int = 0
+    field_requests: int = 0
     statement: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -179,6 +191,18 @@ class ActivationResult:
     batch_id: str = ""
     workflow_id: str = ""
     files_placed: List[str] = field(default_factory=list)
+    #: Mapping rules carried over from the rehearsal's settled decisions, as
+    #: ``{rule_id, version, source_column, canonical_field}``. Reported because
+    #: adding to a client's standing rules is a governed change, and an
+    #: operator who confirmed an activation is entitled to see what it added.
+    rules_promoted: List[Dict[str, str]] = field(default_factory=list)
+    #: Canonical fields the operator asked for, carried into a DRAFT system
+    #: configuration version for a configuration owner to review. Never
+    #: activated here — see :mod:`.field_promotion`. Reported because an
+    #: operator who asked is entitled to know the ask reached somebody, and
+    #: because a proposal that could not be written says so here rather than
+    #: disappearing.
+    fields_proposed: List[Dict[str, Any]] = field(default_factory=list)
     message: str = ""
     error: str = ""
 
@@ -188,8 +212,29 @@ class ActivationResult:
 
 def build_intent(case: OnboardingCase, facts: ExecutionFacts, *,
                  reporting_period: str, files: List[Dict[str, str]],
-                 configuration_artefacts: List[str]) -> ActivationIntent:
-    """What confirming would cause. Built from the case, never from prose."""
+                 configuration_artefacts: List[str],
+                 mappings: int = 0,
+                 field_requests: int = 0) -> ActivationIntent:
+    """What confirming would cause. Built from the case, never from prose.
+
+    ``mappings`` and ``field_requests`` are the two things activation does
+    that this list used to leave out. Both were added to
+    :meth:`~operations_control.occ_agent.service.OccAgentService.confirm_activation`
+    after these four sentences were written, and neither was passed here — so
+    the intent could not have named them even in principle, and the record of
+    "what activation would do" understated what it does.
+    """
+    settling = []
+    if mappings:
+        settling.append(
+            f"Write {mappings} confirmed field mapping(s) into "
+            f"{facts.client_id}'s governed rules, as the standing reading of "
+            "every future delivery for this client.")
+    if field_requests:
+        settling.append(
+            f"Raise {field_requests} requested field(s) as a DRAFT system "
+            "configuration version for a configuration owner to decide. "
+            "Nothing is added to the registry by activating.")
     return ActivationIntent(
         client_id=facts.client_id, client_name=facts.client_name,
         portfolio_id=facts.portfolio_id, dataset=facts.dataset,
@@ -199,15 +244,23 @@ def build_intent(case: OnboardingCase, facts: ExecutionFacts, *,
         target_locations=sorted({str(f.get("target") or "") for f in files
                                  if f.get("target")}),
         configuration_artefacts=list(configuration_artefacts),
+        mappings=int(mappings), field_requests=int(field_requests),
         actions=[
             f"Write {len(configuration_artefacts)} configuration artefact(s) "
             f"for {facts.client_id}, as a new governed version.",
+            *settling,
             "Register the expected source deliveries in the production source "
             "registry.",
             f"Place {len(files)} file(s) in the production raw location, "
             "through the platform's own governed intake.",
-            "Start the existing Onboarding Agent, which will profile, map, "
-            "transform, validate and assemble the delivery.",
+            # "map" was in this sentence and should not have been where a
+            # rehearsal has already settled the mappings: it told an approver
+            # the reading was still to be decided when they had just decided it.
+            ("Start the existing Onboarding Agent, which will profile, "
+             "transform, validate and assemble the delivery against those "
+             "mappings." if mappings else
+             "Start the existing Onboarding Agent, which will profile, map, "
+             "transform, validate and assemble the delivery."),
         ],
         statement=(
             f"Confirming activates {facts.client_name or facts.client_id}'s "
@@ -234,7 +287,9 @@ class ExecutionAdapter(Protocol):
 
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
-                 payloads: Optional[Dict[str, bytes]] = None
+                 payloads: Optional[Dict[str, bytes]] = None,
+                 decisions: Optional[List[Dict[str, Any]]] = None,
+                 field_requests: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult: ...
 
 
@@ -251,10 +306,20 @@ class SyntheticExecutionAdapter:
 
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
-                 payloads: Optional[Dict[str, bytes]] = None
+                 payloads: Optional[Dict[str, bytes]] = None,
+                 decisions: Optional[List[Dict[str, Any]]] = None,
+                 field_requests: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult:
-        """Always refused, and audited. The refusal is the feature."""
-        del payloads                        # nothing is ever placed anywhere
+        """Always refused, and audited. The refusal is the feature.
+
+        Note what is discarded: the settled mapping decisions AND the fields
+        the operator asked for reach this adapter and go no further. A
+        rehearsal that is never activated leaves nothing in the governed rules
+        and no proposal in the configuration history — which is the property
+        the synthetic boundary exists to hold, and it holds here rather than
+        depending on a caller remembering not to pass them.
+        """
+        del payloads, decisions, field_requests   # nothing is placed anywhere
         self.policy.require(CAP_ACTIVATE_CONFIGURATION,
                             detail=f"client {intent.client_id}",
                             case_id=pre.case_ref, tenant=pre.tenant,
@@ -284,14 +349,25 @@ class LiveExecutionAdapter:
 
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
-                 payloads: Optional[Dict[str, bytes]] = None
+                 payloads: Optional[Dict[str, bytes]] = None,
+                 decisions: Optional[List[Dict[str, Any]]] = None,
+                 field_requests: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult:
         """Activate, then hand the files to the existing Onboarding Agent.
 
         The order is the platform's, not this module's: configuration first,
-        because the intake resolves against it; then the governed input pack;
-        then the files; then the start. A failure at any step returns what had
-        already happened, so an operator is never left guessing.
+        because the intake resolves against it; then the rehearsal's settled
+        mappings, because the ingest reads the client's standing rules; then
+        the governed input pack; then the files; then the start. A failure at
+        any step returns what had already happened, so an operator is never
+        left guessing.
+
+        ``decisions`` are the run's decisions. The settled mapping ones become
+        governed rules here — see :mod:`.mapping_promotion` — so that a human's
+        reading of this lender's column names survives the rehearsal that
+        produced it. They are promoted AFTER the configuration and BEFORE the
+        batch, because a rule the ingest cannot yet see is a rule that did not
+        arrive in time.
         """
         assert_may_activate(pre)
         payloads = payloads or {}
@@ -307,6 +383,27 @@ class LiveExecutionAdapter:
                                                   by=actor)
             result.version = activation.get("version")
             result.artefacts_written = list(activation.get("artefacts") or [])
+
+            # What the rehearsal settled about this lender's columns, made
+            # governed. Without this the ingest below re-derives every mapping
+            # and re-asks every question a human already answered.
+            rules = getattr(self.engine, "rules", None)
+            if rules is not None and decisions:
+                result.rules_promoted = _mapping_promotion.promote(
+                    rules, decisions, client_id=intent.client_id,
+                    portfolio_id=intent.portfolio_id,
+                    workflow_id=pre.case_ref)
+
+            # Fields this delivery needs that the platform has no word for,
+            # carried into the route that can grant them — as a DRAFT, which a
+            # configuration owner reads, validates and activates. The registry
+            # is every client's vocabulary and is never written from here.
+            store = getattr(self.engine, "store", None)
+            if store is not None and field_requests:
+                from ..configuration.packages import ConfigPackageStore
+                result.fields_proposed = _field_promotion.propose(
+                    ConfigPackageStore(store), field_requests, by=actor,
+                    case_ref=pre.case_ref, asset_type=pre.asset_class)
 
             # The engine's own signature, in full. Every argument comes from
             # the intent the human confirmed — nothing is defaulted here, and
