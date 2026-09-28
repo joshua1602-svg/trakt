@@ -36,6 +36,9 @@ _YOUNGEST_AGE = "youngest_borrower_age"
 _ORIG_LTV_BUCKET = "original_ltv_bucket"
 _LTV_BUCKET = "ltv_bucket"
 _ORIG_LTV = "original_loan_to_value"
+#: The amount originally advanced — the market-standard base for a balance
+#: factor, where the tape carries it.
+_ORIG_PRINCIPAL = "original_principal_balance"
 _ORIG_CHANNEL = "origination_channel"
 _BROKER = "broker_channel"
 
@@ -561,14 +564,31 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
             # Still admitting loans at the latest cut: the count can yet grow.
             "forming": not anchored,
         }
-        if _BALANCE in sub.columns and len(sub):
-            w = sub[_BALANCE]
-            if _ORIG_LTV in sub.columns:
-                row["waOriginalLtv"] = _weighted_avg_pct(sub[_ORIG_LTV], w, sub[_ORIG_LTV])
-            if _LTV in sub.columns:
-                row["waEntryLtv"] = _weighted_avg_pct(sub[_LTV], w, sub[_LTV])
-            if _RATE in sub.columns:
-                row["waRate"] = _weighted_avg_pct(sub[_RATE], w, sub[_RATE])
+        if _ORIG_PRINCIPAL in sub.columns and _has_values(sub, _ORIG_PRINCIPAL):
+            row["originalAdvance"] = round(
+                float(coerce_numeric(sub[_ORIG_PRINCIPAL]).sum()), 2)
+        # Each profile measure is read from the measuring cut, or — where that
+        # cut does not carry it (the live 2025-12 cut has no LTVs) — from the
+        # next cut holding the same vintage that does. The loans are the same;
+        # only the column was missing.
+        later = [t for t in labelled
+                 if str(t[0].get("reporting_date") or "") >= str(fr.get("reporting_date") or "")
+                 and (t[2] == label).any()]
+        for key, col, pct in (("waOriginalLtv", _ORIG_LTV, True),
+                              ("waEntryLtv", _LTV, True),
+                              ("waRate", _RATE, True),
+                              ("waEntryAge", _YOUNGEST_AGE, False)):
+            for t_fr, _t_col, t_lab in later:
+                t_sub = t_fr["df"][(t_lab == label).fillna(False).to_numpy()]
+                if col not in t_sub.columns or not _has_values(t_sub, col) \
+                        or _BALANCE not in t_sub.columns:
+                    continue
+                w = t_sub[_BALANCE]
+                row[key] = (_weighted_avg_pct(t_sub[col], w, t_sub[col]) if pct
+                            else _weighted_avg(t_sub[col], w))
+                if t_fr is not fr:
+                    row.setdefault("profileFrom", {})[key] = t_fr.get("reporting_date")
+                break
         out.append(row)
     out.sort(key=lambda r: r["vintage"])
     return {
@@ -667,6 +687,7 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
     periods: List[Dict[str, Any]] = []
     original_count: Optional[int] = None
     original_balance: Optional[float] = None
+    original_advance: Optional[float] = None
     prior_ids: Optional[set] = None
     prior_count: Optional[int] = None
     for fr, id_col, mask in zip(usable, id_cols, members_by_cut):
@@ -687,6 +708,8 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
                    if _BALANCE in sub.columns and len(sub) else 0.0)
         if original_count is None and not forming:
             original_count, original_balance = count, balance
+            if _ORIG_PRINCIPAL in sub.columns and _has_values(sub, _ORIG_PRINCIPAL):
+                original_advance = float(coerce_numeric(sub[_ORIG_PRINCIPAL]).sum())
         # Exits only mean something once the pool is fixed. They are named by
         # identifier where this cut links to the previous one; where it does
         # not (fewer than half the previous cut's ids found, e.g. a re-keyed
@@ -736,6 +759,8 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         "originalLoanCount": original_count,
         "originalBalance": (round(original_balance, 2)
                             if original_balance is not None else None),
+        "originalAdvance": (round(original_advance, 2)
+                            if original_advance is not None else None),
         "periods": periods,
         "singlePeriod": len(periods) <= 1,
         "lineage": {
@@ -770,3 +795,79 @@ def _months_between(vintage: str, reporting_date: Optional[str]) -> Optional[int
     except (ValueError, TypeError):
         return None
     return (rd.year - start.year) * 12 + (rd.month - start.month)
+
+
+def cohort_matrix(frames: List[Dict[str, Any]], *, grain: str = "M",
+                  client_id: str = "", portfolio_id: str = "") -> Dict[str, Any]:
+    """Every vintage side by side, by months on book — the static-pool grid.
+
+    Rows are vintages, columns months since origination. Each cell is read
+    from that vintage's own static pool (:func:`cohort_static_pool`), so the
+    grid and the single-vintage table cannot disagree:
+
+      * ``balanceFactor``      balance / the vintage's base. The base is the
+                               amount originally advanced where the tape carries
+                               it, else the balance when the pool was fixed
+                               (``basis`` says which);
+      * ``cumulativeExitRate`` share of the fixed pool's loans that have left;
+      * ``survivingLoanCount`` and ``waLtv``.
+
+    Forming periods (the vintage still originating) carry no cell.
+    """
+    base = {
+        "dataset": "cohort_matrix",
+        "portfolioId": portfolio_id or client_id,
+        "cohortBasis": _ORIG_DATE,
+        "grain": (grain or "M").upper(),
+    }
+    formation = cohort_formation(frames, grain=grain, client_id=client_id,
+                                 portfolio_id=portfolio_id)
+    if not formation.get("available"):
+        return {**base, "available": False, "reason": formation.get("reason"),
+                "vintages": [], "monthsOnBook": []}
+    rows: List[Dict[str, Any]] = []
+    months: set = set()
+    for v in formation["vintages"]:
+        pool = cohort_static_pool(frames, vintage=v["vintage"], grain=grain,
+                                  client_id=client_id, portfolio_id=portfolio_id)
+        if not pool.get("available") or not pool.get("originalLoanCount"):
+            continue
+        advance = pool.get("originalAdvance")
+        denom = advance or pool.get("originalBalance")
+        cells: Dict[str, Dict[str, Any]] = {}
+        for p in pool["periods"]:
+            mob = p.get("monthsSinceEntry")
+            if p.get("forming") or mob is None:
+                continue
+            months.add(int(mob))
+            cells[str(int(mob))] = {
+                "period": p["period"],
+                "survivingLoanCount": p["survivingLoanCount"],
+                "balanceFactor": (round(p["currentBalance"] / denom, 4) if denom else None),
+                "cumulativeExitRate": round(
+                    p["cumulativeExits"] / pool["originalLoanCount"], 4),
+                "waLtv": p.get("waLtv"),
+                "idsRekeyed": bool(p.get("idsRekeyed")),
+            }
+        rows.append({
+            "vintage": v["vintage"],
+            "originalLoanCount": pool["originalLoanCount"],
+            "base": round(denom, 2) if denom else None,
+            "basis": "original_advance" if advance else "balance_when_pool_fixed",
+            "cells": cells,
+        })
+    return {
+        **base,
+        "available": bool(rows),
+        "reason": None if rows else "no vintage has a fixed static pool yet",
+        "monthsOnBook": sorted(months),
+        "vintages": rows,
+        "lineage": {
+            "source": "governed funded reporting periods (fixed static pools)",
+            "metric": "each vintage by months on book: balance factor, cumulative "
+                      "exit rate, surviving loans, WA LTV",
+            "note": "Balance factor above 1.0 is interest roll-up and any further "
+                    "advances on drawdown products. Missing months are reporting "
+                    "periods not loaded, not zero.",
+        },
+    }

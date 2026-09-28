@@ -19,7 +19,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AgentClient } from "@/api";
-import type { CohortFormation, CohortStaticPool } from "@/domain";
+import type { CohortFormation, CohortMatrix, CohortMatrixCell, CohortStaticPool } from "@/domain";
 import { formatGBP, formatValue } from "@/lib/utils";
 
 /** Percent metrics are FRACTIONS by contract (0.395 == 39.5%). */
@@ -69,6 +69,17 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
 
   const rekeyed = (pool?.periods ?? []).filter((p) => p.idsRekeyed).map((p) => p.period);
 
+  const [matrix, setMatrix] = useState<CohortMatrix | null>(null);
+  const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("balanceFactor");
+  useEffect(() => {
+    if (!client.getCohortMatrix) return;
+    let live = true;
+    client.getCohortMatrix(portfolioId, { portfolioContext, grain })
+      .then((r) => { if (live && r.dataset === "cohort_matrix") setMatrix(r); })
+      .catch(() => { if (live) setMatrix(null); });
+    return () => { live = false; };
+  }, [client, portfolioId, portfolioContext, grain]);
+
   return (
     <div className="space-y-3" data-testid="cohorts-panel">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-line)] bg-navy-900/40 px-3 py-2.5">
@@ -109,8 +120,8 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
                   title="Weighted-average LTV at origination. Only vintages whose tape supplies an original LTV can report one — an acquired book usually cannot.">
                   WA original LTV</th>
                 <th className="px-3 py-2 text-right font-medium"
-                  title="Weighted-average CURRENT LTV of the loans as they entered the book. Available for every vintage, including acquired ones with no origination LTV.">
-                  WA LTV at entry</th>
+                  title="Balance-weighted age of the youngest borrower, as the vintage entered the book.">
+                  WA age at entry</th>
                 <th className="px-3 py-2 text-right font-medium">WA rate</th>
               </tr>
             </thead>
@@ -128,7 +139,8 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
                       ? `${((v.originalBalance / totalEntryBalance) * 100).toFixed(1)}%`
                       : "—"}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{pct(v.waOriginalLtv)}</td>
-                  <td className="px-3 py-1.5 text-right text-ink-200">{pct(v.waEntryLtv)}</td>
+                  <td className="px-3 py-1.5 text-right text-ink-200">
+                    {v.waEntryAge == null ? "—" : v.waEntryAge.toFixed(1)}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{pct(v.waRate)}</td>
                 </tr>
               ))}
@@ -145,7 +157,13 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
         </div>
       )}
 
-      {/* B. Static pool — one vintage followed forward. */}
+      {/* B. Every vintage side by side by months on book. */}
+      {matrix?.available && (
+        <VintageMatrix matrix={matrix} metric={matrixMetric} onMetric={setMatrixMetric}
+          selected={selected} onSelect={setVintage} />
+      )}
+
+      {/* C. Static pool — one vintage followed forward. */}
       <div className="pt-1 text-[11px] font-semibold text-ink-300">
         Static pool — {selected || "no vintage"} followed through reporting periods
       </div>
@@ -209,6 +227,100 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
           dates; exits in those periods are the fall in count.
         </p>
       )}
+    </div>
+  );
+}
+
+
+type MatrixMetric = "balanceFactor" | "cumulativeExitRate" | "survivingLoanCount" | "waLtv";
+
+const MATRIX_METRICS: { key: MatrixMetric; label: string }[] = [
+  { key: "balanceFactor", label: "Balance factor" },
+  { key: "cumulativeExitRate", label: "Cumulative exits" },
+  { key: "survivingLoanCount", label: "Surviving loans" },
+  { key: "waLtv", label: "WA LTV" },
+];
+
+function matrixCell(c: CohortMatrixCell | undefined, metric: MatrixMetric): string {
+  if (!c) return "";
+  const v = c[metric];
+  if (v == null) return "—";
+  if (metric === "survivingLoanCount") return Number(v).toLocaleString("en-GB");
+  return pct(Number(v));
+}
+
+/** The market-standard static-pool grid: vintages as rows, months on book as
+ *  columns, so vintages can be compared at the same seasoning. Every cell is
+ *  the engine's; nothing is derived here. */
+function VintageMatrix({ matrix, metric, onMetric, selected, onSelect }: {
+  matrix: CohortMatrix;
+  metric: MatrixMetric;
+  onMetric: (m: MatrixMetric) => void;
+  selected: string;
+  onSelect: (v: string) => void;
+}) {
+  const months = matrix.monthsOnBook;
+  const advanceBased = matrix.vintages.some((v) => v.basis === "original_advance");
+  return (
+    <div className="space-y-1.5" data-testid="vintage-matrix">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <div className="text-[11px] font-semibold text-ink-300">
+          Vintage matrix — each vintage by months on book
+        </div>
+        <div role="group" aria-label="Vintage matrix measure" className="nav-unit">
+          {MATRIX_METRICS.map((m) => (
+            <button key={m.key} type="button" aria-pressed={metric === m.key}
+              aria-selected={metric === m.key} data-testid={`matrix-metric-${m.key}`}
+              onClick={() => onMetric(m.key)}
+              className={"nav-unit-item" + (metric !== m.key ? " cursor-pointer" : "")}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-[var(--color-line)] bg-navy-900/40">
+        <table className="w-full text-[11px]" data-testid="vintage-matrix-table">
+          <thead>
+            <tr className="border-b border-[var(--color-line)] text-ink-400">
+              <th className="px-3 py-2 text-left font-medium">Vintage</th>
+              <th className="px-3 py-2 text-right font-medium">Loans</th>
+              {months.map((m) => (
+                <th key={m} className="px-2 py-2 text-right font-medium">+{m}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.vintages.map((v) => (
+              <tr key={v.vintage}
+                className={"cursor-pointer border-b border-[var(--color-line-soft)] last:border-0 "
+                  + (v.vintage === selected ? "bg-cyan-400/10" : "hover:bg-navy-800/40")}
+                onClick={() => onSelect(v.vintage)} data-testid={`matrix-row-${v.vintage}`}>
+                <td className="px-3 py-1.5 text-left font-medium text-ink-100">{v.vintage}</td>
+                <td className="px-3 py-1.5 text-right text-ink-400">
+                  {v.originalLoanCount.toLocaleString("en-GB")}</td>
+                {months.map((m) => {
+                  const c = v.cells[String(m)];
+                  return (
+                    <td key={m} className="px-2 py-1.5 text-right tabular-nums text-ink-200"
+                      title={c ? `${c.period}${c.idsRekeyed ? " · ids changed; exits from the fall in count" : ""}` : undefined}>
+                      {matrixCell(c, metric)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-ink-500">
+        Columns are months since origination, so vintages are compared at the same
+        seasoning. Balance factor is balance ÷ {advanceBased
+          ? "the amount originally advanced"
+          : "the balance when the pool was fixed (the tape carries no original advance)"};
+        above 100% is interest roll-up and any further advances. Cumulative exits is the
+        share of the vintage's loans that have left. A blank cell is a month not yet
+        reached or a reporting period not loaded, not zero.
+      </p>
     </div>
   );
 }

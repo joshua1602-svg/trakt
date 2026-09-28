@@ -450,6 +450,16 @@ export class HttpAgentClient implements AgentClient {
       `/mi/cohorts/vintages?${p.toString()}`, signal);
   }
 
+  getCohortMatrix(portfolioId: string,
+                  query?: Omit<import("@/domain").CohortVintageQuery, "vintage">,
+                  signal?: AbortSignal): Promise<import("@/domain").CohortMatrix> {
+    const p = new URLSearchParams({ portfolioId, view: "matrix" });
+    if (query?.portfolioContext) p.set("portfolioContext", query.portfolioContext);
+    if (query?.grain) p.set("grain", query.grain);
+    return this.getJson<import("@/domain").CohortMatrix>(
+      `/mi/cohorts/vintages?${p.toString()}`, signal);
+  }
+
   async ask(request: AgentRequest, signal?: AbortSignal): Promise<AgentResponse> {
     let res: Response;
     try {

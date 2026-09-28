@@ -98,6 +98,14 @@ export interface CohortVintage {
   waOriginalLtv?: number | null;
   waEntryLtv?: number | null;
   waRate?: number | null;
+  /** Balance-weighted youngest-borrower age of the vintage's loans. */
+  waEntryAge?: number | null;
+  /** Sum of the amounts originally advanced, where the tape carries them. */
+  originalAdvance?: number | null;
+  /** The reporting cut the vintage is counted in. */
+  measuredAt?: string | null;
+  /** Still originating at the latest cut, so the count can yet grow. */
+  forming?: boolean;
 }
 
 export interface CohortFormation {
@@ -157,6 +165,38 @@ export interface CohortStaticPool {
   periods: StaticPoolPeriod[];
   singlePeriod?: boolean;
   lineage?: Record<string, unknown>;
+}
+
+/** One vintage × months-on-book cell of the static-pool grid. */
+export interface CohortMatrixCell {
+  period: string;
+  survivingLoanCount: number;
+  /** Balance / the vintage's base (fraction; 1.0 == 100%). */
+  balanceFactor: number | null;
+  /** Share of the fixed pool's loans that have left (fraction). */
+  cumulativeExitRate: number;
+  waLtv?: number | null;
+  idsRekeyed?: boolean;
+}
+
+export interface CohortMatrixRow {
+  vintage: string;
+  originalLoanCount: number;
+  base: number | null;
+  basis: "original_advance" | "balance_when_pool_fixed";
+  /** Keyed by months on book ("0", "1", …). */
+  cells: Record<string, CohortMatrixCell>;
+}
+
+/** Every vintage side by side by months on book. */
+export interface CohortMatrix {
+  dataset: "cohort_matrix";
+  portfolioId: string;
+  grain: string;
+  available: boolean;
+  reason?: string | null;
+  monthsOnBook: number[];
+  vintages: CohortMatrixRow[];
 }
 
 export interface CohortVintageQuery {
