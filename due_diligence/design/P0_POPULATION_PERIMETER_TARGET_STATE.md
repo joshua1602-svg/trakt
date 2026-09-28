@@ -13,11 +13,19 @@
         Beyond the ceiling: refuse. Within it: answer, with both vintages stated
         on the face of the answer. Owner decision; recorded, not inferred.
 
-    D2  FORECAST OPERATION MAPPING (scenario, cohort_conversion)    OPEN — see §6
-        Blocks writing plan_forecast_runtime. Nothing else.
+    D2a COHORT CONVERSION OWNERSHIP                  PROPOSED 2026-09-28, see §6.1
+        Owner's reading: it belongs in stage movement, but where it pertains to
+        COMPLETIONS it carries a forward-looking funded angle. Resolution proposed:
+        `pipeline_stage_movement` owns the CALCULATION; `forecast` CONSUMES it as a
+        declared input and never recomputes it. Awaiting confirmation.
 
-    D3  SEQUENCING                                                 OPEN — see §11
-        Recommendation: P0 and P1 committed as one piece of work.
+    D2b SCENARIO OPERATION MAPPING                                 OPEN — see §6
+        Still the only thing blocking plan_forecast_runtime.
+
+    D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
+        P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
+        any vintage today, so "state both vintages" cannot be satisfied until the
+        governed path has an answer composer. P0 and P1 are one piece of work.
 
 ## 1. What the evidence asks this design to fix
 
@@ -211,7 +219,31 @@ It dispatches on the plan's operation to owners that already exist, mirroring ho
     point_in_time        -> the run-rate owner's current-rate answer
     series               -> the extrapolation curve
 
-**Two mapping questions this design raises and does not decide.** `scenario`
+### 6.1 Cohort conversion — D2a
+
+The owner's reading is that conversion is a stage-movement measurement, and that its
+appearance in a forecast is a different thing from its calculation. That resolves
+cleanly against the negative contract already in §8.5 (*no duplicated arithmetic*):
+
+    pipeline_stage_movement   OWNS the calculation. Conversion is a measured
+                              historical fact about stage transitions — 9.4% of the
+                              original KFI cohort has funded to date. Nothing
+                              forward-looking about the measurement itself.
+
+    forecast                  CONSUMES it, as a declared input alongside funded and
+                              pipeline (§4.1), and never recomputes it. The
+                              forward-looking angle is what the FORECAST does with a
+                              historical rate, not a second definition of the rate.
+
+The practical test that this is right: the live answer already says *"This is the
+single definition of conversion used on the KPI card, the funnel and the forecast."*
+One definition, three consumers. Two owners would break that sentence.
+
+So `POPULATION_INPUTS` for forecast gains a third entry, and a forecast answer citing
+a conversion rate attributes it to the stage-movement owner in the receipt rather
+than claiming it.
+
+**One mapping question this design raises and does not decide.** `scenario`
 ("what happens if run rate falls 25%") and `cohort_conversion` (9.4% cumulative
 conversion) both answered well on legacy, and neither is obviously a `forecast`
 operation — conversion looks like `pipeline_stage_movement`, and scenario may warrant
@@ -310,10 +342,22 @@ the change is a regression however good the headline looks.
 - **`whole_book`.** One question ([Q25C]) asks for it, it needs the limit schedule,
   and Concentration Limits are not established by the client. It stays unexecutable
   and keeps refusing, and §8.1 is what makes that safe.
-- **Output composition.** The governed pipeline route's value-free, measure-blind
-  narration is real and is the P1 in the review. Bringing forecast inside the
-  perimeter without fixing composition would produce more governed answers that do
-  not state their numbers. **Sequence P1 immediately after this, not later.**
+- **Output composition — OUT OF SCOPE BUT A HARD DEPENDENCY, not a preference.**
+  Re-measured on the production bank after the review:
+
+        answers carrying a "Calculated:" provenance line
+          governed (NEW)   0 of 41
+          legacy          54 of 94
+        answers stating an as-at date anywhere in the answer
+          governed (NEW)   0 of 41
+          legacy          15 of 94
+
+  The governed path — the one built to be provable — publishes LESS provenance to
+  the reader than the legacy path it replaces. The proof exists in the receipt
+  (`period_from`, `period_to`, `snapshot_references`, `calculation_owner`) and never
+  reaches the sentence. That is why **D1 cannot be implemented without P1**: "state
+  both input vintages on the face of the answer" is unsatisfiable on a path where no
+  answer states any date. P0 and P1 ship together.
 - **Interpretation.** The unmatched-wording defect is P2 and independent.
 - **Latency.** 38s median is not addressed here and is not made worse by it.
 
