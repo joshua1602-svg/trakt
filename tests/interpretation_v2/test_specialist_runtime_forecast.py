@@ -125,10 +125,25 @@ def test_the_ceiling_context_is_the_funded_routes_whole_book_context():
 # the perimeter
 # --------------------------------------------------------------------------- #
 
-def test_the_recorded_milestone_and_run_rate_plans_are_eligible():
+def test_the_milestone_and_balance_plans_are_eligible():
     for plan in (_plan(), _plan(population={"base": "funded"}),
-                 _plan(**_RUN_RATE), _plan(**_BALANCE), _plan(**_PROJECTION)):
+                 _plan(**_BALANCE)):
         assert forecast_rt.check_eligibility(plan) == (True, "", "")
+
+
+def test_the_shapes_production_used_for_several_questions_are_held():
+    """The owner computes them; the plan cannot yet say which figure it means."""
+    for plan in (_plan(**_RUN_RATE), _plan(**_PROJECTION)):
+        ok, why, detail = forecast_rt.check_eligibility(plan)
+        assert (ok, why) == (False, forecast_rt.AMBIGUOUS_READING)
+        assert "vocabulary defines the measure" in detail
+
+
+def test_a_grain_asks_for_a_series_and_is_refused():
+    """[76], [77], [127]: 'by month' / 'over the next twelve months'."""
+    plan = _plan(**_BALANCE)
+    plan["period"]["grain"] = "monthly"
+    assert forecast_rt.check_eligibility(plan)[1] == forecast_rt.PERIOD_NOT_SUPPORTED
 
 
 _BALANCE = {"operation": "point_in_time", "target": None,
@@ -149,8 +164,8 @@ _PROJECTION = {"operation": "forecast_projection", "target": None,
      forecast_rt.SCOPE_NOT_SUPPORTED),
     ({"target": {"concept": "forecast_funded_balance", "comparator": "gt",
                  "value": 20_000_000}}, forecast_rt.TARGET_NOT_SUPPORTED),
-    (dict(_RUN_RATE, time={"form": "range", "grain": "weekly",
-                           "periods_back": 8}), forecast_rt.PERIOD_NOT_SUPPORTED),
+    (dict(_BALANCE, time={"form": "range", "grain": "weekly",
+                          "periods_back": 8}), forecast_rt.PERIOD_NOT_SUPPORTED),
 ])
 def test_what_2a_does_not_serve_is_refused_by_name(over, reason):
     result = DeterministicCompiler(CompilerContext()).compile(

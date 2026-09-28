@@ -793,3 +793,48 @@ One shared change: `requested_semantics` now transcribes a capability-owned
 filter or axis by its concept when it has no canonical field (`origin_stage`,
 `destination_stage`), so the coverage owner proves the stage axis by name rather
 than matching an empty field.
+
+### 14.6 The production run's own plans, replayed — and what that tightened
+
+The canary had recorded every plan of the owner's 2026-09-28 production run in
+its evidence sink. `qb-plan-readback.yml` (read only) pulled all 135 back; each
+record's serving decision matches `qb_full.txt` exactly, and today's compiler
+reproduces 132 of the 135 plans byte for byte — the other three differ only by
+rule 6's base rewrite. So the perimeter can be measured against the real plans
+offline, and `tests/interpretation_v2/test_production_bank_perimeter.py` does.
+
+**What it showed.** The first cut of the forecast perimeter would have admitted
+19 questions that legacy served. Eight of those plans do not mean what their
+shape says: the model put "expected completions by month", "the extrapolation
+curve", "the base scenario", "how much of the forecast comes from the funded
+book", "the forecast's method" and "the KFI-to-completion conversion rate" into
+the same two shapes as the balance and the run-rate. The runtime answers the
+shape, so those eight would have been served a different figure — WRONG answers
+on the governed path, which §10 makes a hard gate.
+
+**What changed.**
+
+- A plan with a period grain is refused: "by month" asks for a figure per
+  period, and every forecast figure served is a point. Checked first, because it
+  must still refuse after the hold below lifts.
+- `forecast_projection / forecast_funded_balance` and `point_in_time /
+  forecast_completion_rate` are HELD (`AMBIGUOUS_READING`). The owner computes
+  them; a plan cannot yet be trusted to mean them, because the vocabulary names
+  these measures and defines none of them. Three correct readings are held with
+  the misreads ([87], [112], [113]) and legacy answers them correctly meanwhile.
+
+**Admitted, pinned by bank number:** [80], [81] (pipeline at named months, D7),
+[85] (forecast funded balance, D6), [107]–[111] (milestones). Eight questions,
+each a reading whose plan cannot mean anything else.
+
+**What lifts the hold** is a P2 item and model-facing: give the forecast
+measures definitions the model can separate them by (the balance is one point
+from the latest extract; the run-rate is £ per month, not a conversion rate; a
+curve is a series), then re-run and re-read. The replay test then says, by bank
+number, which readings separated.
+
+**Also read from the plans, for Change 3's remaining steps:** [82] is a
+`portfolio_summary` level comparison over the pipeline; [83] a
+`generic_analysis` metric delta over the pipeline for named months; [84] a
+stage movement transition by origin and destination (the full matrix); [74],
+[75], [79] never became plans (AMBIGUOUS_PERIOD: "over time" with no grain).

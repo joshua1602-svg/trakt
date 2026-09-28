@@ -138,6 +138,9 @@ MEASURE_NOT_SUPPORTED = "MEASURE_NOT_SUPPORTED"
 OPERATION_NOT_SUPPORTED = "OPERATION_NOT_SUPPORTED"
 PERIOD_NOT_SUPPORTED = "PERIOD_NOT_SUPPORTED"
 TARGET_NOT_SUPPORTED = "TARGET_NOT_SUPPORTED"
+#: The owner computes this shape, but the production bank shows the model
+#: using it for questions that want different figures. Held, not served.
+AMBIGUOUS_READING = "AMBIGUOUS_READING"
 INPUTS_UNAVAILABLE = "INPUTS_UNAVAILABLE"
 FORECAST_UNAVAILABLE = "FORECAST_UNAVAILABLE"
 EXECUTION_FAILED = "EXECUTION_FAILED"
@@ -172,6 +175,29 @@ PERIOD_FORMS: Mapping[str, FrozenSet[str]] = {
 #: The owner decision that defines the forecast funded balance, named on every
 #: refusal and receipt that depends on it.
 BALANCE_DECISION = "D6"
+
+#: SHAPES THE OWNER COMPUTES BUT A PLAN CANNOT YET BE TRUSTED TO MEAN.
+#:
+#: Measured, not supposed: the plans the canary recorded for the owner's
+#: production bank (2026-09-28, read back by `qb_plan_readback`) put several
+#: different questions into each of these shapes, and the runtime can only
+#: answer the shape. The vocabulary gives the model a name and no definition for
+#: these measures — "Owned by the forecast capability" — so it has nothing to
+#: separate them by. Serving the shape would answer some of those questions with
+#: a different figure than they asked for, which the design's hard gate (WRONG
+#: answers must stay at zero) forbids. They are held until the vocabulary
+#: defines the measures (P2) and a live run shows the readings separate; legacy
+#: serves them meanwhile, as it did.
+HELD_READINGS: Mapping[Tuple[str, str], str] = {
+    ("forecast_projection", "forecast_funded_balance"): (
+        "this shape arrived for the expected funded balance [87], but also for "
+        "the extrapolation curve [114], the base scenario [117] and the funded "
+        "share of the forecast [94] — four different figures"),
+    ("point_in_time", "forecast_completion_rate"): (
+        "this shape arrived for the completion run-rate [112, 113], but also "
+        "for a KFI-to-completion conversion rate [121] and for the forecast's "
+        "method [98]"),
+}
 
 #: A milestone's threshold: what the owner's rule answers, and nothing wider.
 #: `milestone_answer` decides "already reached" as `current >= threshold`, so a
@@ -293,7 +319,20 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 f"operation={operation!r} with measure {measures[0]!r} has no "
                 f"forecast owner here (served: {served})")
 
-    form = str((body.get("period") or {}).get("form") or "")
+    # THE GRAIN FIRST: it is the durable refusal. "By month" asks for a figure
+    # per period whatever the measure turns out to mean, so it must still
+    # refuse after the hold below is lifted.
+    period = body.get("period") or {}
+    if period.get("grain"):
+        return (False, PERIOD_NOT_SUPPORTED,
+                f"a {period.get('grain')} grain asks for a figure per period; "
+                f"the {kind} figure is a single point")
+    held = HELD_READINGS.get((operation, measures[0]))
+    if held:
+        return (False, AMBIGUOUS_READING,
+                f"{operation}/{measures[0]} is held until the vocabulary defines "
+                f"the measure: {held}")
+    form = str(period.get("form") or "")
     if form not in PERIOD_FORMS[kind]:
         return (False, PERIOD_NOT_SUPPORTED,
                 f"period.form={form!r} is not how the {kind} figure is stated "
