@@ -1,0 +1,1230 @@
+{
+ "what_this_is": "The frozen 135-question MI acceptance bank, materialised as JSON so the live collector can read it with the standard library alone. Every string is copied from the YAML; nothing here is authored, reworded or reordered.",
+ "bank_path": "mi_agent/interpretation_v2/banks/interpretation_bank_135.yaml",
+ "bank_sha256": "1f71e8444dc4bc149bc8028527c5fe077ce49690a95d27d2a2273a20813fdab2",
+ "canonical_count": 45,
+ "question_count": 135,
+ "sources": [
+  "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+  "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+  "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+  "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml"
+ ],
+ "questions": [
+  {
+   "question_id": "Q01A",
+   "canonical_id": "Q01",
+   "variant": "A",
+   "original_category": "multi_filter_facts",
+   "shape": "two numeric filters / COUNT",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How many loans are to borrowers over 55 with LTV above 50%?"
+  },
+  {
+   "question_id": "Q01B",
+   "canonical_id": "Q01",
+   "variant": "B",
+   "original_category": "multi_filter_facts",
+   "shape": "two numeric filters / COUNT",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How many loans have a borrower older than 55 and an LTV greater than 50%?"
+  },
+  {
+   "question_id": "Q01C",
+   "canonical_id": "Q01",
+   "variant": "C",
+   "original_category": "multi_filter_facts",
+   "shape": "two numeric filters / COUNT",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Count the loans where borrower age is above 55 and current LTV is over 50%."
+  },
+  {
+   "question_id": "Q02A",
+   "canonical_id": "Q02",
+   "variant": "A",
+   "original_category": "multi_filter_facts",
+   "shape": "two numeric filters / BALANCE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "What is the balance of loans to borrowers over 75 with LTV above 40%?"
+  },
+  {
+   "question_id": "Q02B",
+   "canonical_id": "Q02",
+   "variant": "B",
+   "original_category": "multi_filter_facts",
+   "shape": "two numeric filters / BALANCE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How much outstanding balance do we have where borrower age exceeds 75 and LTV is over 40%?"
+  },
+  {
+   "question_id": "Q02C",
+   "canonical_id": "Q02",
+   "variant": "C",
+   "original_category": "multi_filter_facts",
+   "shape": "two numeric filters / BALANCE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Show the total balance for loans with borrowers older than 75 and current LTV greater than 40%."
+  },
+  {
+   "question_id": "Q03A",
+   "canonical_id": "Q03",
+   "variant": "A",
+   "original_category": "multi_filter_facts",
+   "shape": "categorical + numeric filter",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How many drawdown loans have LTV above 50%?"
+  },
+  {
+   "question_id": "Q03B",
+   "canonical_id": "Q03",
+   "variant": "B",
+   "original_category": "multi_filter_facts",
+   "shape": "categorical + numeric filter",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Of the drawdown loans, how many are over 50% LTV?"
+  },
+  {
+   "question_id": "Q03C",
+   "canonical_id": "Q03",
+   "variant": "C",
+   "original_category": "multi_filter_facts",
+   "shape": "categorical + numeric filter",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Count drawdown cases where current LTV exceeds 50%."
+  },
+  {
+   "question_id": "Q04A",
+   "canonical_id": "Q04",
+   "variant": "A",
+   "original_category": "multi_filter_facts",
+   "shape": "scope + geography + numeric filter",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "What is the balance of Direct-book loans in London to borrowers over 75?"
+  },
+  {
+   "question_id": "Q04B",
+   "canonical_id": "Q04",
+   "variant": "B",
+   "original_category": "multi_filter_facts",
+   "shape": "scope + geography + numeric filter",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How much balance is in the Direct portfolio for London loans where the borrower is older than 75?"
+  },
+  {
+   "question_id": "Q04C",
+   "canonical_id": "Q04",
+   "variant": "C",
+   "original_category": "multi_filter_facts",
+   "shape": "scope + geography + numeric filter",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Show total outstanding balance for London loans in the Direct book with borrower age above 75."
+  },
+  {
+   "question_id": "Q05A",
+   "canonical_id": "Q05",
+   "variant": "A",
+   "original_category": "multi_filter_facts",
+   "shape": "aggregation + category + scope",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "What is the weighted-average LTV of lump sum loans in the Direct book?"
+  },
+  {
+   "question_id": "Q05B",
+   "canonical_id": "Q05",
+   "variant": "B",
+   "original_category": "multi_filter_facts",
+   "shape": "aggregation + category + scope",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "For Direct-book lump sum loans, what is the weighted average current LTV?"
+  },
+  {
+   "question_id": "Q05C",
+   "canonical_id": "Q05",
+   "variant": "C",
+   "original_category": "multi_filter_facts",
+   "shape": "aggregation + category + scope",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me WA LTV for lump sum lending in the Direct portfolio."
+  },
+  {
+   "question_id": "Q06A",
+   "canonical_id": "Q06",
+   "variant": "A",
+   "original_category": "synthesis",
+   "shape": "portfolio synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Summarise the portfolio."
+  },
+  {
+   "question_id": "Q06B",
+   "canonical_id": "Q06",
+   "variant": "B",
+   "original_category": "synthesis",
+   "shape": "portfolio synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me a management summary of the current book."
+  },
+  {
+   "question_id": "Q06C",
+   "canonical_id": "Q06",
+   "variant": "C",
+   "original_category": "synthesis",
+   "shape": "portfolio synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me a concise overview of the funded portfolio."
+  },
+  {
+   "question_id": "Q07A",
+   "canonical_id": "Q07",
+   "variant": "A",
+   "original_category": "synthesis",
+   "shape": "portfolio comparison",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Compare the Direct and Acquired books."
+  },
+  {
+   "question_id": "Q07B",
+   "canonical_id": "Q07",
+   "variant": "B",
+   "original_category": "synthesis",
+   "shape": "portfolio comparison",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How do the Direct and Acquired portfolios differ?"
+  },
+  {
+   "question_id": "Q07C",
+   "canonical_id": "Q07",
+   "variant": "C",
+   "original_category": "synthesis",
+   "shape": "portfolio comparison",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me a side-by-side comparison of Direct versus Acquired."
+  },
+  {
+   "question_id": "Q08A",
+   "canonical_id": "Q08",
+   "variant": "A",
+   "original_category": "synthesis",
+   "shape": "concentration synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Where are our largest concentrations today?"
+  },
+  {
+   "question_id": "Q08B",
+   "canonical_id": "Q08",
+   "variant": "B",
+   "original_category": "synthesis",
+   "shape": "concentration synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "What are the biggest concentration exposures in the book?"
+  },
+  {
+   "question_id": "Q08C",
+   "canonical_id": "Q08",
+   "variant": "C",
+   "original_category": "synthesis",
+   "shape": "concentration synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Summarise the main current portfolio concentrations."
+  },
+  {
+   "question_id": "Q09A",
+   "canonical_id": "Q09",
+   "variant": "A",
+   "original_category": "synthesis",
+   "shape": "current limit position",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Are any concentration limits currently breached or close to breach?"
+  },
+  {
+   "question_id": "Q09B",
+   "canonical_id": "Q09",
+   "variant": "B",
+   "original_category": "synthesis",
+   "shape": "current limit position",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Which of our concentration tests are most at risk today?"
+  },
+  {
+   "question_id": "Q09C",
+   "canonical_id": "Q09",
+   "variant": "C",
+   "original_category": "synthesis",
+   "shape": "current limit position",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Summarise our current position against the concentration limits."
+  },
+  {
+   "question_id": "Q10A",
+   "canonical_id": "Q10",
+   "variant": "A",
+   "original_category": "synthesis",
+   "shape": "pipeline synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Summarise the current pipeline."
+  },
+  {
+   "question_id": "Q10B",
+   "canonical_id": "Q10",
+   "variant": "B",
+   "original_category": "synthesis",
+   "shape": "pipeline synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me an overview of the pipeline by size and stage."
+  },
+  {
+   "question_id": "Q10C",
+   "canonical_id": "Q10",
+   "variant": "C",
+   "original_category": "synthesis",
+   "shape": "pipeline synthesis",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "What does the current pipeline look like?"
+  },
+  {
+   "question_id": "Q11A",
+   "canonical_id": "Q11",
+   "variant": "A",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional TABLE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Show a table of balance by LTV bucket and ticket-size bucket."
+  },
+  {
+   "question_id": "Q11B",
+   "canonical_id": "Q11",
+   "variant": "B",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional TABLE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Cross-tab the outstanding balance by LTV band and ticket-size band."
+  },
+  {
+   "question_id": "Q11C",
+   "canonical_id": "Q11",
+   "variant": "C",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional TABLE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Break the balance down by both LTV bucket and ticket-size bucket."
+  },
+  {
+   "question_id": "Q12A",
+   "canonical_id": "Q12",
+   "variant": "A",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional CHART",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Chart the balance by LTV bucket and borrower-age bucket."
+  },
+  {
+   "question_id": "Q12B",
+   "canonical_id": "Q12",
+   "variant": "B",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional CHART",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Show me balance split by both LTV band and age band."
+  },
+  {
+   "question_id": "Q12C",
+   "canonical_id": "Q12",
+   "variant": "C",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional CHART",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Plot portfolio balance across LTV buckets and borrower-age buckets."
+  },
+  {
+   "question_id": "Q13A",
+   "canonical_id": "Q13",
+   "variant": "A",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional TABLE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Show a table of balance by LTV bucket and interest-rate bucket."
+  },
+  {
+   "question_id": "Q13B",
+   "canonical_id": "Q13",
+   "variant": "B",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional TABLE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Cross-tab balance by LTV band and interest-rate band."
+  },
+  {
+   "question_id": "Q13C",
+   "canonical_id": "Q13",
+   "variant": "C",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional TABLE",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Break down outstanding balance by both LTV bucket and rate bucket."
+  },
+  {
+   "question_id": "Q14A",
+   "canonical_id": "Q14",
+   "variant": "A",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional categorical",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Show loan count by region and product type."
+  },
+  {
+   "question_id": "Q14B",
+   "canonical_id": "Q14",
+   "variant": "B",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional categorical",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me a table of loan numbers split by region and loan type."
+  },
+  {
+   "question_id": "Q14C",
+   "canonical_id": "Q14",
+   "variant": "C",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional categorical",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Break the number of loans down by both geographic region and product type."
+  },
+  {
+   "question_id": "Q15A",
+   "canonical_id": "Q15",
+   "variant": "A",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional, single source portfolio",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "For the Direct book, show balance by broker and product type."
+  },
+  {
+   "question_id": "Q15B",
+   "canonical_id": "Q15",
+   "variant": "B",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional, single source portfolio",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Break Direct-book balance down by both broker channel and loan type."
+  },
+  {
+   "question_id": "Q15C",
+   "canonical_id": "Q15",
+   "variant": "C",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "two-dimensional, single source portfolio",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me a broker-by-product balance table for the Direct portfolio."
+  },
+  {
+   "question_id": "Q16A",
+   "canonical_id": "Q16",
+   "variant": "A",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "filter + two dimensions",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "For drawdown loans, show balance by region and LTV bucket."
+  },
+  {
+   "question_id": "Q16B",
+   "canonical_id": "Q16",
+   "variant": "B",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "filter + two dimensions",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Break drawdown balance down by both geography and LTV band."
+  },
+  {
+   "question_id": "Q16C",
+   "canonical_id": "Q16",
+   "variant": "C",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "filter + two dimensions",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Show me the regional balance by LTV bucket for drawdown loans."
+  },
+  {
+   "question_id": "Q17A",
+   "canonical_id": "Q17",
+   "variant": "A",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "true three-dimensional output",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "For the Direct book, show balance by LTV bucket, ticket-size bucket and borrower-age bucket."
+  },
+  {
+   "question_id": "Q17B",
+   "canonical_id": "Q17",
+   "variant": "B",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "true three-dimensional output",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me a table of Direct-book balance split by LTV band, ticket-size band and age band."
+  },
+  {
+   "question_id": "Q17C",
+   "canonical_id": "Q17",
+   "variant": "C",
+   "original_category": "multi_dimensional_artefact",
+   "shape": "true three-dimensional output",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Break Direct portfolio balance down across LTV, ticket size and borrower age."
+  },
+  {
+   "question_id": "Q18A",
+   "canonical_id": "Q18",
+   "variant": "A",
+   "original_category": "movement",
+   "shape": "whole-book movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How did the book change in the last month?"
+  },
+  {
+   "question_id": "Q18B",
+   "canonical_id": "Q18",
+   "variant": "B",
+   "original_category": "movement",
+   "shape": "whole-book movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "What changed in the portfolio since last month?"
+  },
+  {
+   "question_id": "Q18C",
+   "canonical_id": "Q18",
+   "variant": "C",
+   "original_category": "movement",
+   "shape": "whole-book movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Give me a summary of how the funded book moved over the last month."
+  },
+  {
+   "question_id": "Q19A",
+   "canonical_id": "Q19",
+   "variant": "A",
+   "original_category": "movement",
+   "shape": "scoped movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How did the Direct book change last month?"
+  },
+  {
+   "question_id": "Q19B",
+   "canonical_id": "Q19",
+   "variant": "B",
+   "original_category": "movement",
+   "shape": "scoped movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "What changed in the Direct portfolio since last month?"
+  },
+  {
+   "question_id": "Q19C",
+   "canonical_id": "Q19",
+   "variant": "C",
+   "original_category": "movement",
+   "shape": "scoped movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Summarise the month-on-month movement in the Direct book."
+  },
+  {
+   "question_id": "Q20A",
+   "canonical_id": "Q20",
+   "variant": "A",
+   "original_category": "movement",
+   "shape": "categorical filtered movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "How did drawdown loans change last month?"
+  },
+  {
+   "question_id": "Q20B",
+   "canonical_id": "Q20",
+   "variant": "B",
+   "original_category": "movement",
+   "shape": "categorical filtered movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "What changed in the drawdown book since last month?"
+  },
+  {
+   "question_id": "Q20C",
+   "canonical_id": "Q20",
+   "variant": "C",
+   "original_category": "movement",
+   "shape": "categorical filtered movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Summarise the month-on-month movement for drawdown loans."
+  },
+  {
+   "question_id": "Q21A",
+   "canonical_id": "Q21",
+   "variant": "A",
+   "original_category": "movement",
+   "shape": "numeric-filtered ranked movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Which region added the most balance last month for loans with LTV above 50%?"
+  },
+  {
+   "question_id": "Q21B",
+   "canonical_id": "Q21",
+   "variant": "B",
+   "original_category": "movement",
+   "shape": "numeric-filtered ranked movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "For loans over 50% LTV, which region contributed the most balance growth since last month?"
+  },
+  {
+   "question_id": "Q21C",
+   "canonical_id": "Q21",
+   "variant": "C",
+   "original_category": "movement",
+   "shape": "numeric-filtered ranked movement",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Among loans with current LTV above 50%, where did balance increase the most over the last month?"
+  },
+  {
+   "question_id": "Q22A",
+   "canonical_id": "Q22",
+   "variant": "A",
+   "original_category": "movement",
+   "shape": "movement attribution",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Which source portfolio contributed most to balance growth last month?"
+  },
+  {
+   "question_id": "Q22B",
+   "canonical_id": "Q22",
+   "variant": "B",
+   "original_category": "movement",
+   "shape": "movement attribution",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Did Direct or Acquired add more balance during the last month?"
+  },
+  {
+   "question_id": "Q22C",
+   "canonical_id": "Q22",
+   "variant": "C",
+   "original_category": "movement",
+   "shape": "movement attribution",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Which of the Direct and Acquired books drove more of the month-on-month balance increase?"
+  },
+  {
+   "question_id": "Q23A",
+   "canonical_id": "Q23",
+   "variant": "A",
+   "original_category": "strategic",
+   "shape": "milestone already reached / threshold semantics",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "When will we reach £100m of funded loans?"
+  },
+  {
+   "question_id": "Q23B",
+   "canonical_id": "Q23",
+   "variant": "B",
+   "original_category": "strategic",
+   "shape": "milestone already reached / threshold semantics",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "At the current trajectory, when do we get to £100 million?"
+  },
+  {
+   "question_id": "Q23C",
+   "canonical_id": "Q23",
+   "variant": "C",
+   "original_category": "strategic",
+   "shape": "milestone already reached / threshold semantics",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "When does the funded book reach the £100m milestone?"
+  },
+  {
+   "question_id": "Q24A",
+   "canonical_id": "Q24",
+   "variant": "A",
+   "original_category": "strategic",
+   "shape": "forward milestone",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "At the current run rate, when will we reach £250m?"
+  },
+  {
+   "question_id": "Q24B",
+   "canonical_id": "Q24",
+   "variant": "B",
+   "original_category": "strategic",
+   "shape": "forward milestone",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "When are we expected to get to £250 million of funded loans?"
+  },
+  {
+   "question_id": "Q24C",
+   "canonical_id": "Q24",
+   "variant": "C",
+   "original_category": "strategic",
+   "shape": "forward milestone",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Based on the current run rate, when does the book reach £250m?"
+  },
+  {
+   "question_id": "Q25A",
+   "canonical_id": "Q25",
+   "variant": "A",
+   "original_category": "strategic",
+   "shape": "forward concentration-risk assessment",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Do we expect to breach any concentration tests?"
+  },
+  {
+   "question_id": "Q25B",
+   "canonical_id": "Q25",
+   "variant": "B",
+   "original_category": "strategic",
+   "shape": "forward concentration-risk assessment",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Are any concentration limits likely to be breached as the book grows?"
+  },
+  {
+   "question_id": "Q25C",
+   "canonical_id": "Q25",
+   "variant": "C",
+   "original_category": "strategic",
+   "shape": "forward concentration-risk assessment",
+   "origin_bank": "migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml",
+   "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?"
+  },
+  {
+   "question_id": "SM01A",
+   "canonical_id": "SM01",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many cases moved from KFI to Application?"
+  },
+  {
+   "question_id": "SM01B",
+   "canonical_id": "SM01",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many KFI cases progressed to Application?"
+  },
+  {
+   "question_id": "SM01C",
+   "canonical_id": "SM01",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many cases went from KFI into Application?"
+  },
+  {
+   "question_id": "SM02A",
+   "canonical_id": "SM02",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How much balance moved from Application to Offer?"
+  },
+  {
+   "question_id": "SM02B",
+   "canonical_id": "SM02",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "What value progressed from Application to Offer?"
+  },
+  {
+   "question_id": "SM02C",
+   "canonical_id": "SM02",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How much pipeline moved from Application into Offer?"
+  },
+  {
+   "question_id": "SM03A",
+   "canonical_id": "SM03",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many cases moved from Offer to Completion?"
+  },
+  {
+   "question_id": "SM03B",
+   "canonical_id": "SM03",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many cases progressed from Offer into Completion?"
+  },
+  {
+   "question_id": "SM03C",
+   "canonical_id": "SM03",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "What number of offers reached Completion?"
+  },
+  {
+   "question_id": "SM04A",
+   "canonical_id": "SM04",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How much balance moved from Offer to Completion?"
+  },
+  {
+   "question_id": "SM04B",
+   "canonical_id": "SM04",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How much Offer-stage pipeline reached Completion?"
+  },
+  {
+   "question_id": "SM04C",
+   "canonical_id": "SM04",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "transition",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "What amount progressed from Offer to Completion?"
+  },
+  {
+   "question_id": "SM05A",
+   "canonical_id": "SM05",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "new_arrival",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many new cases entered KFI?"
+  },
+  {
+   "question_id": "SM05B",
+   "canonical_id": "SM05",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "new_arrival",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many new pipeline cases arrived in KFI?"
+  },
+  {
+   "question_id": "SM05C",
+   "canonical_id": "SM05",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "new_arrival",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "What number of cases were new arrivals into KFI?"
+  },
+  {
+   "question_id": "SM06A",
+   "canonical_id": "SM06",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "stayer",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many cases stayed in Application?"
+  },
+  {
+   "question_id": "SM06B",
+   "canonical_id": "SM06",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "stayer",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How many Application cases remained in Application?"
+  },
+  {
+   "question_id": "SM06C",
+   "canonical_id": "SM06",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "stayer",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "What number of cases stayed at Application stage?"
+  },
+  {
+   "question_id": "SM07A",
+   "canonical_id": "SM07",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "stayer_amount_change",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "What was the amount change on cases that stayed in Application?"
+  },
+  {
+   "question_id": "SM07B",
+   "canonical_id": "SM07",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "stayer_amount_change",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "How much did Application stayers change in value?"
+  },
+  {
+   "question_id": "SM07C",
+   "canonical_id": "SM07",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "stayer_amount_change",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "What was the balance amendment on cases remaining in Application?"
+  },
+  {
+   "question_id": "SM08A",
+   "canonical_id": "SM08",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "departure",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "Where did cases leaving Offer go?"
+  },
+  {
+   "question_id": "SM08B",
+   "canonical_id": "SM08",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "departure",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "Break down departures from Offer by destination."
+  },
+  {
+   "question_id": "SM08C",
+   "canonical_id": "SM08",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "departure",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "What happened to cases that left Offer?"
+  },
+  {
+   "question_id": "SM09A",
+   "canonical_id": "SM09",
+   "variant": "A",
+   "original_category": "pipeline_stage_movement",
+   "shape": "reconciliation",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "Reconcile Application stage this period."
+  },
+  {
+   "question_id": "SM09B",
+   "canonical_id": "SM09",
+   "variant": "B",
+   "original_category": "pipeline_stage_movement",
+   "shape": "reconciliation",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "Show opening, arrivals, departures and closing for Application."
+  },
+  {
+   "question_id": "SM09C",
+   "canonical_id": "SM09",
+   "variant": "C",
+   "original_category": "pipeline_stage_movement",
+   "shape": "reconciliation",
+   "origin_bank": "tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml",
+   "question": "Reconcile the Application stage from opening to closing."
+  },
+  {
+   "question_id": "Q1.1",
+   "canonical_id": "NL1",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "How has the profile of new originations changed in the last few months?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "How has the profile of our new lending changed over the last few months?"
+  },
+  {
+   "question_id": "Q1.2",
+   "canonical_id": "NL1",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "How has the profile of new originations changed in the last few months?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Are we originating different types of loans now compared with a few months ago?"
+  },
+  {
+   "question_id": "Q1.3",
+   "canonical_id": "NL1",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "How has the profile of new originations changed in the last few months?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "How does recent lending compare with what we were originating earlier in the year?"
+  },
+  {
+   "question_id": "Q2.1",
+   "canonical_id": "NL2",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "When are we likely to reach £100m of loans?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "When do we expect the funded book to reach £100m?"
+  },
+  {
+   "question_id": "Q2.2",
+   "canonical_id": "NL2",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "When are we likely to reach £100m of loans?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "At the current run rate, when should we get to £100m of loans?"
+  },
+  {
+   "question_id": "Q2.3",
+   "canonical_id": "NL2",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "When are we likely to reach £100m of loans?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "When are we forecast to cross £100m of funded balances?"
+  },
+  {
+   "question_id": "Q3.1",
+   "canonical_id": "NL3",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "How much do we currently have at offer and how much of it is likely to complete?"
+  },
+  {
+   "question_id": "Q3.2",
+   "canonical_id": "NL3",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "What's the value of outstanding offers, and when do we expect them to fund?"
+  },
+  {
+   "question_id": "Q3.3",
+   "canonical_id": "NL3",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Of the current offer pipeline, how much should convert and over what timeframe?"
+  },
+  {
+   "question_id": "Q4.1",
+   "canonical_id": "NL4",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "What is the current completion run rate?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "What completion rate are we currently running at?"
+  },
+  {
+   "question_id": "Q4.2",
+   "canonical_id": "NL4",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "What is the current completion run rate?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "How many loans are we completing at the moment?"
+  },
+  {
+   "question_id": "Q4.3",
+   "canonical_id": "NL4",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "What is the current completion run rate?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "What's our recent run rate for completions?"
+  },
+  {
+   "question_id": "Q5.1",
+   "canonical_id": "NL5",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "Are we likely to breach any concentration limits in the next three months?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Are any of our concentration limits likely to breach over the next three months?"
+  },
+  {
+   "question_id": "Q5.2",
+   "canonical_id": "NL5",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "Are we likely to breach any concentration limits in the next three months?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Do we expect to hit any concentration limits in the next quarter?"
+  },
+  {
+   "question_id": "Q5.3",
+   "canonical_id": "NL5",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "Are we likely to breach any concentration limits in the next three months?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Which concentration limits are at risk of being breached over the next three months?"
+  },
+  {
+   "question_id": "Q6.1",
+   "canonical_id": "NL6",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "Which limits are closest to breaching?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Which concentration limits have the least headroom?"
+  },
+  {
+   "question_id": "Q6.2",
+   "canonical_id": "NL6",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "Which limits are closest to breaching?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Where are we closest to our limits?"
+  },
+  {
+   "question_id": "Q6.3",
+   "canonical_id": "NL6",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "Which limits are closest to breaching?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Which of our limits are currently most at risk?"
+  },
+  {
+   "question_id": "Q7.1",
+   "canonical_id": "NL7",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "How does the risk profile of older vintages compare with the front book?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "How does the front book compare with our older lending from a risk perspective?"
+  },
+  {
+   "question_id": "Q7.2",
+   "canonical_id": "NL7",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "How does the risk profile of older vintages compare with the front book?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Are older loans riskier than the loans we've originated recently?"
+  },
+  {
+   "question_id": "Q7.3",
+   "canonical_id": "NL7",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "How does the risk profile of older vintages compare with the front book?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "How different is the risk profile of recent originations versus the back book?"
+  },
+  {
+   "question_id": "Q9.1",
+   "canonical_id": "NL9",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "Based on the current pipeline, what is the forecast funded balance?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "What do we expect the funded book to grow to based on the current pipeline?"
+  },
+  {
+   "question_id": "Q9.2",
+   "canonical_id": "NL9",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "Based on the current pipeline, what is the forecast funded balance?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Where is the funded balance forecast to get to from today's pipeline?"
+  },
+  {
+   "question_id": "Q9.3",
+   "canonical_id": "NL9",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "Based on the current pipeline, what is the forecast funded balance?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "If the current pipeline converts as expected, what will our funded balance be?"
+  },
+  {
+   "question_id": "Q8.provenance.1",
+   "canonical_id": "NL8",
+   "variant": "A",
+   "original_category": "analytical_intent",
+   "shape": "How has the balance from dimension X changed relative to dimension Y?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "How has lending to direct changed compared with acquired?"
+  },
+  {
+   "question_id": "Q8.provenance.2",
+   "canonical_id": "NL8",
+   "variant": "B",
+   "original_category": "analytical_intent",
+   "shape": "How has the balance from dimension X changed relative to dimension Y?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "How has the balance of direct loans moved relative to acquired loans?"
+  },
+  {
+   "question_id": "Q8.provenance.3",
+   "canonical_id": "NL8",
+   "variant": "C",
+   "original_category": "analytical_intent",
+   "shape": "How has the balance from dimension X changed relative to dimension Y?",
+   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+   "question": "Are direct and acquired balances developing differently over time?"
+  },
+  {
+   "question_id": "C03",
+   "canonical_id": "BB01",
+   "variant": "A",
+   "original_category": "borrowing_base",
+   "shape": "borrowing-base headroom",
+   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+   "question": "What is the borrowing-base headroom?"
+  },
+  {
+   "question_id": "C04",
+   "canonical_id": "BB01",
+   "variant": "B",
+   "original_category": "borrowing_base",
+   "shape": "borrowing-base headroom",
+   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+   "question": "How much headroom do we have under the borrowing base?"
+  },
+  {
+   "question_id": "S05",
+   "canonical_id": "BB01",
+   "variant": "C",
+   "original_category": "borrowing_base",
+   "shape": "borrowing-base headroom",
+   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+   "question": "What is the headroom?"
+  },
+  {
+   "question_id": "B01",
+   "canonical_id": "BB02",
+   "variant": "A",
+   "original_category": "borrowing_base",
+   "shape": "borrowing-base bridge",
+   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+   "question": "Show me the borrowing-base bridge."
+  },
+  {
+   "question_id": "B03",
+   "canonical_id": "BB02",
+   "variant": "B",
+   "original_category": "borrowing_base",
+   "shape": "borrowing-base bridge",
+   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+   "question": "Why did the borrowing base change?"
+  },
+  {
+   "question_id": "B04",
+   "canonical_id": "BB02",
+   "variant": "C",
+   "original_category": "borrowing_base",
+   "shape": "borrowing-base bridge",
+   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+   "question": "Show the borrowing-base movement as a waterfall."
+  }
+ ]
+}

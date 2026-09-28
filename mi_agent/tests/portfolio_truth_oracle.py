@@ -33,8 +33,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-__all__ = ["canonical_book", "mask_for", "total", "weighted_average",
-           "grouped", "row_count"]
+__all__ = ["canonical_book", "canonical_history", "mask_for", "total",
+           "weighted_average", "grouped", "row_count"]
 
 BALANCE = "current_outstanding_balance"
 LTV = "current_loan_to_value"
@@ -72,6 +72,39 @@ def canonical_book(n: int = 400, seed: int = 20260905) -> pd.DataFrame:
         age, bins=[0, 70, 80, 90, 200],
         labels=["<70", "70-79", "80-89", "90+"]).astype(str)
     return frame
+
+
+#: Month ends, written out. A history fixture must not depend on a calendar
+#: library to say what the last day of February is, because the thing under test
+#: is snapshot SELECTION and a date helper that disagreed would be indis-
+#: tinguishable from a selection defect.
+_MONTH_END = {1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30,
+              7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31}
+
+
+def canonical_history(periods: int = 8, *, start_year: int = 2025,
+                      start_month: int = 11, n0: int = 260,
+                      growth: int = 18, seed: int = 20260905
+                      ) -> List[Tuple[str, pd.DataFrame]]:
+    """A deterministic monthly history: ``[(reporting_date, frame), …]``.
+
+    Ascending, one frame per reporting month, each a `canonical_book` of its own
+    with its own size and its own seed — so a series over it is not a constant
+    line and a wrongly selected snapshot produces a visibly wrong figure rather
+    than the right one by luck.
+
+    The book GROWS by `growth` loans a month, which makes the period on either
+    side of any boundary distinguishable by row count alone.
+    """
+    out: List[Tuple[str, pd.DataFrame]] = []
+    year, month = start_year, start_month
+    for index in range(periods):
+        frame = canonical_book(n=n0 + growth * index, seed=seed + 101 * index)
+        out.append((f"{year:04d}-{month:02d}-{_MONTH_END[month]:02d}", frame))
+        month += 1
+        if month > 12:
+            month, year = 1, year + 1
+    return out
 
 
 def mask_for(frame: pd.DataFrame,

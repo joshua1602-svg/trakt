@@ -1,0 +1,648 @@
+version: 1
+note: '135 questions = 45 canonical x 3 variants, every string copied verbatim from a frozen committed
+  bank. Assembled by mi_agent/interpretation_v2/banks/build_bank_135.py; not authored, not edited. This
+  is an INTERPRETATION benchmark: it scores what a question MEANS, never what the answer is.'
+sources:
+- due_diligence/evidence/analytical_intent_v1/nl_bank.py
+- migration_phase0/BORROWING_BASE_MI_BANK.yaml
+- migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+- tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+canonical_count: 45
+question_count: 135
+canonicals:
+- id: Q01
+  family: multi_filter_facts
+  shape: two numeric filters / COUNT
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: How many loans are to borrowers over 55 with LTV above 50%?
+    source_id: Q01A
+  - variant: B
+    question: How many loans have a borrower older than 55 and an LTV greater than 50%?
+    source_id: Q01B
+  - variant: C
+    question: Count the loans where borrower age is above 55 and current LTV is over 50%.
+    source_id: Q01C
+- id: Q02
+  family: multi_filter_facts
+  shape: two numeric filters / BALANCE
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: What is the balance of loans to borrowers over 75 with LTV above 40%?
+    source_id: Q02A
+  - variant: B
+    question: How much outstanding balance do we have where borrower age exceeds 75 and LTV is over 40%?
+    source_id: Q02B
+  - variant: C
+    question: Show the total balance for loans with borrowers older than 75 and current LTV greater than
+      40%.
+    source_id: Q02C
+- id: Q03
+  family: multi_filter_facts
+  shape: categorical + numeric filter
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: How many drawdown loans have LTV above 50%?
+    source_id: Q03A
+  - variant: B
+    question: Of the drawdown loans, how many are over 50% LTV?
+    source_id: Q03B
+  - variant: C
+    question: Count drawdown cases where current LTV exceeds 50%.
+    source_id: Q03C
+- id: Q04
+  family: multi_filter_facts
+  shape: scope + geography + numeric filter
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: What is the balance of Direct-book loans in London to borrowers over 75?
+    source_id: Q04A
+  - variant: B
+    question: How much balance is in the Direct portfolio for London loans where the borrower is older
+      than 75?
+    source_id: Q04B
+  - variant: C
+    question: Show total outstanding balance for London loans in the Direct book with borrower age above
+      75.
+    source_id: Q04C
+- id: Q05
+  family: multi_filter_facts
+  shape: aggregation + category + scope
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: What is the weighted-average LTV of lump sum loans in the Direct book?
+    source_id: Q05A
+  - variant: B
+    question: For Direct-book lump sum loans, what is the weighted average current LTV?
+    source_id: Q05B
+  - variant: C
+    question: Give me WA LTV for lump sum lending in the Direct portfolio.
+    source_id: Q05C
+- id: Q06
+  family: synthesis
+  shape: portfolio synthesis
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Summarise the portfolio.
+    source_id: Q06A
+  - variant: B
+    question: Give me a management summary of the current book.
+    source_id: Q06B
+  - variant: C
+    question: Give me a concise overview of the funded portfolio.
+    source_id: Q06C
+- id: Q07
+  family: synthesis
+  shape: portfolio comparison
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Compare the Direct and Acquired books.
+    source_id: Q07A
+  - variant: B
+    question: How do the Direct and Acquired portfolios differ?
+    source_id: Q07B
+  - variant: C
+    question: Give me a side-by-side comparison of Direct versus Acquired.
+    source_id: Q07C
+- id: Q08
+  family: synthesis
+  shape: concentration synthesis
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Where are our largest concentrations today?
+    source_id: Q08A
+  - variant: B
+    question: What are the biggest concentration exposures in the book?
+    source_id: Q08B
+  - variant: C
+    question: Summarise the main current portfolio concentrations.
+    source_id: Q08C
+- id: Q09
+  family: synthesis
+  shape: current limit position
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Are any concentration limits currently breached or close to breach?
+    source_id: Q09A
+  - variant: B
+    question: Which of our concentration tests are most at risk today?
+    source_id: Q09B
+  - variant: C
+    question: Summarise our current position against the concentration limits.
+    source_id: Q09C
+- id: Q10
+  family: synthesis
+  shape: pipeline synthesis
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Summarise the current pipeline.
+    source_id: Q10A
+  - variant: B
+    question: Give me an overview of the pipeline by size and stage.
+    source_id: Q10B
+  - variant: C
+    question: What does the current pipeline look like?
+    source_id: Q10C
+- id: Q11
+  family: multi_dimensional_artefact
+  shape: two-dimensional TABLE
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Show a table of balance by LTV bucket and ticket-size bucket.
+    source_id: Q11A
+  - variant: B
+    question: Cross-tab the outstanding balance by LTV band and ticket-size band.
+    source_id: Q11B
+  - variant: C
+    question: Break the balance down by both LTV bucket and ticket-size bucket.
+    source_id: Q11C
+- id: Q12
+  family: multi_dimensional_artefact
+  shape: two-dimensional CHART
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Chart the balance by LTV bucket and borrower-age bucket.
+    source_id: Q12A
+  - variant: B
+    question: Show me balance split by both LTV band and age band.
+    source_id: Q12B
+  - variant: C
+    question: Plot portfolio balance across LTV buckets and borrower-age buckets.
+    source_id: Q12C
+- id: Q13
+  family: multi_dimensional_artefact
+  shape: two-dimensional TABLE
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Show a table of balance by LTV bucket and interest-rate bucket.
+    source_id: Q13A
+  - variant: B
+    question: Cross-tab balance by LTV band and interest-rate band.
+    source_id: Q13B
+  - variant: C
+    question: Break down outstanding balance by both LTV bucket and rate bucket.
+    source_id: Q13C
+- id: Q14
+  family: multi_dimensional_artefact
+  shape: two-dimensional categorical
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Show loan count by region and product type.
+    source_id: Q14A
+  - variant: B
+    question: Give me a table of loan numbers split by region and loan type.
+    source_id: Q14B
+  - variant: C
+    question: Break the number of loans down by both geographic region and product type.
+    source_id: Q14C
+- id: Q15
+  family: multi_dimensional_artefact
+  shape: two-dimensional, single source portfolio
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: For the Direct book, show balance by broker and product type.
+    source_id: Q15A
+  - variant: B
+    question: Break Direct-book balance down by both broker channel and loan type.
+    source_id: Q15B
+  - variant: C
+    question: Give me a broker-by-product balance table for the Direct portfolio.
+    source_id: Q15C
+- id: Q16
+  family: multi_dimensional_artefact
+  shape: filter + two dimensions
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: For drawdown loans, show balance by region and LTV bucket.
+    source_id: Q16A
+  - variant: B
+    question: Break drawdown balance down by both geography and LTV band.
+    source_id: Q16B
+  - variant: C
+    question: Show me the regional balance by LTV bucket for drawdown loans.
+    source_id: Q16C
+- id: Q17
+  family: multi_dimensional_artefact
+  shape: true three-dimensional output
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: For the Direct book, show balance by LTV bucket, ticket-size bucket and borrower-age bucket.
+    source_id: Q17A
+  - variant: B
+    question: Give me a table of Direct-book balance split by LTV band, ticket-size band and age band.
+    source_id: Q17B
+  - variant: C
+    question: Break Direct portfolio balance down across LTV, ticket size and borrower age.
+    source_id: Q17C
+- id: Q18
+  family: movement
+  shape: whole-book movement
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: How did the book change in the last month?
+    source_id: Q18A
+  - variant: B
+    question: What changed in the portfolio since last month?
+    source_id: Q18B
+  - variant: C
+    question: Give me a summary of how the funded book moved over the last month.
+    source_id: Q18C
+- id: Q19
+  family: movement
+  shape: scoped movement
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: How did the Direct book change last month?
+    source_id: Q19A
+  - variant: B
+    question: What changed in the Direct portfolio since last month?
+    source_id: Q19B
+  - variant: C
+    question: Summarise the month-on-month movement in the Direct book.
+    source_id: Q19C
+- id: Q20
+  family: movement
+  shape: categorical filtered movement
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: How did drawdown loans change last month?
+    source_id: Q20A
+  - variant: B
+    question: What changed in the drawdown book since last month?
+    source_id: Q20B
+  - variant: C
+    question: Summarise the month-on-month movement for drawdown loans.
+    source_id: Q20C
+- id: Q21
+  family: movement
+  shape: numeric-filtered ranked movement
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Which region added the most balance last month for loans with LTV above 50%?
+    source_id: Q21A
+  - variant: B
+    question: For loans over 50% LTV, which region contributed the most balance growth since last month?
+    source_id: Q21B
+  - variant: C
+    question: Among loans with current LTV above 50%, where did balance increase the most over the last
+      month?
+    source_id: Q21C
+- id: Q22
+  family: movement
+  shape: movement attribution
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Which source portfolio contributed most to balance growth last month?
+    source_id: Q22A
+  - variant: B
+    question: Did Direct or Acquired add more balance during the last month?
+    source_id: Q22B
+  - variant: C
+    question: Which of the Direct and Acquired books drove more of the month-on-month balance increase?
+    source_id: Q22C
+- id: Q23
+  family: strategic
+  shape: milestone already reached / threshold semantics
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: When will we reach £100m of funded loans?
+    source_id: Q23A
+  - variant: B
+    question: At the current trajectory, when do we get to £100 million?
+    source_id: Q23B
+  - variant: C
+    question: When does the funded book reach the £100m milestone?
+    source_id: Q23C
+- id: Q24
+  family: strategic
+  shape: forward milestone
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: At the current run rate, when will we reach £250m?
+    source_id: Q24A
+  - variant: B
+    question: When are we expected to get to £250 million of funded loans?
+    source_id: Q24B
+  - variant: C
+    question: Based on the current run rate, when does the book reach £250m?
+    source_id: Q24C
+- id: Q25
+  family: strategic
+  shape: forward concentration-risk assessment
+  source: migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml
+  variants:
+  - variant: A
+    question: Do we expect to breach any concentration tests?
+    source_id: Q25A
+  - variant: B
+    question: Are any concentration limits likely to be breached as the book grows?
+    source_id: Q25B
+  - variant: C
+    question: Based on the current book and forward pipeline, which concentration tests are we at risk
+      of breaching?
+    source_id: Q25C
+- id: SM01
+  family: pipeline_stage_movement
+  shape: transition
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: How many cases moved from KFI to Application?
+    source_id: SM01A
+  - variant: B
+    question: How many KFI cases progressed to Application?
+    source_id: SM01B
+  - variant: C
+    question: How many cases went from KFI into Application?
+    source_id: SM01C
+- id: SM02
+  family: pipeline_stage_movement
+  shape: transition
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: How much balance moved from Application to Offer?
+    source_id: SM02A
+  - variant: B
+    question: What value progressed from Application to Offer?
+    source_id: SM02B
+  - variant: C
+    question: How much pipeline moved from Application into Offer?
+    source_id: SM02C
+- id: SM03
+  family: pipeline_stage_movement
+  shape: transition
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: How many cases moved from Offer to Completion?
+    source_id: SM03A
+  - variant: B
+    question: How many cases progressed from Offer into Completion?
+    source_id: SM03B
+  - variant: C
+    question: What number of offers reached Completion?
+    source_id: SM03C
+- id: SM04
+  family: pipeline_stage_movement
+  shape: transition
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: How much balance moved from Offer to Completion?
+    source_id: SM04A
+  - variant: B
+    question: How much Offer-stage pipeline reached Completion?
+    source_id: SM04B
+  - variant: C
+    question: What amount progressed from Offer to Completion?
+    source_id: SM04C
+- id: SM05
+  family: pipeline_stage_movement
+  shape: new_arrival
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: How many new cases entered KFI?
+    source_id: SM05A
+  - variant: B
+    question: How many new pipeline cases arrived in KFI?
+    source_id: SM05B
+  - variant: C
+    question: What number of cases were new arrivals into KFI?
+    source_id: SM05C
+- id: SM06
+  family: pipeline_stage_movement
+  shape: stayer
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: How many cases stayed in Application?
+    source_id: SM06A
+  - variant: B
+    question: How many Application cases remained in Application?
+    source_id: SM06B
+  - variant: C
+    question: What number of cases stayed at Application stage?
+    source_id: SM06C
+- id: SM07
+  family: pipeline_stage_movement
+  shape: stayer_amount_change
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: What was the amount change on cases that stayed in Application?
+    source_id: SM07A
+  - variant: B
+    question: How much did Application stayers change in value?
+    source_id: SM07B
+  - variant: C
+    question: What was the balance amendment on cases remaining in Application?
+    source_id: SM07C
+- id: SM08
+  family: pipeline_stage_movement
+  shape: departure
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: Where did cases leaving Offer go?
+    source_id: SM08A
+  - variant: B
+    question: Break down departures from Offer by destination.
+    source_id: SM08B
+  - variant: C
+    question: What happened to cases that left Offer?
+    source_id: SM08C
+- id: SM09
+  family: pipeline_stage_movement
+  shape: reconciliation
+  source: tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml
+  variants:
+  - variant: A
+    question: Reconcile Application stage this period.
+    source_id: SM09A
+  - variant: B
+    question: Show opening, arrivals, departures and closing for Application.
+    source_id: SM09B
+  - variant: C
+    question: Reconcile the Application stage from opening to closing.
+    source_id: SM09C
+- id: NL1
+  family: analytical_intent
+  shape: How has the profile of new originations changed in the last few months?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: How has the profile of our new lending changed over the last few months?
+    source_id: Q1.1
+  - variant: B
+    question: Are we originating different types of loans now compared with a few months ago?
+    source_id: Q1.2
+  - variant: C
+    question: How does recent lending compare with what we were originating earlier in the year?
+    source_id: Q1.3
+- id: NL2
+  family: analytical_intent
+  shape: When are we likely to reach £100m of loans?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: When do we expect the funded book to reach £100m?
+    source_id: Q2.1
+  - variant: B
+    question: At the current run rate, when should we get to £100m of loans?
+    source_id: Q2.2
+  - variant: C
+    question: When are we forecast to cross £100m of funded balances?
+    source_id: Q2.3
+- id: NL3
+  family: analytical_intent
+  shape: What is the current value of outstanding offers in the pipeline, how much do we expect to complete,
+    and when?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: How much do we currently have at offer and how much of it is likely to complete?
+    source_id: Q3.1
+  - variant: B
+    question: What's the value of outstanding offers, and when do we expect them to fund?
+    source_id: Q3.2
+  - variant: C
+    question: Of the current offer pipeline, how much should convert and over what timeframe?
+    source_id: Q3.3
+- id: NL4
+  family: analytical_intent
+  shape: What is the current completion run rate?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: What completion rate are we currently running at?
+    source_id: Q4.1
+  - variant: B
+    question: How many loans are we completing at the moment?
+    source_id: Q4.2
+  - variant: C
+    question: What's our recent run rate for completions?
+    source_id: Q4.3
+- id: NL5
+  family: analytical_intent
+  shape: Are we likely to breach any concentration limits in the next three months?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: Are any of our concentration limits likely to breach over the next three months?
+    source_id: Q5.1
+  - variant: B
+    question: Do we expect to hit any concentration limits in the next quarter?
+    source_id: Q5.2
+  - variant: C
+    question: Which concentration limits are at risk of being breached over the next three months?
+    source_id: Q5.3
+- id: NL6
+  family: analytical_intent
+  shape: Which limits are closest to breaching?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: Which concentration limits have the least headroom?
+    source_id: Q6.1
+  - variant: B
+    question: Where are we closest to our limits?
+    source_id: Q6.2
+  - variant: C
+    question: Which of our limits are currently most at risk?
+    source_id: Q6.3
+- id: NL7
+  family: analytical_intent
+  shape: How does the risk profile of older vintages compare with the front book?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: How does the front book compare with our older lending from a risk perspective?
+    source_id: Q7.1
+  - variant: B
+    question: Are older loans riskier than the loans we've originated recently?
+    source_id: Q7.2
+  - variant: C
+    question: How different is the risk profile of recent originations versus the back book?
+    source_id: Q7.3
+- id: NL9
+  family: analytical_intent
+  shape: Based on the current pipeline, what is the forecast funded balance?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: What do we expect the funded book to grow to based on the current pipeline?
+    source_id: Q9.1
+  - variant: B
+    question: Where is the funded balance forecast to get to from today's pipeline?
+    source_id: Q9.2
+  - variant: C
+    question: If the current pipeline converts as expected, what will our funded balance be?
+    source_id: Q9.3
+- id: NL8
+  family: analytical_intent
+  shape: How has the balance from dimension X changed relative to dimension Y?
+  source: due_diligence/evidence/analytical_intent_v1/nl_bank.py
+  variants:
+  - variant: A
+    question: How has lending to direct changed compared with acquired?
+    source_id: Q8.provenance.1
+  - variant: B
+    question: How has the balance of direct loans moved relative to acquired loans?
+    source_id: Q8.provenance.2
+  - variant: C
+    question: Are direct and acquired balances developing differently over time?
+    source_id: Q8.provenance.3
+- id: BB01
+  family: borrowing_base
+  shape: borrowing-base headroom
+  source: migration_phase0/BORROWING_BASE_MI_BANK.yaml
+  variants:
+  - variant: A
+    question: What is the borrowing-base headroom?
+    source_id: C03
+  - variant: B
+    question: How much headroom do we have under the borrowing base?
+    source_id: C04
+  - variant: C
+    question: What is the headroom?
+    source_id: S05
+- id: BB02
+  family: borrowing_base
+  shape: borrowing-base bridge
+  source: migration_phase0/BORROWING_BASE_MI_BANK.yaml
+  variants:
+  - variant: A
+    question: Show me the borrowing-base bridge.
+    source_id: B01
+  - variant: B
+    question: Why did the borrowing base change?
+    source_id: B03
+  - variant: C
+    question: Show the borrowing-base movement as a waterfall.
+    source_id: B04

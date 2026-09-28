@@ -19,6 +19,9 @@ LATEST = "latest"
 AS_OF = "as_of"
 RANGE = "range"
 COMPARE = "compare"
+#: "the latest N available reporting periods". A COUNT of snapshots, not a date
+#: window — see ``SnapshotStore.resolve_last_n`` for why the difference matters.
+LAST_N = "last_n"
 
 _SINGLE_MODES = {LATEST, AS_OF}
 
@@ -27,8 +30,8 @@ _SINGLE_MODES = {LATEST, AS_OF}
 class SnapshotSelector:
     """Declarative snapshot selection.
 
-    ``mode`` is one of ``latest`` / ``as_of`` / ``range`` / ``compare``. The
-    remaining fields are interpreted per mode.
+    ``mode`` is one of ``latest`` / ``as_of`` / ``range`` / ``compare`` /
+    ``last_n``. The remaining fields are interpreted per mode.
     """
 
     client_id: str
@@ -39,6 +42,7 @@ class SnapshotSelector:
     end_date: Any = None               # range
     baseline_date: Any = None          # compare
     current_date: Any = None           # compare
+    periods: Optional[int] = None      # last_n
 
     # -- factories --------------------------------------------------------- #
 
@@ -63,6 +67,12 @@ class SnapshotSelector:
                 route: Optional[str] = None) -> "SnapshotSelector":
         return cls(client_id=client_id, mode=COMPARE, route=route,
                    baseline_date=baseline_date, current_date=current_date)
+
+    @classmethod
+    def last_n(cls, client_id: str, periods: int,
+               route: Optional[str] = None) -> "SnapshotSelector":
+        return cls(client_id=client_id, mode=LAST_N, route=route,
+                   periods=periods)
 
     # -- resolution -------------------------------------------------------- #
 
@@ -90,4 +100,7 @@ class SnapshotSelector:
         if self.mode == COMPARE:
             return store.resolve_compare(self.client_id, self.baseline_date,
                                          self.current_date, route=self.route)
+        if self.mode == LAST_N:
+            return store.resolve_last_n(self.client_id, self.periods,
+                                        route=self.route)
         raise ValueError(f"unknown selector mode {self.mode!r}")

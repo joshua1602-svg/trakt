@@ -1,0 +1,283 @@
+{
+  "source_run": "temporal_live_run_result.json",
+  "headline_live_result": {
+    "boundary_held": 7,
+    "of": 15,
+    "live_calls_made": 15
+  },
+  "finding_1_capability_routing": {
+    "cases": 4,
+    "all_routed_to": [
+      "period_movement"
+    ],
+    "counterfactual_temporal_binding_sound": 4,
+    "counterfactual_is_not_evidence_about_routing": true,
+    "rows": [
+      {
+        "id": "T01",
+        "question": "How has funded balance changed over the last six months?",
+        "model_capability": "period_movement",
+        "model_operation": "movement",
+        "model_time": {
+          "form": "range",
+          "labels": [
+            "last six months"
+          ],
+          "grain": "monthly",
+          "periods_back": 6
+        },
+        "refused_as": "CAPABILITY_NOT_GENERIC",
+        "counterfactual_operation": "series",
+        "counterfactual": "RESOLVED",
+        "counterfactual_snapshots": [
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "expected_snapshots": [
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "temporal_binding_sound": true
+      },
+      {
+        "id": "T05",
+        "question": "How has average LTV changed over the last four months?",
+        "model_capability": "period_movement",
+        "model_operation": "series",
+        "model_time": {
+          "form": "series",
+          "labels": [
+            "the last four months"
+          ],
+          "grain": "monthly",
+          "periods_back": 4
+        },
+        "refused_as": "CAPABILITY_NOT_GENERIC",
+        "counterfactual_operation": "series",
+        "counterfactual": "RESOLVED",
+        "counterfactual_snapshots": [
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "expected_snapshots": [
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "temporal_binding_sound": true
+      },
+      {
+        "id": "T10",
+        "question": "How has funded balance changed since March?",
+        "model_capability": "period_movement",
+        "model_operation": "movement",
+        "model_time": {
+          "form": "range",
+          "labels": [
+            "since March",
+            "March"
+          ],
+          "grain": null,
+          "periods_back": null
+        },
+        "refused_as": "CAPABILITY_NOT_GENERIC",
+        "counterfactual_operation": "series",
+        "counterfactual": "RESOLVED",
+        "counterfactual_snapshots": [
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "expected_snapshots": [
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "temporal_binding_sound": true
+      },
+      {
+        "id": "T11",
+        "question": "What was funded balance this month versus last month?",
+        "model_capability": "period_movement",
+        "model_operation": "movement",
+        "model_time": {
+          "form": "relative_pair",
+          "labels": [
+            "this month",
+            "last month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "refused_as": "CAPABILITY_NOT_GENERIC",
+        "counterfactual_operation": "compare",
+        "counterfactual": "RESOLVED",
+        "counterfactual_snapshots": [
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "expected_snapshots": [
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "temporal_binding_sound": true
+      }
+    ]
+  },
+  "finding_2_compiler_resolver_disagreement": {
+    "cases": 4,
+    "compiler_emitted_a_plan_for_all": true,
+    "whole_series_reading_would_match": 4,
+    "rows": [
+      {
+        "id": "T03",
+        "question": "What was funded balance each month?",
+        "model_time": {
+          "form": "series",
+          "labels": [],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "compiler_emitted_a_plan": true,
+        "compiler_outcome": "PLAN",
+        "resolver_refused_as": "PERIOD_LABEL_UNRESOLVED",
+        "whole_series_would_select": [
+          "2025-11-30",
+          "2025-12-31",
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "expected_snapshots": [
+          "2025-11-30",
+          "2025-12-31",
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "whole_series_matches_expectation": true
+      },
+      {
+        "id": "T04",
+        "question": "How many loans were on the book each month?",
+        "model_time": {
+          "form": "series",
+          "labels": [],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "compiler_emitted_a_plan": true,
+        "compiler_outcome": "PLAN",
+        "resolver_refused_as": "PERIOD_LABEL_UNRESOLVED",
+        "whole_series_would_select": [
+          "2025-11-30",
+          "2025-12-31",
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "expected_snapshots": [
+          "2025-11-30",
+          "2025-12-31",
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "whole_series_matches_expectation": true
+      },
+      {
+        "id": "T06",
+        "question": "How many drawdown loans were there each month?",
+        "model_time": {
+          "form": "series",
+          "labels": [],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "compiler_emitted_a_plan": true,
+        "compiler_outcome": "PLAN",
+        "resolver_refused_as": "PERIOD_LABEL_UNRESOLVED",
+        "whole_series_would_select": [
+          "2025-11-30",
+          "2025-12-31",
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "expected_snapshots": [
+          "2025-11-30",
+          "2025-12-31",
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "whole_series_matches_expectation": true
+      },
+      {
+        "id": "T07",
+        "question": "Show loan count by LTV bucket each month.",
+        "model_time": {
+          "form": "series",
+          "labels": [],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "compiler_emitted_a_plan": true,
+        "compiler_outcome": "PLAN",
+        "resolver_refused_as": "PERIOD_LABEL_UNRESOLVED",
+        "whole_series_would_select": [
+          "2025-11-30",
+          "2025-12-31",
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "expected_snapshots": [
+          "2025-11-30",
+          "2025-12-31",
+          "2026-01-31",
+          "2026-02-28",
+          "2026-03-31",
+          "2026-04-30",
+          "2026-05-31",
+          "2026-06-30"
+        ],
+        "whole_series_matches_expectation": true
+      }
+    ]
+  }
+}

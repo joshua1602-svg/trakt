@@ -97,6 +97,33 @@ class SnapshotStore(abc.ABC):
                 f"client={client_id!r} route={route!r}")
         return _sorted_by_reporting_date(headers)[-1]
 
+    def resolve_last_n(self, client_id: str, periods: int,
+                       route: Optional[str] = None) -> List[SnapshotHeader]:
+        """The latest *periods* snapshots, ascending. Never fewer, never padded.
+
+        The one selection the other four resolvers cannot express. "The last six
+        months" is a count of AVAILABLE reporting periods, not a date window: a
+        caller that translated it into a window would have to invent the start
+        date, and inventing a date is the substitution this layer exists to
+        stop.
+
+        Raises ``SnapshotNotFoundError`` when the book does not reach back that
+        far, rather than returning a shorter series. A caller asking for six and
+        silently receiving four would report a four-month answer under a
+        six-month question, which is the same defect as a fabricated snapshot
+        wearing the other sign.
+        """
+        if not isinstance(periods, int) or isinstance(periods, bool) or periods < 1:
+            raise SnapshotNotFoundError(
+                f"a period count must be a positive integer, got {periods!r}")
+        headers = [h for h in self.list_snapshots(client_id, route=route)
+                   if parse_date(h.reporting_date) is not None]
+        if len(headers) < periods:
+            raise SnapshotNotFoundError(
+                f"{periods} reporting period(s) requested; client={client_id!r} "
+                f"route={route!r} carries {len(headers)}")
+        return _sorted_by_reporting_date(headers)[-periods:]
+
     def resolve_range(self, client_id: str, start_date: Any, end_date: Any,
                       route: Optional[str] = None) -> List[SnapshotHeader]:
         start = parse_date(start_date)

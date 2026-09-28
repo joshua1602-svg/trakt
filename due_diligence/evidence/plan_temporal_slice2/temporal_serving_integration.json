@@ -1,0 +1,193 @@
+{
+  "path_under_test": "plan_serving_canary.serve (the production entry point)",
+  "model_calls": 0,
+  "payload_source": "recorded live Opus output, replayed via ReplayClient",
+  "positives": 5,
+  "controls": 6,
+  "verdicts": {
+    "PASS": 11
+  },
+  "series_values_reconciled": 24,
+  "grouped_cells_reconciled": 40,
+  "period_comparisons_reconciled": 1,
+  "snapshot_selection_errors": 0,
+  "results": [
+    {
+      "id": "S2-1",
+      "case": "T01",
+      "why": "funded balance over last N months",
+      "question": "How has funded balance changed over the last six months?",
+      "problems": [],
+      "served_from": "NEW",
+      "perimeter": "slice2_temporal",
+      "shape": "time_series",
+      "basis": "count",
+      "snapshots": [
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "requested_period_form": "series",
+      "evidence_snapshots": 6,
+      "payload_rows": 6,
+      "verdict": "PASS"
+    },
+    {
+      "id": "S2-2",
+      "case": "T04",
+      "why": "loan count each month",
+      "question": "How many loans were on the book each month?",
+      "problems": [],
+      "served_from": "NEW",
+      "perimeter": "slice2_temporal",
+      "shape": "time_series",
+      "basis": "cadence",
+      "snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "requested_period_form": "series",
+      "evidence_snapshots": 8,
+      "payload_rows": 8,
+      "verdict": "PASS"
+    },
+    {
+      "id": "S2-3",
+      "case": "T06",
+      "why": "filtered temporal series",
+      "question": "How many drawdown loans were there each month?",
+      "problems": [],
+      "served_from": "NEW",
+      "perimeter": "slice2_temporal",
+      "shape": "time_series",
+      "basis": "cadence",
+      "snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "requested_period_form": "series",
+      "evidence_snapshots": 8,
+      "payload_rows": 8,
+      "verdict": "PASS"
+    },
+    {
+      "id": "S2-4",
+      "case": "T07",
+      "why": "time x one supported dimension",
+      "question": "Show loan count by LTV bucket each month.",
+      "problems": [],
+      "served_from": "NEW",
+      "perimeter": "slice2_temporal",
+      "shape": "time_series",
+      "basis": "cadence",
+      "snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "requested_period_form": "series",
+      "evidence_snapshots": 8,
+      "payload_rows": 40,
+      "verdict": "PASS"
+    },
+    {
+      "id": "S2-5",
+      "case": "T11",
+      "why": "current versus previous period",
+      "question": "What was funded balance this month versus last month?",
+      "problems": [],
+      "served_from": "NEW",
+      "perimeter": "slice2_temporal",
+      "shape": "period_comparison",
+      "basis": "pair",
+      "snapshots": [
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "requested_period_form": "relative_pair",
+      "evidence_snapshots": 2,
+      "payload_rows": 2,
+      "verdict": "PASS"
+    },
+    {
+      "id": "N-1",
+      "case": "T10",
+      "why": "T10 \u2014 generic_analysis + movement",
+      "question": "How has funded balance changed since March?",
+      "problems": [],
+      "served_from": "LEGACY_FALLBACK",
+      "reason": "INELIGIBLE:OPERATION_NOT_TEMPORAL",
+      "verdict": "PASS"
+    },
+    {
+      "id": "N-2",
+      "case": "T13",
+      "why": "unavailable requested period",
+      "question": "How has funded balance changed over the last twenty-four months?",
+      "problems": [],
+      "served_from": "LEGACY_FALLBACK",
+      "reason": "TEMPORAL_NOT_RESOLVED:PERIOD_NOT_AVAILABLE",
+      "verdict": "PASS"
+    },
+    {
+      "id": "N-3",
+      "case": "T13",
+      "why": "overlong period does not shorten",
+      "question": "How has funded balance changed over the last twenty-four months?",
+      "problems": [],
+      "served_from": "LEGACY_FALLBACK",
+      "reason": "TEMPORAL_NOT_RESOLVED:PERIOD_NOT_AVAILABLE",
+      "verdict": "PASS"
+    },
+    {
+      "id": "N-4",
+      "case": "T14",
+      "why": "movement attribution",
+      "question": "Why did funded balance increase last month?",
+      "problems": [],
+      "served_from": "LEGACY_FALLBACK",
+      "reason": "INELIGIBLE:CAPABILITY_NOT_GENERIC",
+      "verdict": "PASS"
+    },
+    {
+      "id": "N-5",
+      "case": "T15",
+      "why": "multi-output temporal request",
+      "question": "Give me balance, loan count and average LTV for each of the last three months.",
+      "problems": [],
+      "served_from": "LEGACY_FALLBACK",
+      "reason": "INELIGIBLE:NOT_SINGLE_OUTPUT",
+      "verdict": "PASS"
+    },
+    {
+      "id": "N-6",
+      "case": "T01",
+      "why": "non-canary principal",
+      "question": "How has funded balance changed over the last six months?",
+      "problems": [],
+      "served_from": null,
+      "reason": "",
+      "verdict": "PASS"
+    }
+  ]
+}

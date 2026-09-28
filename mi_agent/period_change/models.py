@@ -45,6 +45,19 @@ STATUS_NOT_COMPARABLE_PERIOD_BASIS = "not_comparable_period_basis"
 #: The book reports more than one currency and no governed normalisation exists.
 STATUS_NOT_COMPARABLE_MIXED_CURRENCY = "not_comparable_mixed_currency"
 
+#: HOW A REQUESTED METRIC CAME OUT, for a reader who named one. It NAMES what the
+#: status above already means rather than deciding anything: `ANSWERED` where the
+#: movement stands unqualified, `QUALIFIED` where it stands with an exclusion
+#: behind it, `GOVERNED_REFUSAL` where the owner produced no movement at all.
+#: Publishability is not decided here — `AggregateOutcome.ok` and the route's own
+#: status gate already own that, and a second policy would be a second answer.
+DISPOSITION_ANSWERED = "ANSWERED"
+DISPOSITION_QUALIFIED = "QUALIFIED"
+DISPOSITION_GOVERNED_REFUSAL = "GOVERNED_REFUSAL"
+
+ALL_DISPOSITIONS: Tuple[str, ...] = (
+    DISPOSITION_ANSWERED, DISPOSITION_QUALIFIED, DISPOSITION_GOVERNED_REFUSAL)
+
 ALL_STATUSES: Tuple[str, ...] = (
     STATUS_AVAILABLE, STATUS_PARTIALLY_AVAILABLE, STATUS_NOT_AVAILABLE,
     STATUS_NOT_COMPARABLE, STATUS_NOT_COMPARABLE_DUE_TO_AVAILABILITY,

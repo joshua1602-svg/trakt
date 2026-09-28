@@ -26,6 +26,12 @@ name: Deploy trakt-mi-api (App Service)
 
 on:
   workflow_dispatch: {}
+  # Callable so an acceptance run can deploy through THIS workflow rather than
+  # copying its packaging. Everything hard-won below — the staged artefact, the
+  # API's own requirements as the artefact root, the kept remote build — has one
+  # owner, and a second copy of it would drift. Behaviour on manual dispatch is
+  # unchanged; a caller must pass `secrets: inherit` for the publish profile.
+  workflow_call: {}
   # push:
   #   branches: [ main ]
   #   paths: [ 'mi_agent_api/**', 'mi_agent/**', 'deploy/trakt-mi-api/**', 'startup.sh' ]

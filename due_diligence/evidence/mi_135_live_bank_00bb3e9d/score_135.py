@@ -1,0 +1,599 @@
+#!/usr/bin/env python3
+"""Score the collected 135-question evidence. Reads records; asks nothing.
+
+WHO SCORES WHAT, AND WHY IT IS NOT THIS FILE'S OPINION.
+
+  interpretation   `interpretation_v2.equivalence.score_intent`, per dimension,
+                   against `banks/expected_intents.yaml`. This is the SIGNED-OFF
+                   scorer that produced the committed run1..run8 baselines. A
+                   rubric invented here would be a second owner, and the
+                   before/after comparison would then be between two different
+                   questions.
+  legacy answers   the product's OWN integrity checks — `filter_invariant`,
+                   `dimension_invariant`, `semantic_guard`, `reconciliation` —
+                   read off the envelope rather than recomputed. The legacy path
+                   already states whether it dropped a filter or a grouping; a
+                   second opinion here would be less authoritative, not more.
+  served answers   the governed receipt, compared with what the plan requested.
+
+WHAT IT REFUSES TO DECIDE. The bank carries expected SEMANTICS and no expected
+NUMBERS — it says so itself: "an INTERPRETATION benchmark: it scores what a
+question MEANS, never what the answer is". So `numeric_parity` is `N/A`
+everywhere, stated as an absence rather than filled in from the answer the
+product happened to give. Nothing here invents a tolerance, and nothing treats
+the served figure as its own ground truth.
+
+Anything this file cannot decide from evidence is INCONCLUSIVE, never a pass.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from collections import Counter
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Tuple
+
+_HERE = Path(__file__).resolve().parent
+_REPO = _HERE.parents[2]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+
+RAW = _HERE / "raw_records.json"
+RERUN = _HERE / "raw_records_rerun.json"
+LEGACY_COMPLETION = _HERE / "raw_records_legacy_completion.json"
+RESULTS = _HERE / "MI_135_LIVE_BANK_RESULTS.json"
+
+# user-facing outcomes
+FULLY_CORRECT = "FULLY_CORRECT"
+PARTIALLY_CORRECT = "PARTIALLY_CORRECT"
+WRONG = "WRONG"
+APPROPRIATE_CLARIFICATION = "APPROPRIATE_CLARIFICATION"
+UNNECESSARY_CLARIFICATION = "UNNECESSARY_CLARIFICATION"
+PLAN_CONNECTIVITY_CLARIFICATION = "PLAN_OR_CONNECTIVITY_GAP_MASQUERADING_AS_CLARIFY"
+HONEST_REFUSAL = "HONEST_REFUSAL"
+BAD_REFUSAL = "BAD_REFUSAL"
+INFRASTRUCTURE_FAILURE = "INFRASTRUCTURE_FAILURE"
+INCONCLUSIVE = "INCONCLUSIVE"
+
+# migration outcomes
+NEW = "NEW"
+LEGACY_FALLBACK = "LEGACY_FALLBACK"
+NOT_REACHED = "NOT_REACHED"
+
+#: Capabilities with a governed runtime on the build under test. Everything else
+#: is refused at the perimeter BY DESIGN, and a fallback for one of these is a
+#: migration statement, not a product defect.
+MIGRATED_CAPABILITIES = frozenset({"generic_analysis", "pipeline"})
+
+
+def _expectations() -> Mapping[str, Any]:
+    import yaml
+    path = _REPO / "mi_agent/interpretation_v2/banks/expected_intents.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))["expectations"]
+
+
+
+def _project_recorded_intent(intent_body: Mapping[str, Any]) -> Dict[str, Any]:
+    """A recorded `to_dict` intent, narrowed to what the parser will accept.
+
+    DRIVEN BY THE PARSER'S OWN KEY TUPLES, at every level. Nothing is listed
+    here by name: a derived field added to any slot is dropped automatically on
+    the way back in, and a genuinely unknown key still reaches the parser and
+    still fails closed, which is what that fail-closed rule is for.
+    """
+    from mi_agent.interpretation_v2 import intent as _intent
+
+    #: slot -> the parser's key tuple, for the blocks that are objects.
+    objects = {
+        "time": _intent._TIME_KEYS,
+        "population": _intent._POP_KEYS,
+        "comparison": _intent._CMP_KEYS,
+        "target": _intent._TARGET_KEYS,
+        "geography": _intent._GEO_KEYS,
+    }
+    #: slot -> the parser's key tuple, for the blocks that are lists of objects.
+    lists = {
+        "measures": _intent._MEASURE_KEYS,
+        "filters": _intent._FILTER_KEYS,
+        "ambiguity": _intent._AMBIG_KEYS,
+        "evidence": _intent._EVIDENCE_KEYS,
+        "outputs": _intent._OUTPUT_KEYS,
+    }
+
+    def narrow(node: Any, keys) -> Any:
+        if not isinstance(node, Mapping):
+            return node
+        out = {k: v for k, v in dict(node).items() if k in keys}
+        # An output carries the same nested blocks the top level does.
+        for slot, slot_keys in objects.items():
+            if slot in out:
+                out[slot] = narrow(out[slot], slot_keys)
+        for slot, slot_keys in lists.items():
+            if slot in out and isinstance(out[slot], (list, tuple)):
+                out[slot] = [narrow(item, slot_keys) for item in out[slot]]
+        return out
+
+    return narrow(intent_body, _intent._INTENT_KEYS)
+
+
+def _score_interpretation(intent_body: Optional[Mapping[str, Any]],
+                          expected: Mapping[str, Any]
+                          ) -> Tuple[Dict[str, Optional[bool]], str]:
+    """Per-dimension truth from the signed-off scorer, or why it could not run."""
+    if not intent_body:
+        return {}, "no candidate intent was recorded"
+    from mi_agent.interpretation_v2.equivalence import score_intent
+    from mi_agent.interpretation_v2.intent import parse_candidate_intent
+    from mi_agent.interpretation_v2.vocabulary import load_governed_vocabulary
+
+    # THE RECORD HOLDS `CandidateIntent.to_dict()`, WHICH IS NOT MODEL OUTPUT.
+    # `to_dict` is an asdict and carries `provenance`, which the parser rejects
+    # outright — it fails closed on any key its contract does not define,
+    # because an unknown key is how a physical binding would arrive. Both sides
+    # are right; the round trip is what needs the projection. The intent is
+    # therefore narrowed to the parser's OWN key tuples rather than to a list of
+    # exclusions written here, so a field added to either side cannot silently
+    # start being dropped.
+    #
+    # THIS USED TO NARROW THE TOP LEVEL ONLY, AND THE NESTED BLOCKS SLIPPED
+    # THROUGH. `SemanticTime` gained `stated` during the temporal-presence work,
+    # `to_dict` emits it, and `_TIME_KEYS` does not admit it — deliberately, and
+    # correctly: `_parse_time` DERIVES `stated` as `"form" in raw`, so admitting
+    # it from a payload would let a model assert that a temporal form was stated
+    # when it was not, which is the exact distinction three sprints were spent
+    # establishing. The parser is right. The projection was one level too
+    # shallow, so every recorded intent on a build that emits `stated` failed to
+    # parse and every question on it scored INCONCLUSIVE — a whole release
+    # certification reading as an estate collapse. Caught by the 135 run of
+    # 2026-09-13 against 5c436961.
+    body = _project_recorded_intent(intent_body)
+    try:
+        intent = parse_candidate_intent(body)
+    except Exception as exc:                                         # noqa: BLE001
+        return {}, f"the recorded intent did not parse: {type(exc).__name__}: {exc}"
+    return score_intent(intent, expected,
+                        vocabulary=load_governed_vocabulary()), ""
+
+
+def _legacy_integrity(envelope: Mapping[str, Any]) -> Dict[str, Any]:
+    """The legacy path's own verdict on whether it kept the question's meaning."""
+    def ok(key: str) -> Optional[bool]:
+        node = envelope.get(key)
+        if not isinstance(node, Mapping):
+            return None
+        value = node.get("ok")
+        return bool(value) if value is not None else None
+    return {
+        "filter_invariant_ok": ok("filter_invariant"),
+        "dimension_invariant_ok": ok("dimension_invariant"),
+        "semantic_guard_ok": ok("semantic_guard"),
+        "reconciliation_ok": ok("reconciliation"),
+        "unavailable_filters": list(
+            (envelope.get("spec") or {}).get("unavailable_filters") or ()),
+    }
+
+
+def _silent_drops(record: Mapping[str, Any],
+                  envelope: Mapping[str, Any]) -> Dict[str, Any]:
+    """Semantic loss on a SERVED answer, read from the evidence, never inferred.
+
+    `N/A` where the question asked for nothing of that kind — an absent filter
+    cannot be dropped — so a run of `False` never overstates what was checked.
+    """
+    execution = record.get("execution") or {}
+    requested = execution.get("requested_semantics") or {}
+    legacy = _legacy_integrity(envelope)
+
+    # THE TWO RUNTIMES DO NOT RECORD ALIKE, AND THIS SCORER FORGOT IT AGAIN.
+    # The generic and pipeline runtimes write `execution.receipt`; the funded
+    # TEMPORAL runtime writes `execution.temporal`, whose per-snapshot receipts
+    # and selected periods live inside it. Reading only `receipt` made a
+    # correctly served period comparison — `shape: period_comparison`,
+    # `reconciled: true`, two points — look as though it had dropped its measure
+    # and its period, and it was the single WRONG in the bank. The identical
+    # mistake was found and fixed in the pipeline acceptance harness days
+    # earlier; one reader for two shapes is the defect, so both are read here.
+    receipt = dict(execution.get("receipt") or {})
+    temporal = execution.get("temporal")
+    if not receipt and isinstance(temporal, Mapping):
+        points = [p for p in (temporal.get("points") or ()) if isinstance(p, Mapping)]
+        merged: Dict[str, Any] = {}
+        for point in points:
+            merged.update(dict(point.get("receipt") or {}))
+        spec = execution.get("bound_spec") or {}
+        receipt = {
+            **merged,
+            "measure_field": merged.get("measure_field") or spec.get("metric"),
+            "aggregation": merged.get("aggregation") or spec.get("aggregation"),
+            "selected_periods": [p.get("reporting_date") for p in points],
+            "comparison": temporal.get("comparison"),
+            "result_shape": temporal.get("shape"),
+        }
+
+    def asked(value: Any) -> bool:
+        return bool(value)
+
+    def drop(asked_it: bool, kept: bool) -> Any:
+        return (not kept) if asked_it else "N/A"
+
+    executed_dims = {str(d) for d in (receipt.get("group_field_keys") or ())}
+    wanted_dims = {str(d) for d in (requested.get("dimensions") or ()) if d}
+    executed_preds = receipt.get("applied_predicates")
+    wanted_preds = requested.get("filters") or ()
+
+    return {
+        "silent_measure_drop": drop(
+            asked(requested.get("measure_concept")),
+            bool(receipt.get("measure_concept") or receipt.get("measure_field")
+                 or receipt.get("aggregation"))),
+        "silent_dimension_drop": drop(bool(wanted_dims),
+                                      wanted_dims <= executed_dims),
+        "silent_filter_drop": drop(
+            bool(wanted_preds),
+            executed_preds is not None
+            and len(executed_preds) >= len(wanted_preds)),
+        "silent_period_drop": drop(
+            str(requested.get("period_form") or "current") != "current",
+            bool(receipt.get("selected_periods") or receipt.get("grain")
+                 or receipt.get("temporal_basis"))),
+        "silent_capability_drop": drop(
+            asked(requested.get("capability")),
+            receipt.get("capability") in (None, requested.get("capability"))),
+        "silent_population_drop": drop(
+            asked(requested.get("population_base")),
+            receipt.get("population_base") in
+            (None, requested.get("population_base"))),
+        "silent_scope_drop": drop(
+            asked(requested.get("source_reference")
+                  or requested.get("population_lens")),
+            bool(receipt.get("population_base"))),
+        "silent_comparison_drop": drop(
+            str(requested.get("comparison_kind") or "none") != "none",
+            bool(receipt.get("comparison") or receipt.get("result_shape"))),
+        # WIDENING IS ONLY SILENT IF AN ANSWER WAS ACTUALLY GIVEN. Three
+        # questions carried `unavailable_filters` and were scored as silent
+        # wideners; all three were REFUSED (`ok: false`). `unavailable_filters`
+        # is the disclosure mechanism — the product naming what it could not
+        # bind — and declining afterwards is the opposite of answering a wider
+        # question quietly. (The underlying parser defect is real and recorded
+        # separately: the connectives "both" and "among" are being read as
+        # category values. It surfaces as an honest refusal, not a silent one.)
+        "silent_widening": bool(legacy["unavailable_filters"]
+                                and envelope.get("ok")),
+        "legacy_integrity": legacy,
+    }
+
+
+def _user_outcome(row: Dict[str, Any]) -> Tuple[str, str]:
+    """`(outcome, why)` from the evidence. Undecidable reads INCONCLUSIVE."""
+    if row["infrastructure_failure"]:
+        return INFRASTRUCTURE_FAILURE, "the request did not reach the service"
+    if row["record"] is None:
+        return INCONCLUSIVE, "no governed evidence record was found"
+
+    outcome = row["interpretation_outcome"]
+    if outcome == "INTERPRETER_FAILURE":
+        return INFRASTRUCTURE_FAILURE, "the interpreter did not return a reading"
+    if outcome == "CLARIFY":
+        return INCONCLUSIVE, "clarification — adjudicated separately by class"
+    if outcome == "REFUSE":
+        # An honest refusal names a governed obstacle. A refusal of something the
+        # estate can express is a bad one; that judgement is made per reason code
+        # in the review, so this states the evidence and defers.
+        return INCONCLUSIVE, "refusal — adjudicated by reason code"
+
+    scored = row["interpretation_scored"]
+    checked = [v for v in scored.values() if v is not None]
+    if not checked:
+        return INCONCLUSIVE, "the fixture states no dimension for this question"
+
+    drops = row["drops"]
+    real_drops = [k for k, v in drops.items()
+                  if k.startswith("silent_") and v is True]
+    if row["migration_outcome"] == NEW and real_drops:
+        return WRONG, f"served with semantic loss: {', '.join(sorted(real_drops))}"
+
+    if all(checked):
+        if row["migration_outcome"] == NEW:
+            return FULLY_CORRECT, "served by the governed path, semantics intact"
+        integrity = drops["legacy_integrity"]
+        if integrity["filter_invariant_ok"] is False or \
+           integrity["dimension_invariant_ok"] is False:
+            return WRONG, "the legacy path reports it dropped part of the question"
+        if not row["envelope_ok"]:
+            # A REFUSAL IS HONEST WHEN THE PRODUCT SAYS WHY. Measured: every
+            # `ok: false` in this bank carries a product-authored sentence
+            # naming a governed obstacle — an empty governed population with an
+            # explicit "I have not returned a whole-book figure in its place",
+            # or a dimension it would not silently drop. Calling those BAD
+            # inverted the safety property they exist to provide, which is the
+            # first thing this scorer got wrong. BAD is reserved for a refusal
+            # with no stated reason: a failure, not a governed decline.
+            if row["refusal_stated_reason"]:
+                return HONEST_REFUSAL, row["refusal_stated_reason"][:160]
+            return BAD_REFUSAL, "no answer and no stated governed reason"
+        return FULLY_CORRECT, "answered by the legacy path, semantics intact"
+    if any(checked):
+        return PARTIALLY_CORRECT, (
+            "the reading differs from the fixture on: "
+            + ", ".join(k for k, v in sorted(scored.items()) if v is False))
+    return WRONG, "the reading does not match the fixture on any stated dimension"
+
+
+def _collected() -> Tuple[Dict[str, Any], Dict[str, str]]:
+    """The full collection, with infrastructure failures repaired by a rerun.
+
+    A RERUN REPLACES ONLY WHAT IT REPAIRS. A question is taken from the rerun
+    file only if the original attempt failed in the transport — never because
+    the rerun's answer is preferable. Re-asking a question whose first answer
+    was merely undesirable would make this a best-of-two benchmark, which is a
+    different and much weaker claim than the one the bank makes.
+
+    The original failure stays in the evidence beside the repair, and every
+    replacement is listed in the report.
+    """
+    raw = json.loads(RAW.read_text(encoding="utf-8"))
+    if not RERUN.exists():
+        return raw, {}
+    rerun = {e["question_id"]: e
+             for e in json.loads(RERUN.read_text(encoding="utf-8"))["records"]}
+    replaced: Dict[str, str] = {}
+    records = []
+    for entry in raw["records"]:
+        qid = entry["question_id"]
+        failed = bool((entry.get("envelope") or {}).get("__transport_error__"))
+        repair = rerun.get(qid)
+        if failed and repair is not None:
+            status = (entry.get("envelope") or {}).get("__http_status__")
+            replaced[qid] = f"HTTP {status} on the original attempt"
+            repair = dict(repair)
+            repair["repairs_infrastructure_failure"] = {
+                "original_envelope": entry.get("envelope"),
+                "original_retry": entry.get("retry_of_infrastructure_failure"),
+            }
+            records.append(repair)
+            continue
+        records.append(entry)
+    raw = dict(raw, records=records)
+    raw["reran_after_infrastructure_failure"] = replaced
+    return raw, replaced
+
+
+NOT_TESTED = "NOT_TESTED_KNOWN_UNMIGRATED"
+CANARY_EXPOSED = "CANARY_EXPOSED"
+LEGACY_ONLY = "LEGACY_ONLY_COMPLETION"
+
+
+def _legacy_completion_rows(expectations: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """The outstanding questions, asked with the governed canary OFF.
+
+    SCORED FROM THE ENVELOPE, BECAUSE THERE IS NOTHING ELSE TO SCORE FROM. No
+    interpretation ran, so there is no CandidateIntent and the signed-off
+    per-dimension scorer cannot be applied — applying it to a legacy spec would
+    be comparing a concept-level fixture with a field-level binding and calling
+    the mismatch a defect. These questions therefore carry
+    `interpretation_outcome = NOT_APPLICABLE` and are judged on what the reader
+    received.
+
+    A REFUSAL THAT STATES A GOVERNED OBSTACLE IS HONEST. Measured here: five
+    borrowing-base questions decline with "No funding facility is configured for
+    this portfolio", which is a configuration fact rather than missing
+    arithmetic, and three more name the capability they understood and declined
+    to answer. None of those is a product failing to know what it was asked.
+
+    NOTHING HERE IS CALLED FULLY_CORRECT ON THE STRENGTH OF A FIGURE ALONE. The
+    bank states no expected values, so an answered question is INCONCLUSIVE on
+    correctness unless the product's own integrity checks and the expected
+    capability agree — which is as far as this evidence reaches.
+    """
+    if not LEGACY_COMPLETION.exists():
+        return []
+    body = json.loads(LEGACY_COMPLETION.read_text(encoding="utf-8"))
+    rows: List[Dict[str, Any]] = []
+    for entry in body["records"]:
+        envelope = entry.get("envelope") or {}
+        expected = (expectations.get(entry["canonical_id"]) or {}).get("expected") or {}
+        legacy = _legacy_integrity(envelope)
+        stated = str(envelope.get("error") or "") if not envelope.get("ok") else ""
+        merge = (envelope.get("conceptMerge")
+                 or (envelope.get("metadata") or {}).get("conceptMerge") or {})
+
+        if envelope.get("__transport_error__"):
+            outcome, why = INFRASTRUCTURE_FAILURE, "the request failed in transport"
+        elif not envelope.get("ok"):
+            outcome = HONEST_REFUSAL if stated else BAD_REFUSAL
+            why = stated[:200] or "declined with no stated governed reason"
+        elif legacy["filter_invariant_ok"] is False or \
+                legacy["dimension_invariant_ok"] is False:
+            outcome, why = WRONG, "the legacy path reports it dropped part of the question"
+        else:
+            # An answer was returned and the product's own invariants are intact.
+            # Correctness of the FIGURE is not establishable: this bank states no
+            # expected values, and the capability is one the governed path does
+            # not implement, so there is no second owner to reconcile against.
+            outcome = PARTIALLY_CORRECT
+            why = ("answered, integrity checks intact; the figure cannot be "
+                   "independently verified — this bank states no expected values")
+
+        rows.append({
+            "question_id": entry["question_id"],
+            "canonical_id": entry["canonical_id"], "variant": entry["variant"],
+            "original_category": entry["original_category"],
+            "shape": entry["shape"], "origin_bank": entry["origin_bank"],
+            "question": entry["question"],
+            "run_mode": LEGACY_ONLY,
+            "migration_outcome": NOT_TESTED,
+            "governed_capability_migrated": False,
+            "interpretation_outcome": "NOT_APPLICABLE",
+            "interpretation_scored": {},
+            "interpretation_unscoreable_because":
+                "no interpretation ran: the governed canary was deliberately off",
+            "expected_intent": expected,
+            "expected_capability": expected.get("capability"),
+            "envelope_ok": bool(envelope.get("ok")),
+            "controlled_refusal": bool(envelope.get("controlledRefusal")
+                                       or envelope.get("controlledUnsupported")),
+            "refusal_stated_reason": stated,
+            "concept_merge_status": merge.get("status"),
+            "concept_merge_cost": (merge.get("cost") or {}).get("estimated_total_cost"),
+            "expected_value": None,
+            "independent_numeric_parity": "N/A",
+            "drops": {k: "N/A" for k in (
+                "silent_measure_drop", "silent_statistic_drop",
+                "silent_operation_drop", "silent_dimension_drop",
+                "silent_filter_drop", "silent_period_drop",
+                "silent_capability_drop", "silent_population_drop",
+                "silent_scope_drop", "silent_comparison_drop")}
+                     | {"silent_widening": bool(legacy["unavailable_filters"]
+                                                and envelope.get("ok")),
+                        "legacy_integrity": legacy},
+            "user_outcome": outcome, "user_outcome_why": why,
+        })
+    return rows
+
+
+def build_rows() -> List[Dict[str, Any]]:
+    raw, _replaced = _collected()
+    expectations = _expectations()
+    rows: List[Dict[str, Any]] = []
+
+    for entry in raw["records"]:
+        record = entry.get("record")
+        envelope = entry.get("envelope") or {}
+        compiler = (record or {}).get("compiler") or {}
+        interpretation = (record or {}).get("interpretation") or {}
+        serving = (record or {}).get("serving") or {}
+        execution = (record or {}).get("execution") or {}
+        plan = compiler.get("plan") or {}
+        expected = (expectations.get(entry["canonical_id"]) or {}).get("expected") or {}
+
+        infra = bool(envelope.get("__transport_error__"))
+        model_id = ((record or {}).get("model") or {}).get("model_id") or ""
+
+        outcome = str(compiler.get("outcome") or "").upper()
+        if record is None:
+            interp_outcome = "NO_RECORD"
+        elif (record or {}).get("disposition") == "INTERPRETER_FAILURE":
+            interp_outcome = "INTERPRETER_FAILURE"
+        elif outcome in ("PLAN", "CLARIFY", "REFUSE"):
+            interp_outcome = outcome
+        else:
+            interp_outcome = outcome or "UNKNOWN"
+
+        decision = str(serving.get("decision") or "")
+        migration = (NEW if decision == "NEW"
+                     else LEGACY_FALLBACK if decision else
+                     (NOT_REACHED if record is None else LEGACY_FALLBACK))
+        if infra:
+            migration = "INFRASTRUCTURE_FAILURE"
+
+        scored, why_not = _score_interpretation(
+            interpretation.get("candidate_intent"), expected)
+
+        output = (tuple(plan.get("outputs") or ()) or ({},))[0]
+        row: Dict[str, Any] = {
+            "question_id": entry["question_id"],
+            "canonical_id": entry["canonical_id"],
+            "variant": entry["variant"],
+            "original_category": entry["original_category"],
+            "shape": entry["shape"],
+            "origin_bank": entry["origin_bank"],
+            "question": entry["question"],
+            "model_id": model_id,
+            "infrastructure_failure": infra,
+            "record": record and True or None,
+            "envelope_ok": bool(envelope.get("ok")),
+            "interpretation_outcome": interp_outcome,
+            "interpretation_scored": scored,
+            "interpretation_unscoreable_because": why_not,
+            "expected_intent": expected,
+            # read off the plan, never reconstructed from the sentence
+            "capability": plan.get("capability"),
+            "operation": plan.get("operation"),
+            "population_base": (plan.get("population") or {}).get("base"),
+            "population_lens": (plan.get("population") or {}).get("lens"),
+            "source_reference": (plan.get("population") or {}).get("source_reference"),
+            "measures": [m.get("concept") for m in (output.get("measures") or ())],
+            "dimensions": [d.get("canonical_field")
+                           for d in (output.get("dimensions") or ())],
+            "filters": [[f.get("canonical_field"), f.get("comparator"), f.get("value")]
+                        for f in (tuple(plan.get("filters") or ())
+                                  + tuple(output.get("filters") or ()))],
+            "period": plan.get("period"),
+            "comparison_kind": plan.get("comparison_kind"),
+            "plan_id": compiler.get("plan_id"),
+            # the clarification evidence, verbatim
+            "clarify_reasons": [dict(r) for r in (compiler.get("reasons") or ())],
+            "reason_codes": list(compiler.get("reason_codes") or ()),
+            "ambiguities": [dict(a) for a in
+                            (interpretation.get("ambiguities") or ())],
+            "migration_outcome": migration,
+            "served_from": serving.get("response_served_from") or decision,
+            "fallback_reason": serving.get("reason") or "",
+            "eligibility": (record or {}).get("eligibility"),
+            "execution_runtime": execution.get("runtime"),
+            "receipt": execution.get("receipt"),
+            "expected_capability_migrated":
+                (expected.get("capability") in MIGRATED_CAPABILITIES
+                 if expected.get("capability") else None),
+            # the bank states no numbers; this is an absence, not a pass
+            "expected_value": None,
+            "numeric_parity": "N/A",
+        }
+        row["drops"] = _silent_drops(record or {}, envelope)
+        # The product's own account of a decline, read rather than inferred.
+        # `controlledRefusal` / `controlledUnsupported` are the marks a route
+        # sets for itself; the `error` sentence is what it wrote for the reader.
+        row["controlled_refusal"] = bool(envelope.get("controlledRefusal")
+                                         or envelope.get("controlledUnsupported"))
+        row["refusal_stated_reason"] = (
+            str(envelope.get("error") or "") if not envelope.get("ok") else "")
+        row["user_outcome"], row["user_outcome_why"] = _user_outcome(row)
+        row["run_mode"] = CANARY_EXPOSED
+        row["independent_numeric_parity"] = "N/A"
+        rows.append(row)
+
+    # THE OUTSTANDING QUESTIONS, MERGED — AND NEVER OVER A USABLE RECORD.
+    # A legacy-completion row is admitted only where the canary-exposed attempt
+    # was infrastructure-invalid. Two valid answers are never compared and the
+    # better-scoring one chosen; that would make this a best-of-two benchmark
+    # and the number it produced would mean nothing.
+    invalid = {r["question_id"] for r in rows
+               if r["user_outcome"] == INFRASTRUCTURE_FAILURE}
+    completion = {r["question_id"]: r for r in _legacy_completion_rows(expectations)}
+    merged = []
+    for row in rows:
+        repair = completion.get(row["question_id"])
+        if row["question_id"] in invalid and repair is not None:
+            repair["repairs_infrastructure_failure"] = row["user_outcome_why"]
+            merged.append(repair)
+        else:
+            merged.append(row)
+    return merged
+
+
+def main() -> int:
+    _raw, replaced = _collected()
+    if replaced:
+        print(f"repaired {len(replaced)} infrastructure failure(s) from the "
+              f"rerun file; originals kept in the evidence\n")
+    rows = build_rows()
+    RESULTS.write_text(json.dumps(rows, indent=1, ensure_ascii=False, default=str)
+                       + "\n", encoding="utf-8")
+    print(f"scored {len(rows)} questions -> {RESULTS.name}\n")
+    for field in ("user_outcome", "migration_outcome", "interpretation_outcome"):
+        print(f"{field}:")
+        for key, count in Counter(r[field] for r in rows).most_common():
+            print(f"   {key:52s} {count:4d}")
+        print()
+    drops = Counter()
+    for r in rows:
+        for k, v in r["drops"].items():
+            if k.startswith("silent_") and v is True:
+                drops[k] += 1
+    print("silent semantic losses:", dict(drops) or "none")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

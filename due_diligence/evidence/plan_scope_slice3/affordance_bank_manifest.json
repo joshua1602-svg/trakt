@@ -1,0 +1,164 @@
+{
+  "authorised_live_calls": 10,
+  "bank_id": "slice3_affordance_v1",
+  "boundary": "question -> Opus -> CandidateIntent -> compiler (+ client registry) -> plan. No execution, no MI API, no serving path.",
+  "calls_per_case": 1,
+  "cases": [
+    {
+      "axis": "lifecycle",
+      "base": "funded",
+      "id": "M1",
+      "named": false,
+      "question": "What is the back book balance?",
+      "role": null,
+      "seasoning_forbidden": true,
+      "why": "the generic phrase, alone. It names the funded population; reading it as a seasoning silently drops the front book"
+    },
+    {
+      "axis": "lifecycle",
+      "base": "pipeline",
+      "id": "M2",
+      "named": false,
+      "question": "What is in the front book?",
+      "role": null,
+      "seasoning_forbidden": true,
+      "why": "the mirror. New originations are the pipeline population, not a vintage of the funded one"
+    },
+    {
+      "axis": "role",
+      "base": "funded",
+      "id": "M3",
+      "named": false,
+      "question": "What is the acquired back book balance?",
+      "role": "acquired",
+      "seasoning_forbidden": true,
+      "why": "two axes in one phrase: lifecycle AND role. Both, and no third"
+    },
+    {
+      "axis": "role",
+      "base": "funded",
+      "id": "M4",
+      "named": false,
+      "question": "What is the direct back book balance?",
+      "role": "direct",
+      "seasoning_forbidden": true,
+      "why": "the same, the other role. 'back book' must not drag in 'acquired'"
+    },
+    {
+      "axis": "role",
+      "base": null,
+      "id": "M5",
+      "named": false,
+      "question": "What is the balance of purchased loans?",
+      "role": "acquired",
+      "why": "role language without the word 'acquired'"
+    },
+    {
+      "axis": "role",
+      "base": null,
+      "id": "M6",
+      "named": false,
+      "question": "What is the balance of originated loans?",
+      "role": "direct",
+      "why": "role language without the word 'direct'"
+    },
+    {
+      "atomic": true,
+      "axis": "named",
+      "base": "funded",
+      "id": "M7",
+      "named": true,
+      "question": "What is funded balance for ALP Acquired Back Book?",
+      "resolves_to": "alp_acquired",
+      "role": null,
+      "seasoning_forbidden": true,
+      "why": "the canonical label. Its words are its NAME \u2014 not a role and not a seasoning. This is the case that would have served wrong"
+    },
+    {
+      "atomic": true,
+      "axis": "named",
+      "base": "funded",
+      "id": "M8",
+      "named": true,
+      "question": "What is funded balance for the ALP back book?",
+      "resolves_to": "alp_acquired",
+      "role": null,
+      "seasoning_forbidden": true,
+      "why": "a declared alias, which the model can now read. 'back book' here is part of a name, not the lifecycle phrase"
+    },
+    {
+      "atomic": true,
+      "axis": "named",
+      "base": "funded",
+      "id": "M9",
+      "named": true,
+      "question": "Show ALP Acquired Back Book funded balance each month.",
+      "resolves_to": "alp_acquired",
+      "role": null,
+      "seasoning_forbidden": true,
+      "temporal": true,
+      "why": "a named source must cost neither the series nor its grain"
+    },
+    {
+      "axis": "attribution",
+      "base": "funded",
+      "capability_not": [
+        "generic_analysis"
+      ],
+      "id": "M10",
+      "named": false,
+      "question": "How much of this month's increase came from the acquired back book?",
+      "role": "acquired",
+      "seasoning_forbidden": true,
+      "temporal": true,
+      "why": "THE control. Now that three axes are readable in one phrase, the question must still be an attribution and not a scoped balance"
+    }
+  ],
+  "compile_checked": [
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "M5",
+    "M6",
+    "M7",
+    "M8",
+    "M9"
+  ],
+  "model": "claude-opus-5",
+  "not_pinned": [
+    "operation",
+    "time.form",
+    "statistic",
+    "exact wording of source_reference",
+    "capability (except the attribution control)"
+  ],
+  "registry": {
+    "client_id": "ERE",
+    "portfolios": [
+      {
+        "aliases": [],
+        "source_portfolio_id": "alp_origination",
+        "source_portfolio_label": "ALP Originations",
+        "source_portfolio_type": "direct"
+      },
+      {
+        "aliases": [
+          "ALP back book"
+        ],
+        "source_portfolio_id": "alp_acquired",
+        "source_portfolio_label": "ALP Acquired Back Book",
+        "source_portfolio_type": "acquired"
+      },
+      {
+        "aliases": [],
+        "source_portfolio_id": "nbs_acquired",
+        "source_portfolio_label": "NBS Acquired",
+        "source_portfolio_type": "acquired"
+      }
+    ]
+  },
+  "registry_is_visible_to_the_model": true,
+  "retries": 0,
+  "what_this_is": "does claude-opus-5 place portfolio language on the right governed axis now that the contract describes the axes"
+}

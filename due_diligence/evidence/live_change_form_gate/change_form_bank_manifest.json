@@ -1,0 +1,392 @@
+{
+ "authorised_live_calls": 18,
+ "bank_id": "live_change_form_gate_v1",
+ "baseline_sha": "665176864d2f5dbceedc277e351c5d2cd978777f",
+ "boundary": "Calls the Anthropic API directly via AnthropicInterpreterClient. No /mi/query, no MI_BEARER, no Azure App Service, no plan_serving_canary, no MI_AGENT_PLAN_SERVE, and not the 135 benchmark CLI. Nothing is executed against a book.",
+ "calls_per_case": 1,
+ "cases": [
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF01",
+   "measure": null,
+   "question": "What are the main changes in the funded portfolio since the previous reporting period?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF02",
+   "measure": null,
+   "question": "Give me the material changes in the book over the latest month.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF03",
+   "measure": null,
+   "question": "What should I know about how the portfolio has changed since last month?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF04",
+   "measure": null,
+   "question": "Have there been any important changes in the funded book since the last reporting date?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF05",
+   "measure": null,
+   "question": "What materially changed in the direct funded portfolio over the latest reporting period?",
+   "scope": "direct",
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF06",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "How much did funded balance change since last month?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF07",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value",
+     "indexed_loan_to_value"
+    ],
+    "family": "weighted_average_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "question": "How did weighted average LTV move over the latest reporting period?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF08",
+   "measure": {
+    "concepts": [
+     "loan"
+    ],
+    "family": "loan_count",
+    "statistics": [
+     "count",
+     "count_distinct"
+    ]
+   },
+   "question": "How much has the number of funded loans changed since the previous report?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF09",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "What was the change in outstanding balance between this month and last month?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF10",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "How did funded balance change in the acquired portfolio over the latest month?",
+   "scope": "acquired",
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF11",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "What drove the change in funded balance this month?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF12",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Explain the main contributors to the movement in funded balance since the previous reporting period.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF13",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Bridge the funded balance movement from the previous month to the current month.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF14",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Why did the direct funded book balance move over the latest reporting period?",
+   "scope": "direct",
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF15",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Compare funded balance this month with the previous month.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF16",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value",
+     "indexed_loan_to_value"
+    ],
+    "family": "weighted_average_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "question": "What was weighted average LTV in the current reporting period versus the previous one?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF17",
+   "measure": {
+    "concepts": [
+     "loan"
+    ],
+    "family": "loan_count",
+    "statistics": [
+     "count",
+     "count_distinct"
+    ]
+   },
+   "question": "Show me the funded loan count at the current reporting date and at the prior reporting date.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters": [],
+   "id": "CF18",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Compare the acquired book's funded balance at the latest reporting date with the previous reporting date.",
+   "scope": "acquired",
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  }
+ ],
+ "model": "claude-opus-5",
+ "not_pinned": [
+  "capability",
+  "operation",
+  "the statistic on a measure (recorded, reported, not a gate)",
+  "time.grain (a question naming no grain may leave it absent)"
+ ],
+ "note_on_scope_count": "The gate brief states SCOPE_PRESERVED = 3/3. The question set contains FOUR scope-bearing questions: CF05 direct, CF10 acquired, CF14 direct, CF18 acquired. All four are pinned and scored. The stricter reading is used deliberately; a gate is not relaxed to fit an arithmetic slip, and the discrepancy is reported rather than resolved by dropping a case.",
+ "primary_gate": "change_form == expected, 18/18",
+ "registry_is_visible_to_the_model": false,
+ "retries": 0,
+ "secondary_gates": {
+  "explicit_measure_preserved": "13 of 13 (CF06-CF18)",
+  "invented_dimensions": 0,
+  "invented_filters": 0,
+  "material_summary_specific_measure_invented": "0 of 5",
+  "scope_preserved": "4 of 4 (CF05, CF10, CF14, CF18)",
+  "silent_semantic_drops": 0,
+  "unnecessary_clarifications": 0
+ },
+ "what_this_is": "NATURAL LANGUAGE -> OPUS -> CandidateIntent. Whether live Opus assigns the Sprint A first-class `change_form` to eighteen natural-language change questions. It does NOT test deterministic execution, and no answer is computed."
+}

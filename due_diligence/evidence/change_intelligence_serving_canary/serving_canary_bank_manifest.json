@@ -1,0 +1,394 @@
+{
+ "authoring_defects_avoided": {
+  "v3_V06_restricting_adjective": "filters_permitted is pinned per case.",
+  "v3_V13_attribution_measure": "ATTRIBUTION_TARGET admits bridge_component.",
+  "v4_W06_no_governed_value_list": "no question restricts on arrears or on any concept with an empty governed value list; the one unsatisfiable question (S10) is pinned as a REFUSAL, not as an answer with zero clarifications."
+ },
+ "authorised_live_calls": 10,
+ "bank_id": "change_intelligence_serving_canary",
+ "boundary": "The deployed MI API at the pinned product SHA, with MI_AGENT_PLAN_SERVE=canary and the canary principal allow-listed. It does NOT run the 135 benchmark, does not touch the historical banks, and changes no configuration itself.",
+ "calls_per_case": 1,
+ "cases": [
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S01",
+   "measure": null,
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": "mi_agent_api.insight_funded.compose",
+    "plan_adapter": "mi_agent.plan_material_summary",
+    "route": "governed_plan_material_summary",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Taking the two most recent reporting dates, where did the funded portfolio shift significantly?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S02",
+   "measure": null,
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": "mi_agent_api.insight_funded.compose",
+    "plan_adapter": "mi_agent.plan_material_summary",
+    "route": "governed_plan_material_summary",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Tell me which changes in the portfolio are worth my attention.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "OWNER_DEFAULT"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S03",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": null,
+    "plan_adapter": null,
+    "route_must_not_be": [
+     "governed_plan_material_summary",
+     "governed_plan_attribution"
+    ],
+    "serving_provenance": "NOT_PINNED_UNCHANGED_BY_THIS_SPRINT"
+   },
+   "question": "By how much has outstanding balance moved from the preceding reporting date to the latest one?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S04",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value"
+    ],
+    "family": "weighted_average_current_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": null,
+    "plan_adapter": null,
+    "route_must_not_be": [
+     "governed_plan_material_summary",
+     "governed_plan_attribution"
+    ],
+    "serving_provenance": "NOT_PINNED_UNCHANGED_BY_THIS_SPRINT"
+   },
+   "question": "Quantify the move in weighted average LTV between this reporting date and the last one.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S05",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement",
+     "bridge_component"
+    ],
+    "family": "funded_balance_or_its_governed_components",
+    "statistics": []
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.bridge.balance_bridge",
+    "composition_owner": null,
+    "plan_adapter": "mi_agent.plan_attribution",
+    "route": "governed_plan_attribution",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Which parts of the book account for the funded balance movement across the two most recent reporting dates?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S06",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement",
+     "bridge_component"
+    ],
+    "family": "funded_balance_or_its_governed_components",
+    "statistics": []
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.bridge.balance_bridge",
+    "composition_owner": null,
+    "plan_adapter": "mi_agent.plan_attribution",
+    "route": "governed_plan_attribution",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Explain what sits behind the change in funded balance.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "OWNER_DEFAULT"
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S07",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.mi_query_executor.execute_mi_query",
+    "composition_owner": null,
+    "plan_adapter": "mi_agent.plan_temporal_runtime (pre-existing)",
+    "route_must_not_be": [
+     "governed_plan_material_summary",
+     "governed_plan_attribution"
+    ],
+    "serving_provenance": "NOT_PINNED_UNCHANGED_BY_THIS_SPRINT"
+   },
+   "question": "I want outstanding balance as two figures: one for the current reporting date and one for the date before it.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S08",
+   "measure": {
+    "concepts": [
+     "loan"
+    ],
+    "family": "loan_count",
+    "statistics": [
+     "count",
+     "count_distinct"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.mi_query_executor.execute_mi_query",
+    "composition_owner": null,
+    "plan_adapter": "mi_agent.plan_temporal_runtime (pre-existing)",
+    "route_must_not_be": [
+     "governed_plan_material_summary",
+     "governed_plan_attribution"
+    ],
+    "serving_provenance": "NOT_PINNED_UNCHANGED_BY_THIS_SPRINT"
+   },
+   "question": "How many funded loans were there at this reporting date, and how many at the one before it?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S09",
+   "measure": null,
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": "mi_agent_api.insight_funded.compose",
+    "plan_adapter": "mi_agent.plan_material_summary",
+    "route": "governed_plan_material_summary",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "In the acquired book specifically, what changed between this reporting date and the last one?",
+   "scope": "acquired",
+   "scope_must_narrow": true,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": null,
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "S10",
+   "measure": null,
+   "must_not_answer": true,
+   "outcome": "REFUSE",
+   "owner": null,
+   "question": "How did the Meridian Trust portfolio change since the preceding reporting date?",
+   "scope": "unresolvable",
+   "temporal_accept": [],
+   "temporal_intent": "EXPLICIT_PAIR"
+  }
+ ],
+ "deployment_sha_rule": {
+  "asserted_by": "GET /api/health -> build.commit, compared before any question is asked",
+  "must_equal": "88cf5fde759c29f1cff29b9adbf003a2d6ebd530",
+  "on_mismatch": "STOP. Zero live calls, zero spend.",
+  "tolerated_difference": "none in product code. The approved head must be an ancestor of the deployed build, and the only files differing between them may be this evidence directory and the workflow that runs it \u2014 asserted by diffing, not claimed.",
+  "what_that_is": "the commit every offline gate in this sprint passed on \u2014 the product change itself, with no evidence file and no CI plumbing in it"
+ },
+ "model": "claude-opus-5",
+ "not_pinned": [
+  "capability",
+  "operation",
+  "the statistic on a measure (recorded, reported, not a gate)",
+  "time.grain",
+  "any numeric value",
+  "WHICH of the three valid temporal routes a form that owns a default takes",
+  "the serving provenance of metric_delta and level_comparison \u2014 this sprint established nothing about it"
+ ],
+ "numbers_are_not_pinned": {
+  "how_numeric_truth_is_established": "AFTER each live call, the deterministic owner named in the case's `owner` block is invoked independently over the same governed snapshots, with the period request the served receipt records, and every published figure \u2014 metric movements, composition shifts, balance-bridge components, finding metrics \u2014 must match exactly. This is the offline OWNER PARITY GATE applied to live inputs.",
+  "required": {
+   "numerical_differences": 0,
+   "scope_differences": 0,
+   "semantic_differences": 0
+  },
+  "why": "A figure taken from a model's output and then used to score the same model certifies nothing. No numeric answer is pinned."
+ },
+ "primary_gates": {
+  "change_form": "9 of 9 (S01-S09); S10 states no form",
+  "execution_owner": "5 of 5 \u2014 S01, S02, S05, S06 and S09 must record the calculation_owner their case pins, and S03, S04, S07 and S08 must NOT arrive through a change-form route",
+  "outcome_type": "10 of 10 ANSWER / REFUSE as pinned",
+  "owner_parity": "0 numerical, 0 semantic, 0 scope differences"
+ },
+ "product_baseline": "f22d0e467bec66daa2cd3177d7e5c260d847c4e7",
+ "product_head": "88cf5fde759c29f1cff29b9adbf003a2d6ebd530",
+ "registry_is_visible_to_the_model": false,
+ "retries": 0,
+ "secondary_gates": {
+  "explicit_measure_preserved": "6 of 6 (S03, S04, S05, S06, S07, S08)",
+  "invented_dimensions": 0,
+  "invented_filters": "0 \u2014 a filter outside filters_permitted",
+  "legacy_envelope_never_damaged": "every case's response is a complete answer or a governed decline; a canary failure must show as LEGACY_FALLBACK and never as an error",
+  "material_summary_measure_invented": "0 of 3 (S01, S02, S09)",
+  "scope_preserved_and_narrowed": "1 of 1 (S09)",
+  "unnecessary_clarifications": 0
+ },
+ "stop_conditions": [
+  "the deployed build does not satisfy deployment_sha_rule \u2014 STOP with zero questions asked",
+  "MI_AGENT_PLAN_SERVE cannot be read from the authoritative source \u2014 STOP before enabling serving",
+  "a provider quota, credit or authentication failure \u2014 STOP immediately and report the partial result",
+  "any case is asked twice \u2014 the run is void"
+ ],
+ "supersedes": "Nothing. v1, v2, v3 and v4 remain immutable INTERPRETATION banks; v2 remains unrun. This is the first END-TO-END bank in the programme and replaces none of them.",
+ "temporal_accept_by_form": {
+  "attribution": [
+   "relative_pair",
+   "previous_reporting_period",
+   "explicit_period",
+   "current",
+   "ABSENT"
+  ],
+  "level_comparison": [
+   "relative_pair",
+   "previous_reporting_period",
+   "explicit_period"
+  ],
+  "material_summary": [
+   "relative_pair",
+   "previous_reporting_period",
+   "explicit_period",
+   "current",
+   "ABSENT"
+  ],
+  "metric_delta": [
+   "relative_pair",
+   "previous_reporting_period",
+   "explicit_period"
+  ]
+ },
+ "temporal_routes": {
+  "EXPLICIT_ANCHOR": "the wording names only the current endpoint",
+  "EXPLICIT_PAIR": "the wording names two reporting states",
+  "OWNER_DEFAULT": "the wording names no temporal relation, and the form owns the comparison window; absent, anchor and pair are all valid",
+  "scored_from": "the receipt's own `interpreted_time_present` / `temporal_default_applied`, never from wording"
+ },
+ "what_this_is": "NATURAL LANGUAGE -> POST /api/mi/query -> interpretation_v2 -> GovernedQueryPlan -> deterministic owner -> rendered envelope. Ten fresh questions; none of v1's, v3's or v4's wording is reused, verified programmatically by the runner before any call."
+}

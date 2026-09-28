@@ -1,0 +1,1977 @@
+{
+ "cases": {
+  "S03": {
+   "candidate_intent": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No population stated; resolved to the funded book per the governed default.",
+      "options": [
+       "funded",
+       "whole_book"
+      ],
+      "slot": "population.base"
+     },
+     {
+      "blocking": false,
+      "note": "No statistic stated; the registry default (sum of balance) applies.",
+      "options": [],
+      "slot": "measures[0].statistic"
+     }
+    ],
+    "capability": "generic_analysis",
+    "change_form": "metric_delta",
+    "comparison": {
+     "kind": "none",
+     "left": null,
+     "right": null
+    },
+    "dimensions": [],
+    "evidence": [
+     {
+      "claim": "The governed quantity asked about is outstanding balance (exposure).",
+      "text": "outstanding balance"
+     },
+     {
+      "claim": "The reader asks for the size of the movement in a single named metric, not its cause or decomposition, so this is a metric delta handled by generic_analysis.",
+      "text": "By how much has outstanding balance moved"
+     },
+     {
+      "claim": "Two consecutive governed reporting states are held against each other: previous and current.",
+      "text": "from the preceding reporting date to the latest one"
+     }
+    ],
+    "filters": [],
+    "geography": {
+     "basis": null,
+     "group_by": false,
+     "level": null,
+     "requested": false,
+     "values": []
+    },
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": null,
+      "weight": null
+     }
+    ],
+    "operation": "movement",
+    "outputs": [],
+    "population": {
+     "base": "funded",
+     "lens": "all",
+     "seasoning": "any",
+     "source_reference": null
+    },
+    "provenance": {
+     "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+     "model_id": "claude-opus-5",
+     "question": "By how much has outstanding balance moved from the preceding reporting date to the latest one?",
+     "usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 36783,
+      "input_tokens": 4091,
+      "output_tokens": 930
+     },
+     "vocabulary_version": "2.2.0"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "target": null,
+    "time": {
+     "form": "relative_pair",
+     "grain": null,
+     "labels": [
+      "the preceding reporting date",
+      "the latest one"
+     ],
+     "periods_back": null,
+     "stated": true
+    }
+   },
+   "compile_result": {
+    "outcome": "PLAN",
+    "plan_id": "plan_6d99df55e11d4dcd",
+    "reason_codes": [],
+    "reasons": []
+   },
+   "correlation_id": "shadow_cee022b2e73b453c9cd9",
+   "disposition": "INELIGIBLE",
+   "duplicate_records_for_this_question": 0,
+   "eligibility": {
+    "detail": "capability='period_movement' is specialist; it owns its own input contract and arithmetic",
+    "eligible": false,
+    "perimeter": "slice2_temporal",
+    "reason": "CAPABILITY_NOT_GENERIC"
+   },
+   "execution": {
+    "attempted": false,
+    "why_not": "CAPABILITY_NOT_GENERIC: capability='period_movement' is specialist; it owns its own input contract and arithmetic"
+   },
+   "governed_plan": {
+    "capability": "period_movement",
+    "comparison_kind": "none",
+    "comparison_left": null,
+    "comparison_right": null,
+    "filters": [],
+    "geography": null,
+    "operation": "movement",
+    "outputs": [
+     {
+      "dimensions": [],
+      "filters": [],
+      "geography": null,
+      "id": "primary",
+      "measures": [
+       {
+        "canonical_field": "current_outstanding_balance",
+        "capability_owner": null,
+        "concept": "current_outstanding_balance",
+        "statistic": "sum",
+        "statistic_defaulted": true,
+        "weight_concept": null,
+        "weight_field": null
+       }
+      ]
+     }
+    ],
+    "period": {
+     "contract": "governed_reporting_period_pair",
+     "default_method": "",
+     "default_owner": "",
+     "default_reason": "",
+     "defaulted": false,
+     "form": "relative_pair",
+     "grain": null,
+     "labels": [
+      "the preceding reporting date",
+      "the latest one"
+     ],
+     "owned_by_capability": false,
+     "periods_back": 1,
+     "resolved": true,
+     "stated": true
+    },
+    "plan_id": "plan_6d99df55e11d4dcd",
+    "population": {
+     "base": "funded",
+     "lens": "all",
+     "scope_predicates": [],
+     "seasoning": "any",
+     "source_portfolio_id": null,
+     "source_reference": null
+    },
+    "provenance": {
+     "compiler_bindings": {
+      "change_form": {
+       "capability": "period_movement",
+       "form": "metric_delta",
+       "mode": "requested_metric"
+      },
+      "geography_field": null,
+      "normalisation": {
+       "applied": [
+        "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)",
+        "change_form: capability 'generic_analysis' -> 'period_movement' (derived from change_form 'metric_delta')"
+       ],
+       "normal_form_version": "candidate_intent_normal_form/1.0"
+      },
+      "outputs": {
+       "primary": {
+        "dimensions": [],
+        "filters": [],
+        "measures": [
+         {
+          "capability_owner": null,
+          "concept": "current_outstanding_balance",
+          "field": "current_outstanding_balance",
+          "statistic": "sum",
+          "weight_field": null
+         }
+        ]
+       }
+      },
+      "population_predicates": []
+     },
+     "compiler_version": "interpretation_v2.compiler/1.0.0",
+     "intent_claims": {
+      "capability": "generic_analysis",
+      "change_form": "metric_delta",
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "dimensions": [],
+      "evidence": [
+       {
+        "claim": "The governed quantity asked about is outstanding balance (exposure).",
+        "text": "outstanding balance"
+       },
+       {
+        "claim": "The reader asks for the size of the movement in a single named metric, not its cause or decomposition, so this is a metric delta handled by generic_analysis.",
+        "text": "By how much has outstanding balance moved"
+       },
+       {
+        "claim": "Two consecutive governed reporting states are held against each other: previous and current.",
+        "text": "from the preceding reporting date to the latest one"
+       }
+      ],
+      "filters": [],
+      "geography": [
+       false,
+       null,
+       null,
+       false,
+       []
+      ],
+      "measures": [
+       [
+        "current_outstanding_balance",
+        null,
+        null
+       ]
+      ],
+      "operation": "movement",
+      "population": [
+       "funded",
+       "all",
+       "any",
+       null
+      ],
+      "target": null,
+      "time": [
+       "relative_pair",
+       [
+        "the preceding reporting date",
+        "the latest one"
+       ],
+       null,
+       null
+      ]
+     },
+     "intent_schema_version": "candidate_intent/1.0",
+     "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+     "model_id": "claude-opus-5",
+     "notes": [
+      "normalised [candidate_intent_normal_form/1.0]: relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)",
+      "normalised [candidate_intent_normal_form/1.0]: change_form: capability 'generic_analysis' -> 'period_movement' (derived from change_form 'metric_delta')",
+      "disclosed reading [population.base]: No population stated; resolved to the funded book per the governed default.",
+      "disclosed reading [measures[0].statistic]: No statistic stated; the registry default (sum of balance) applies.",
+      "statistic for 'current_outstanding_balance' defaulted to 'sum' by the governed registry"
+     ],
+     "question": "By how much has outstanding balance moved from the preceding reporting date to the latest one?",
+     "usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 36783,
+      "input_tokens": 4091,
+      "output_tokens": 930
+     },
+     "vocabulary_version": "2.2.0"
+    },
+    "schema_version": "governed_query_plan/1.0",
+    "target": null
+   },
+   "model_id": "claude-opus-5",
+   "question": "By how much has outstanding balance moved from the preceding reporting date to the latest one?",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No population stated; resolved to the funded book per the governed default.",
+      "options": [
+       "funded",
+       "whole_book"
+      ],
+      "slot": "population.base"
+     },
+     {
+      "blocking": false,
+      "note": "No statistic stated; the registry default (sum of balance) applies.",
+      "slot": "measures[0].statistic"
+     }
+    ],
+    "capability": "generic_analysis",
+    "change_form": "metric_delta",
+    "evidence": [
+     {
+      "claim": "The governed quantity asked about is outstanding balance (exposure).",
+      "text": "outstanding balance"
+     },
+     {
+      "claim": "The reader asks for the size of the movement in a single named metric, not its cause or decomposition, so this is a metric delta handled by generic_analysis.",
+      "text": "By how much has outstanding balance moved"
+     },
+     {
+      "claim": "Two consecutive governed reporting states are held against each other: previous and current.",
+      "text": "from the preceding reporting date to the latest one"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "movement",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "relative_pair",
+     "labels": [
+      "the preceding reporting date",
+      "the latest one"
+     ]
+    }
+   },
+   "record_found": true,
+   "request": {
+    "client_id": "ERE",
+    "dataset_view": "funded",
+    "portfolio_id": "ERE/2026-06-30",
+    "question": "By how much has outstanding balance moved from the preceding reporting date to the latest one?",
+    "run_id": "2026-06-30"
+   },
+   "serving": {
+    "decision": "LEGACY_FALLBACK",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": false,
+    "new_value": null,
+    "plan_id": "plan_6d99df55e11d4dcd",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "INELIGIBLE:CAPABILITY_NOT_GENERIC",
+    "response_served_from": "LEGACY_FALLBACK"
+   }
+  },
+  "S07": {
+   "candidate_intent": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No statistic stated; left empty so the governed default for balance applies.",
+      "options": [
+       "governed default"
+      ],
+      "slot": "measures[0].statistic"
+     },
+     {
+      "blocking": false,
+      "note": "Read as a side-by-side comparison of levels at two governed reporting periods; no cause or decomposition of the change was asked for, so this stays generic analysis rather than movement attribution.",
+      "options": [
+       "generic_analysis",
+       "period_movement"
+      ],
+      "slot": "capability"
+     }
+    ],
+    "capability": "generic_analysis",
+    "change_form": "level_comparison",
+    "comparison": {
+     "kind": "none",
+     "left": null,
+     "right": null
+    },
+    "dimensions": [],
+    "evidence": [
+     {
+      "claim": "The measure requested is the governed balance (current outstanding exposure).",
+      "text": "I want outstanding balance"
+     },
+     {
+      "claim": "Two levels are wanted side by side, not the movement between them.",
+      "text": "as two figures"
+     },
+     {
+      "claim": "The two reporting states are the current period and the immediately preceding one.",
+      "text": "one for the current reporting date and one for the date before it"
+     }
+    ],
+    "filters": [],
+    "geography": {
+     "basis": null,
+     "group_by": false,
+     "level": null,
+     "requested": false,
+     "values": []
+    },
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": null,
+      "weight": null
+     }
+    ],
+    "operation": "compare",
+    "outputs": [],
+    "population": {
+     "base": "funded",
+     "lens": "all",
+     "seasoning": "any",
+     "source_reference": null
+    },
+    "provenance": {
+     "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+     "model_id": "claude-opus-5",
+     "question": "I want outstanding balance as two figures: one for the current reporting date and one for the date before it.",
+     "usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 36783,
+      "input_tokens": 4259,
+      "output_tokens": 1026
+     },
+     "vocabulary_version": "2.2.0"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "target": null,
+    "time": {
+     "form": "relative_pair",
+     "grain": null,
+     "labels": [
+      "the current reporting date",
+      "the date before it"
+     ],
+     "periods_back": 1,
+     "stated": true
+    }
+   },
+   "compile_result": {
+    "outcome": "PLAN",
+    "plan_id": "plan_cce90c173e7b28aa",
+    "reason_codes": [],
+    "reasons": []
+   },
+   "correlation_id": "shadow_070a71f3f134415eb424",
+   "disposition": "EXECUTED",
+   "duplicate_records_for_this_question": 0,
+   "eligibility": {
+    "detail": "",
+    "eligible": true,
+    "perimeter": "slice2_temporal",
+    "reason": ""
+   },
+   "execution": {
+    "attempted": true,
+    "bound_spec": {
+     "acquired_portfolio_id": null,
+     "aggregation": "sum",
+     "allow_chart_fallback": null,
+     "allow_config_probability": null,
+     "allow_partial_result": null,
+     "as_of_date": null,
+     "baseline_date": null,
+     "baseline_risk_field": null,
+     "bridge_dimension": null,
+     "bridge_query": false,
+     "bucket_config_key": null,
+     "bucket_count": 4,
+     "bucket_field": null,
+     "bucket_strategy": null,
+     "chart_preference": null,
+     "chart_type": "none",
+     "cohort_grain": null,
+     "cohort_progression": false,
+     "cohort_vintage": null,
+     "color": null,
+     "compare_periods": [],
+     "comparison_basis": null,
+     "concentration_dimension": null,
+     "current_date": null,
+     "current_risk_field": null,
+     "cut_off_date": null,
+     "dimension": null,
+     "dimensions": [],
+     "end_date": null,
+     "execution_mode": null,
+     "explanation": "Shadow execution of a governed plan (slice 1).",
+     "filters": {},
+     "forecast_mode": null,
+     "forecast_probability_source": null,
+     "forecast_question": null,
+     "forecast_target_value": null,
+     "hierarchy": [],
+     "intent": "summary",
+     "limit": null,
+     "measures": [],
+     "metric": "current_outstanding_balance",
+     "metric_defaulted": false,
+     "migration_dimension": null,
+     "output_format": "text",
+     "output_type": null,
+     "portfolio_id": null,
+     "portfolio_lens": null,
+     "query_id": null,
+     "ranking_mode": null,
+     "reporting_date": null,
+     "require_structured_issues": true,
+     "risk_dimension": null,
+     "risk_limit_category": null,
+     "risk_limit_query": null,
+     "risk_monitor": null,
+     "risk_monitor_mode": null,
+     "route_id": "mi",
+     "segment": null,
+     "size": null,
+     "snapshot_client_id": null,
+     "snapshot_store_root": null,
+     "sort_by": null,
+     "sort_direction": "desc",
+     "spv_id": null,
+     "start_date": null,
+     "state": null,
+     "state_filters": {},
+     "strict_mode": null,
+     "temporal_mode": null,
+     "title": null,
+     "top_n": null,
+     "trend_grain": null,
+     "unavailable_filters": [],
+     "weight_field": null,
+     "x": null,
+     "y": null
+    },
+    "requested_semantics": {
+     "capability": "generic_analysis",
+     "dimension_concepts": [],
+     "dimensions": [],
+     "filters": [],
+     "geography": {},
+     "measure_concept": "current_outstanding_balance",
+     "measure_field": "current_outstanding_balance",
+     "operation": "compare",
+     "period_contract": "governed_reporting_period_pair",
+     "period_form": "relative_pair",
+     "period_grain": null,
+     "period_labels": [
+      "the current reporting date",
+      "the date before it"
+     ],
+     "period_periods_back": 1,
+     "population": {
+      "base": "funded",
+      "lens": "all",
+      "scope_predicates": [],
+      "seasoning": "any",
+      "source_portfolio_id": null,
+      "source_reference": null
+     },
+     "statistic": "sum",
+     "weight_field": null
+    },
+    "temporal": {
+     "basis": "pair",
+     "bound_spec": {
+      "acquired_portfolio_id": null,
+      "aggregation": "sum",
+      "allow_chart_fallback": null,
+      "allow_config_probability": null,
+      "allow_partial_result": null,
+      "as_of_date": null,
+      "baseline_date": null,
+      "baseline_risk_field": null,
+      "bridge_dimension": null,
+      "bridge_query": false,
+      "bucket_config_key": null,
+      "bucket_count": 4,
+      "bucket_field": null,
+      "bucket_strategy": null,
+      "chart_preference": null,
+      "chart_type": "none",
+      "cohort_grain": null,
+      "cohort_progression": false,
+      "cohort_vintage": null,
+      "color": null,
+      "compare_periods": [],
+      "comparison_basis": null,
+      "concentration_dimension": null,
+      "current_date": null,
+      "current_risk_field": null,
+      "cut_off_date": null,
+      "dimension": null,
+      "dimensions": [],
+      "end_date": null,
+      "execution_mode": null,
+      "explanation": "Shadow execution of a governed plan (slice 1).",
+      "filters": {},
+      "forecast_mode": null,
+      "forecast_probability_source": null,
+      "forecast_question": null,
+      "forecast_target_value": null,
+      "hierarchy": [],
+      "intent": "summary",
+      "limit": null,
+      "measures": [],
+      "metric": "current_outstanding_balance",
+      "metric_defaulted": false,
+      "migration_dimension": null,
+      "output_format": "text",
+      "output_type": null,
+      "portfolio_id": null,
+      "portfolio_lens": null,
+      "query_id": null,
+      "ranking_mode": null,
+      "reporting_date": null,
+      "require_structured_issues": true,
+      "risk_dimension": null,
+      "risk_limit_category": null,
+      "risk_limit_query": null,
+      "risk_monitor": null,
+      "risk_monitor_mode": null,
+      "route_id": "mi",
+      "segment": null,
+      "size": null,
+      "snapshot_client_id": null,
+      "snapshot_store_root": null,
+      "sort_by": null,
+      "sort_direction": "desc",
+      "spv_id": null,
+      "start_date": null,
+      "state": null,
+      "state_filters": {},
+      "strict_mode": null,
+      "temporal_mode": null,
+      "title": null,
+      "top_n": null,
+      "trend_grain": null,
+      "unavailable_filters": [],
+      "weight_field": null,
+      "x": null,
+      "y": null
+     },
+     "comparison": {
+      "absolute_change": 150194079.0,
+      "baseline_reporting_date": "2025-11-30",
+      "baseline_snapshot_id": "ERE/2025-11-30",
+      "baseline_value": 8903225.069999998,
+      "current_reporting_date": "2026-06-30",
+      "current_snapshot_id": "ERE/2026-06-30",
+      "current_value": 159097304.07,
+      "note": "",
+      "percent_change": 1686.9626210628867
+     },
+     "detail": "",
+     "eligible": true,
+     "error": "",
+     "plan_id": "plan_cce90c173e7b28aa",
+     "points": [
+      {
+       "cells": [],
+       "cells_note": null,
+       "empty": false,
+       "receipt": {
+        "aggregation": "sum",
+        "applied_predicates": [],
+        "balance_field_used": "current_outstanding_balance",
+        "filtered_row_count": 73,
+        "group_field_keys": [],
+        "input_row_count": 73,
+        "result_type": "summary",
+        "row_count": 1
+       },
+       "reporting_date": "2025-11-30",
+       "snapshot_id": "ERE/2025-11-30",
+       "value": 8903225.069999998,
+       "warnings": [
+        "percent-scale heuristically detected as 'fraction' (median 0.38); the executor does NOT rescale percentages"
+       ]
+      },
+      {
+       "cells": [],
+       "cells_note": null,
+       "empty": false,
+       "receipt": {
+        "aggregation": "sum",
+        "applied_predicates": [],
+        "balance_field_used": "current_outstanding_balance",
+        "filtered_row_count": 958,
+        "group_field_keys": [],
+        "input_row_count": 958,
+        "result_type": "summary",
+        "row_count": 1
+       },
+       "reporting_date": "2026-06-30",
+       "snapshot_id": "ERE/2026-06-30",
+       "value": 159097304.07,
+       "warnings": [
+        "percent-scale heuristically detected as 'whole_number_percent' (median 2.717); the executor does NOT rescale percentages"
+       ]
+      }
+     ],
+     "reason": "",
+     "reconciled": true,
+     "requested": {
+      "capability": "generic_analysis",
+      "dimension_concepts": [],
+      "dimensions": [],
+      "filters": [],
+      "geography": {},
+      "measure_concept": "current_outstanding_balance",
+      "measure_field": "current_outstanding_balance",
+      "operation": "compare",
+      "period_contract": "governed_reporting_period_pair",
+      "period_form": "relative_pair",
+      "period_grain": null,
+      "period_labels": [
+       "the current reporting date",
+       "the date before it"
+      ],
+      "period_periods_back": 1,
+      "population": {
+       "base": "funded",
+       "lens": "all",
+       "scope_predicates": [],
+       "seasoning": "any",
+       "source_portfolio_id": null,
+       "source_reference": null
+      },
+      "statistic": "sum",
+      "weight_field": null
+     },
+     "resolution": {
+      "n_snapshots": 2,
+      "reporting_dates": [
+       "2025-11-30",
+       "2026-06-30"
+      ],
+      "selector_mode": "last_n",
+      "snapshot_ids": [
+       "ERE/2025-11-30",
+       "ERE/2026-06-30"
+      ]
+     },
+     "shape": "period_comparison"
+    }
+   },
+   "governed_plan": {
+    "capability": "generic_analysis",
+    "comparison_kind": "none",
+    "comparison_left": null,
+    "comparison_right": null,
+    "filters": [],
+    "geography": null,
+    "operation": "compare",
+    "outputs": [
+     {
+      "dimensions": [],
+      "filters": [],
+      "geography": null,
+      "id": "primary",
+      "measures": [
+       {
+        "canonical_field": "current_outstanding_balance",
+        "capability_owner": null,
+        "concept": "current_outstanding_balance",
+        "statistic": "sum",
+        "statistic_defaulted": true,
+        "weight_concept": null,
+        "weight_field": null
+       }
+      ]
+     }
+    ],
+    "period": {
+     "contract": "governed_reporting_period_pair",
+     "default_method": "",
+     "default_owner": "",
+     "default_reason": "",
+     "defaulted": false,
+     "form": "relative_pair",
+     "grain": null,
+     "labels": [
+      "the current reporting date",
+      "the date before it"
+     ],
+     "owned_by_capability": false,
+     "periods_back": 1,
+     "resolved": true,
+     "stated": true
+    },
+    "plan_id": "plan_cce90c173e7b28aa",
+    "population": {
+     "base": "funded",
+     "lens": "all",
+     "scope_predicates": [],
+     "seasoning": "any",
+     "source_portfolio_id": null,
+     "source_reference": null
+    },
+    "provenance": {
+     "compiler_bindings": {
+      "change_form": {
+       "capability": "generic_analysis",
+       "form": "level_comparison",
+       "mode": null
+      },
+      "geography_field": null,
+      "normalisation": {
+       "applied": [],
+       "normal_form_version": "candidate_intent_normal_form/1.0"
+      },
+      "outputs": {
+       "primary": {
+        "dimensions": [],
+        "filters": [],
+        "measures": [
+         {
+          "capability_owner": null,
+          "concept": "current_outstanding_balance",
+          "field": "current_outstanding_balance",
+          "statistic": "sum",
+          "weight_field": null
+         }
+        ]
+       }
+      },
+      "population_predicates": []
+     },
+     "compiler_version": "interpretation_v2.compiler/1.0.0",
+     "intent_claims": {
+      "capability": "generic_analysis",
+      "change_form": "level_comparison",
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "dimensions": [],
+      "evidence": [
+       {
+        "claim": "The measure requested is the governed balance (current outstanding exposure).",
+        "text": "I want outstanding balance"
+       },
+       {
+        "claim": "Two levels are wanted side by side, not the movement between them.",
+        "text": "as two figures"
+       },
+       {
+        "claim": "The two reporting states are the current period and the immediately preceding one.",
+        "text": "one for the current reporting date and one for the date before it"
+       }
+      ],
+      "filters": [],
+      "geography": [
+       false,
+       null,
+       null,
+       false,
+       []
+      ],
+      "measures": [
+       [
+        "current_outstanding_balance",
+        null,
+        null
+       ]
+      ],
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any",
+       null
+      ],
+      "target": null,
+      "time": [
+       "relative_pair",
+       [
+        "the current reporting date",
+        "the date before it"
+       ],
+       null,
+       1
+      ]
+     },
+     "intent_schema_version": "candidate_intent/1.0",
+     "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+     "model_id": "claude-opus-5",
+     "notes": [
+      "disclosed reading [measures[0].statistic]: No statistic stated; left empty so the governed default for balance applies.",
+      "disclosed reading [capability]: Read as a side-by-side comparison of levels at two governed reporting periods; no cause or decomposition of the change was asked for, so this stays generic analysis rather than movement attribution.",
+      "statistic for 'current_outstanding_balance' defaulted to 'sum' by the governed registry"
+     ],
+     "question": "I want outstanding balance as two figures: one for the current reporting date and one for the date before it.",
+     "usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 36783,
+      "input_tokens": 4259,
+      "output_tokens": 1026
+     },
+     "vocabulary_version": "2.2.0"
+    },
+    "schema_version": "governed_query_plan/1.0",
+    "target": null
+   },
+   "model_id": "claude-opus-5",
+   "question": "I want outstanding balance as two figures: one for the current reporting date and one for the date before it.",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No statistic stated; left empty so the governed default for balance applies.",
+      "options": [
+       "governed default"
+      ],
+      "slot": "measures[0].statistic"
+     },
+     {
+      "blocking": false,
+      "note": "Read as a side-by-side comparison of levels at two governed reporting periods; no cause or decomposition of the change was asked for, so this stays generic analysis rather than movement attribution.",
+      "options": [
+       "generic_analysis",
+       "period_movement"
+      ],
+      "slot": "capability"
+     }
+    ],
+    "capability": "generic_analysis",
+    "change_form": "level_comparison",
+    "comparison": {
+     "kind": "none"
+    },
+    "evidence": [
+     {
+      "claim": "The measure requested is the governed balance (current outstanding exposure).",
+      "text": "I want outstanding balance"
+     },
+     {
+      "claim": "Two levels are wanted side by side, not the movement between them.",
+      "text": "as two figures"
+     },
+     {
+      "claim": "The two reporting states are the current period and the immediately preceding one.",
+      "text": "one for the current reporting date and one for the date before it"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "compare",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "relative_pair",
+     "labels": [
+      "the current reporting date",
+      "the date before it"
+     ],
+     "periods_back": 1
+    }
+   },
+   "record_found": true,
+   "request": {
+    "client_id": "ERE",
+    "dataset_view": "funded",
+    "portfolio_id": "ERE/2026-06-30",
+    "question": "I want outstanding balance as two figures: one for the current reporting date and one for the date before it.",
+    "run_id": "2026-06-30"
+   },
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": true,
+    "legacy_result_available": true,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": null,
+    "plan_id": "plan_cce90c173e7b28aa",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  },
+  "S08": {
+   "candidate_intent": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as a level comparison: the reader asks for the count at the current reporting period and at the immediately preceding one, not for the size or cause of the change between them.",
+      "options": [
+       "level_comparison",
+       "metric_delta"
+      ],
+      "slot": "change_form"
+     }
+    ],
+    "capability": "generic_analysis",
+    "change_form": "level_comparison",
+    "comparison": {
+     "kind": "none",
+     "left": null,
+     "right": null
+    },
+    "dimensions": [],
+    "evidence": [
+     {
+      "claim": "The requested figure is a count of loans",
+      "text": "How many funded loans were there"
+     },
+     {
+      "claim": "Population is the funded book",
+      "text": "funded loans"
+     },
+     {
+      "claim": "Two reporting states are requested side by side, not a movement or its cause",
+      "text": "at this reporting date, and how many at the one before it"
+     }
+    ],
+    "filters": [],
+    "geography": {
+     "basis": null,
+     "group_by": false,
+     "level": null,
+     "requested": false,
+     "values": []
+    },
+    "measures": [
+     {
+      "concept": "loan",
+      "statistic": "count",
+      "weight": null
+     }
+    ],
+    "operation": "compare",
+    "outputs": [],
+    "population": {
+     "base": "funded",
+     "lens": "all",
+     "seasoning": "any",
+     "source_reference": null
+    },
+    "provenance": {
+     "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+     "model_id": "claude-opus-5",
+     "question": "How many funded loans were there at this reporting date, and how many at the one before it?",
+     "usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 36783,
+      "input_tokens": 4626,
+      "output_tokens": 900
+     },
+     "vocabulary_version": "2.2.0"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "target": null,
+    "time": {
+     "form": "relative_pair",
+     "grain": null,
+     "labels": [
+      "this reporting date",
+      "the one before it"
+     ],
+     "periods_back": null,
+     "stated": true
+    }
+   },
+   "compile_result": {
+    "outcome": "PLAN",
+    "plan_id": "plan_ef59f0fde469ae8c",
+    "reason_codes": [],
+    "reasons": []
+   },
+   "correlation_id": "shadow_f9082be7c89442159d57",
+   "disposition": "EXECUTED",
+   "duplicate_records_for_this_question": 0,
+   "eligibility": {
+    "detail": "",
+    "eligible": true,
+    "perimeter": "slice2_temporal",
+    "reason": ""
+   },
+   "execution": {
+    "attempted": true,
+    "bound_spec": {
+     "acquired_portfolio_id": null,
+     "aggregation": "count",
+     "allow_chart_fallback": null,
+     "allow_config_probability": null,
+     "allow_partial_result": null,
+     "as_of_date": null,
+     "baseline_date": null,
+     "baseline_risk_field": null,
+     "bridge_dimension": null,
+     "bridge_query": false,
+     "bucket_config_key": null,
+     "bucket_count": 4,
+     "bucket_field": null,
+     "bucket_strategy": null,
+     "chart_preference": null,
+     "chart_type": "none",
+     "cohort_grain": null,
+     "cohort_progression": false,
+     "cohort_vintage": null,
+     "color": null,
+     "compare_periods": [],
+     "comparison_basis": null,
+     "concentration_dimension": null,
+     "current_date": null,
+     "current_risk_field": null,
+     "cut_off_date": null,
+     "dimension": null,
+     "dimensions": [],
+     "end_date": null,
+     "execution_mode": null,
+     "explanation": "Shadow execution of a governed plan (slice 1).",
+     "filters": {},
+     "forecast_mode": null,
+     "forecast_probability_source": null,
+     "forecast_question": null,
+     "forecast_target_value": null,
+     "hierarchy": [],
+     "intent": "summary",
+     "limit": null,
+     "measures": [],
+     "metric": null,
+     "metric_defaulted": false,
+     "migration_dimension": null,
+     "output_format": "text",
+     "output_type": null,
+     "portfolio_id": null,
+     "portfolio_lens": null,
+     "query_id": null,
+     "ranking_mode": null,
+     "reporting_date": null,
+     "require_structured_issues": true,
+     "risk_dimension": null,
+     "risk_limit_category": null,
+     "risk_limit_query": null,
+     "risk_monitor": null,
+     "risk_monitor_mode": null,
+     "route_id": "mi",
+     "segment": null,
+     "size": null,
+     "snapshot_client_id": null,
+     "snapshot_store_root": null,
+     "sort_by": null,
+     "sort_direction": "desc",
+     "spv_id": null,
+     "start_date": null,
+     "state": null,
+     "state_filters": {},
+     "strict_mode": null,
+     "temporal_mode": null,
+     "title": null,
+     "top_n": null,
+     "trend_grain": null,
+     "unavailable_filters": [],
+     "weight_field": null,
+     "x": null,
+     "y": null
+    },
+    "requested_semantics": {
+     "capability": "generic_analysis",
+     "dimension_concepts": [],
+     "dimensions": [],
+     "filters": [],
+     "geography": {},
+     "measure_concept": "loan",
+     "measure_field": null,
+     "operation": "compare",
+     "period_contract": "governed_reporting_period_pair",
+     "period_form": "relative_pair",
+     "period_grain": null,
+     "period_labels": [
+      "this reporting date",
+      "the one before it"
+     ],
+     "period_periods_back": 1,
+     "population": {
+      "base": "funded",
+      "lens": "all",
+      "scope_predicates": [],
+      "seasoning": "any",
+      "source_portfolio_id": null,
+      "source_reference": null
+     },
+     "statistic": "count",
+     "weight_field": null
+    },
+    "temporal": {
+     "basis": "pair",
+     "bound_spec": {
+      "acquired_portfolio_id": null,
+      "aggregation": "count",
+      "allow_chart_fallback": null,
+      "allow_config_probability": null,
+      "allow_partial_result": null,
+      "as_of_date": null,
+      "baseline_date": null,
+      "baseline_risk_field": null,
+      "bridge_dimension": null,
+      "bridge_query": false,
+      "bucket_config_key": null,
+      "bucket_count": 4,
+      "bucket_field": null,
+      "bucket_strategy": null,
+      "chart_preference": null,
+      "chart_type": "none",
+      "cohort_grain": null,
+      "cohort_progression": false,
+      "cohort_vintage": null,
+      "color": null,
+      "compare_periods": [],
+      "comparison_basis": null,
+      "concentration_dimension": null,
+      "current_date": null,
+      "current_risk_field": null,
+      "cut_off_date": null,
+      "dimension": null,
+      "dimensions": [],
+      "end_date": null,
+      "execution_mode": null,
+      "explanation": "Shadow execution of a governed plan (slice 1).",
+      "filters": {},
+      "forecast_mode": null,
+      "forecast_probability_source": null,
+      "forecast_question": null,
+      "forecast_target_value": null,
+      "hierarchy": [],
+      "intent": "summary",
+      "limit": null,
+      "measures": [],
+      "metric": null,
+      "metric_defaulted": false,
+      "migration_dimension": null,
+      "output_format": "text",
+      "output_type": null,
+      "portfolio_id": null,
+      "portfolio_lens": null,
+      "query_id": null,
+      "ranking_mode": null,
+      "reporting_date": null,
+      "require_structured_issues": true,
+      "risk_dimension": null,
+      "risk_limit_category": null,
+      "risk_limit_query": null,
+      "risk_monitor": null,
+      "risk_monitor_mode": null,
+      "route_id": "mi",
+      "segment": null,
+      "size": null,
+      "snapshot_client_id": null,
+      "snapshot_store_root": null,
+      "sort_by": null,
+      "sort_direction": "desc",
+      "spv_id": null,
+      "start_date": null,
+      "state": null,
+      "state_filters": {},
+      "strict_mode": null,
+      "temporal_mode": null,
+      "title": null,
+      "top_n": null,
+      "trend_grain": null,
+      "unavailable_filters": [],
+      "weight_field": null,
+      "x": null,
+      "y": null
+     },
+     "comparison": {
+      "absolute_change": 885.0,
+      "baseline_reporting_date": "2025-11-30",
+      "baseline_snapshot_id": "ERE/2025-11-30",
+      "baseline_value": 73.0,
+      "current_reporting_date": "2026-06-30",
+      "current_snapshot_id": "ERE/2026-06-30",
+      "current_value": 958.0,
+      "note": "",
+      "percent_change": 1212.3287671232877
+     },
+     "detail": "",
+     "eligible": true,
+     "error": "",
+     "plan_id": "plan_ef59f0fde469ae8c",
+     "points": [
+      {
+       "cells": [],
+       "cells_note": null,
+       "empty": false,
+       "receipt": {
+        "aggregation": "count",
+        "applied_predicates": [],
+        "balance_field_used": "current_outstanding_balance",
+        "filtered_row_count": 73,
+        "group_field_keys": [],
+        "input_row_count": 73,
+        "result_type": "summary",
+        "row_count": 1
+       },
+       "reporting_date": "2025-11-30",
+       "snapshot_id": "ERE/2025-11-30",
+       "value": 73.0,
+       "warnings": [
+        "percent-scale heuristically detected as 'fraction' (median 0.38); the executor does NOT rescale percentages"
+       ]
+      },
+      {
+       "cells": [],
+       "cells_note": null,
+       "empty": false,
+       "receipt": {
+        "aggregation": "count",
+        "applied_predicates": [],
+        "balance_field_used": "current_outstanding_balance",
+        "filtered_row_count": 958,
+        "group_field_keys": [],
+        "input_row_count": 958,
+        "result_type": "summary",
+        "row_count": 1
+       },
+       "reporting_date": "2026-06-30",
+       "snapshot_id": "ERE/2026-06-30",
+       "value": 958.0,
+       "warnings": [
+        "percent-scale heuristically detected as 'whole_number_percent' (median 2.717); the executor does NOT rescale percentages"
+       ]
+      }
+     ],
+     "reason": "",
+     "reconciled": true,
+     "requested": {
+      "capability": "generic_analysis",
+      "dimension_concepts": [],
+      "dimensions": [],
+      "filters": [],
+      "geography": {},
+      "measure_concept": "loan",
+      "measure_field": null,
+      "operation": "compare",
+      "period_contract": "governed_reporting_period_pair",
+      "period_form": "relative_pair",
+      "period_grain": null,
+      "period_labels": [
+       "this reporting date",
+       "the one before it"
+      ],
+      "period_periods_back": 1,
+      "population": {
+       "base": "funded",
+       "lens": "all",
+       "scope_predicates": [],
+       "seasoning": "any",
+       "source_portfolio_id": null,
+       "source_reference": null
+      },
+      "statistic": "count",
+      "weight_field": null
+     },
+     "resolution": {
+      "n_snapshots": 2,
+      "reporting_dates": [
+       "2025-11-30",
+       "2026-06-30"
+      ],
+      "selector_mode": "last_n",
+      "snapshot_ids": [
+       "ERE/2025-11-30",
+       "ERE/2026-06-30"
+      ]
+     },
+     "shape": "period_comparison"
+    }
+   },
+   "governed_plan": {
+    "capability": "generic_analysis",
+    "comparison_kind": "none",
+    "comparison_left": null,
+    "comparison_right": null,
+    "filters": [],
+    "geography": null,
+    "operation": "compare",
+    "outputs": [
+     {
+      "dimensions": [],
+      "filters": [],
+      "geography": null,
+      "id": "primary",
+      "measures": [
+       {
+        "canonical_field": null,
+        "capability_owner": null,
+        "concept": "loan",
+        "statistic": "count",
+        "statistic_defaulted": false,
+        "weight_concept": null,
+        "weight_field": null
+       }
+      ]
+     }
+    ],
+    "period": {
+     "contract": "governed_reporting_period_pair",
+     "default_method": "",
+     "default_owner": "",
+     "default_reason": "",
+     "defaulted": false,
+     "form": "relative_pair",
+     "grain": null,
+     "labels": [
+      "this reporting date",
+      "the one before it"
+     ],
+     "owned_by_capability": false,
+     "periods_back": 1,
+     "resolved": true,
+     "stated": true
+    },
+    "plan_id": "plan_ef59f0fde469ae8c",
+    "population": {
+     "base": "funded",
+     "lens": "all",
+     "scope_predicates": [],
+     "seasoning": "any",
+     "source_portfolio_id": null,
+     "source_reference": null
+    },
+    "provenance": {
+     "compiler_bindings": {
+      "change_form": {
+       "capability": "generic_analysis",
+       "form": "level_comparison",
+       "mode": null
+      },
+      "geography_field": null,
+      "normalisation": {
+       "applied": [
+        "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+       ],
+       "normal_form_version": "candidate_intent_normal_form/1.0"
+      },
+      "outputs": {
+       "primary": {
+        "dimensions": [],
+        "filters": [],
+        "measures": [
+         {
+          "capability_owner": null,
+          "concept": "loan",
+          "field": null,
+          "statistic": "count",
+          "weight_field": null
+         }
+        ]
+       }
+      },
+      "population_predicates": []
+     },
+     "compiler_version": "interpretation_v2.compiler/1.0.0",
+     "intent_claims": {
+      "capability": "generic_analysis",
+      "change_form": "level_comparison",
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "dimensions": [],
+      "evidence": [
+       {
+        "claim": "The requested figure is a count of loans",
+        "text": "How many funded loans were there"
+       },
+       {
+        "claim": "Population is the funded book",
+        "text": "funded loans"
+       },
+       {
+        "claim": "Two reporting states are requested side by side, not a movement or its cause",
+        "text": "at this reporting date, and how many at the one before it"
+       }
+      ],
+      "filters": [],
+      "geography": [
+       false,
+       null,
+       null,
+       false,
+       []
+      ],
+      "measures": [
+       [
+        "loan",
+        "count",
+        null
+       ]
+      ],
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any",
+       null
+      ],
+      "target": null,
+      "time": [
+       "relative_pair",
+       [
+        "this reporting date",
+        "the one before it"
+       ],
+       null,
+       null
+      ]
+     },
+     "intent_schema_version": "candidate_intent/1.0",
+     "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+     "model_id": "claude-opus-5",
+     "notes": [
+      "normalised [candidate_intent_normal_form/1.0]: relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)",
+      "disclosed reading [change_form]: Read as a level comparison: the reader asks for the count at the current reporting period and at the immediately preceding one, not for the size or cause of the change between them."
+     ],
+     "question": "How many funded loans were there at this reporting date, and how many at the one before it?",
+     "usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 36783,
+      "input_tokens": 4626,
+      "output_tokens": 900
+     },
+     "vocabulary_version": "2.2.0"
+    },
+    "schema_version": "governed_query_plan/1.0",
+    "target": null
+   },
+   "model_id": "claude-opus-5",
+   "question": "How many funded loans were there at this reporting date, and how many at the one before it?",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as a level comparison: the reader asks for the count at the current reporting period and at the immediately preceding one, not for the size or cause of the change between them.",
+      "options": [
+       "level_comparison",
+       "metric_delta"
+      ],
+      "slot": "change_form"
+     }
+    ],
+    "capability": "generic_analysis",
+    "change_form": "level_comparison",
+    "comparison": {
+     "kind": "none"
+    },
+    "evidence": [
+     {
+      "claim": "The requested figure is a count of loans",
+      "text": "How many funded loans were there"
+     },
+     {
+      "claim": "Population is the funded book",
+      "text": "funded loans"
+     },
+     {
+      "claim": "Two reporting states are requested side by side, not a movement or its cause",
+      "text": "at this reporting date, and how many at the one before it"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "loan",
+      "statistic": "count"
+     }
+    ],
+    "operation": "compare",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "relative_pair",
+     "labels": [
+      "this reporting date",
+      "the one before it"
+     ]
+    }
+   },
+   "record_found": true,
+   "request": {
+    "client_id": "ERE",
+    "dataset_view": "funded",
+    "portfolio_id": "ERE/2026-06-30",
+    "question": "How many funded loans were there at this reporting date, and how many at the one before it?",
+    "run_id": "2026-06-30"
+   },
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": true,
+    "legacy_result_available": true,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": null,
+    "plan_id": "plan_ef59f0fde469ae8c",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  },
+  "S09": {
+   "candidate_intent": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "'the acquired book' states an origination role; no lifecycle stage is stated, so the governed default funded population is read.",
+      "options": [
+       "funded",
+       "whole_book"
+      ],
+      "slot": "population.base"
+     },
+     {
+      "blocking": false,
+      "note": "'the acquired book' is read as the acquired origination ROLE, not as a named source portfolio \u2014 no governed source portfolio registry is available in this environment, so no book identity is asserted.",
+      "options": [
+       "acquired origination role",
+       "a named source portfolio"
+      ],
+      "slot": "population.source_reference"
+     },
+     {
+      "blocking": false,
+      "note": "No specific metric was named; the request is for the changes that matter, so the capability selects the material movements itself.",
+      "options": [],
+      "slot": "measures"
+     }
+    ],
+    "capability": "period_movement",
+    "change_form": "material_summary",
+    "comparison": {
+     "kind": "none",
+     "left": null,
+     "right": null
+    },
+    "dimensions": [],
+    "evidence": [
+     {
+      "claim": "Origination role restricted to loans acquired from another originator",
+      "text": "In the acquired book specifically"
+     },
+     {
+      "claim": "The reader asks what moved without naming any single metric or cause \u2014 a material change summary",
+      "text": "what changed"
+     },
+     {
+      "claim": "Current governed reporting period held against the immediately preceding one",
+      "text": "between this reporting date and the last one"
+     }
+    ],
+    "filters": [],
+    "geography": {
+     "basis": null,
+     "group_by": false,
+     "level": null,
+     "requested": false,
+     "values": []
+    },
+    "measures": [],
+    "operation": "summary",
+    "outputs": [],
+    "population": {
+     "base": "funded",
+     "lens": "acquired",
+     "seasoning": "any",
+     "source_reference": null
+    },
+    "provenance": {
+     "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+     "model_id": "claude-opus-5",
+     "question": "In the acquired book specifically, what changed between this reporting date and the last one?",
+     "usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 36783,
+      "input_tokens": 1528,
+      "output_tokens": 1110
+     },
+     "vocabulary_version": "2.2.0"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "target": null,
+    "time": {
+     "form": "relative_pair",
+     "grain": null,
+     "labels": [
+      "this reporting date",
+      "the last one"
+     ],
+     "periods_back": null,
+     "stated": true
+    }
+   },
+   "compile_result": {
+    "outcome": "PLAN",
+    "plan_id": "plan_143324dde4e553a8",
+    "reason_codes": [],
+    "reasons": []
+   },
+   "correlation_id": "shadow_19c4ad9436dc4660933e",
+   "disposition": "EXECUTION_ERROR",
+   "duplicate_records_for_this_question": 0,
+   "eligibility": {
+    "detail": "",
+    "eligible": true,
+    "perimeter": "change_form_material_summary",
+    "reason": ""
+   },
+   "execution": {
+    "attempted": true,
+    "error": "PeriodChangeFailure: The requested portfolio does not exist at both reporting dates, so the two periods cannot be compared.",
+    "requested_semantics": {
+     "capability": "period_movement",
+     "change_form": "material_summary",
+     "lens": "acquired",
+     "operation": "summary",
+     "plan_id": "plan_143324dde4e553a8",
+     "population": "funded"
+    },
+    "runtime": "material_summary"
+   },
+   "governed_plan": {
+    "capability": "period_movement",
+    "comparison_kind": "none",
+    "comparison_left": null,
+    "comparison_right": null,
+    "filters": [],
+    "geography": null,
+    "operation": "summary",
+    "outputs": [
+     {
+      "dimensions": [],
+      "filters": [],
+      "geography": null,
+      "id": "primary",
+      "measures": []
+     }
+    ],
+    "period": {
+     "contract": "governed_reporting_period_pair",
+     "default_method": "",
+     "default_owner": "",
+     "default_reason": "",
+     "defaulted": false,
+     "form": "relative_pair",
+     "grain": null,
+     "labels": [
+      "this reporting date",
+      "the last one"
+     ],
+     "owned_by_capability": false,
+     "periods_back": 1,
+     "resolved": true,
+     "stated": true
+    },
+    "plan_id": "plan_143324dde4e553a8",
+    "population": {
+     "base": "funded",
+     "lens": "acquired",
+     "scope_predicates": [
+      {
+       "canonical_field": "source_portfolio_type",
+       "capability_owner": null,
+       "comparator": "eq",
+       "concept": "portfolio_lens",
+       "value": "acquired"
+      }
+     ],
+     "seasoning": "any",
+     "source_portfolio_id": null,
+     "source_reference": null
+    },
+    "provenance": {
+     "compiler_bindings": {
+      "change_form": {
+       "capability": "period_movement",
+       "form": "material_summary",
+       "mode": "portfolio_overview"
+      },
+      "geography_field": null,
+      "normalisation": {
+       "applied": [
+        "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+       ],
+       "normal_form_version": "candidate_intent_normal_form/1.0"
+      },
+      "outputs": {
+       "primary": {
+        "dimensions": [],
+        "filters": [],
+        "measures": []
+       }
+      },
+      "population_predicates": [
+       {
+        "comparator": "eq",
+        "field": "source_portfolio_type",
+        "value": "acquired"
+       }
+      ]
+     },
+     "compiler_version": "interpretation_v2.compiler/1.0.0",
+     "intent_claims": {
+      "capability": "period_movement",
+      "change_form": "material_summary",
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "dimensions": [],
+      "evidence": [
+       {
+        "claim": "Origination role restricted to loans acquired from another originator",
+        "text": "In the acquired book specifically"
+       },
+       {
+        "claim": "The reader asks what moved without naming any single metric or cause \u2014 a material change summary",
+        "text": "what changed"
+       },
+       {
+        "claim": "Current governed reporting period held against the immediately preceding one",
+        "text": "between this reporting date and the last one"
+       }
+      ],
+      "filters": [],
+      "geography": [
+       false,
+       null,
+       null,
+       false,
+       []
+      ],
+      "measures": [],
+      "operation": "summary",
+      "population": [
+       "funded",
+       "acquired",
+       "any",
+       null
+      ],
+      "target": null,
+      "time": [
+       "relative_pair",
+       [
+        "this reporting date",
+        "the last one"
+       ],
+       null,
+       null
+      ]
+     },
+     "intent_schema_version": "candidate_intent/1.0",
+     "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+     "model_id": "claude-opus-5",
+     "notes": [
+      "normalised [candidate_intent_normal_form/1.0]: relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)",
+      "disclosed reading [population.base]: 'the acquired book' states an origination role; no lifecycle stage is stated, so the governed default funded population is read.",
+      "disclosed reading [population.source_reference]: 'the acquired book' is read as the acquired origination ROLE, not as a named source portfolio \u2014 no governed source portfolio registry is available in this environment, so no book identity is asserted.",
+      "disclosed reading [measures]: No specific metric was named; the request is for the changes that matter, so the capability selects the material movements itself.",
+      "population lens 'acquired' bound to source_portfolio_type"
+     ],
+     "question": "In the acquired book specifically, what changed between this reporting date and the last one?",
+     "usage": {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 36783,
+      "input_tokens": 1528,
+      "output_tokens": 1110
+     },
+     "vocabulary_version": "2.2.0"
+    },
+    "schema_version": "governed_query_plan/1.0",
+    "target": null
+   },
+   "model_id": "claude-opus-5",
+   "question": "In the acquired book specifically, what changed between this reporting date and the last one?",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "'the acquired book' states an origination role; no lifecycle stage is stated, so the governed default funded population is read.",
+      "options": [
+       "funded",
+       "whole_book"
+      ],
+      "slot": "population.base"
+     },
+     {
+      "blocking": false,
+      "note": "'the acquired book' is read as the acquired origination ROLE, not as a named source portfolio \u2014 no governed source portfolio registry is available in this environment, so no book identity is asserted.",
+      "options": [
+       "acquired origination role",
+       "a named source portfolio"
+      ],
+      "slot": "population.source_reference"
+     },
+     {
+      "blocking": false,
+      "note": "No specific metric was named; the request is for the changes that matter, so the capability selects the material movements itself.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "period_movement",
+    "change_form": "material_summary",
+    "comparison": {
+     "kind": "none"
+    },
+    "evidence": [
+     {
+      "claim": "Origination role restricted to loans acquired from another originator",
+      "text": "In the acquired book specifically"
+     },
+     {
+      "claim": "The reader asks what moved without naming any single metric or cause \u2014 a material change summary",
+      "text": "what changed"
+     },
+     {
+      "claim": "Current governed reporting period held against the immediately preceding one",
+      "text": "between this reporting date and the last one"
+     }
+    ],
+    "operation": "summary",
+    "population": {
+     "base": "funded",
+     "lens": "acquired"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "relative_pair",
+     "labels": [
+      "this reporting date",
+      "the last one"
+     ]
+    }
+   },
+   "record_found": true,
+   "request": {
+    "client_id": "ERE",
+    "dataset_view": "funded",
+    "portfolio_id": "ERE/2026-06-30",
+    "question": "In the acquired book specifically, what changed between this reporting date and the last one?",
+    "run_id": "2026-06-30"
+   },
+   "serving": {
+    "decision": "LEGACY_FALLBACK",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": null,
+    "plan_id": "plan_143324dde4e553a8",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "EXECUTION_FAILED",
+    "response_served_from": "LEGACY_FALLBACK"
+   }
+  }
+ },
+ "live_mi_query_calls": 0,
+ "live_model_calls": 0,
+ "reads_only": true,
+ "recorded_at": "2026-09-13T11:13:59.353737+00:00",
+ "sink_detail": "read",
+ "sink_records_seen": 209
+}

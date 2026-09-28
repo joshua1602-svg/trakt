@@ -1,0 +1,372 @@
+name: Confirmation canary — the pre-registered five, once
+
+# THE OPERATOR'S FINAL SEQUENCE, and only its last three steps. The two steps
+# this file CANNOT perform are the two an operator holds:
+#
+#     MI_AGENT_PLAN_SERVE = off      before the deploy   (operator, Portal)
+#     MI_AGENT_PLAN_SERVE = canary   after provenance    (operator, Portal)
+#
+# Both are Azure App Service APPLICATION SETTINGS and need ARM access; this
+# repository's mi-api automation holds a publish profile, which grants Kudu and
+# nothing else. This workflow neither reads nor writes them. It verifies the flag
+# BEHAVIOURALLY instead, from `serving.mode` and `principal_matched` on each
+# evidence record — which is what the flag being on actually means.
+#
+# ORDER, AND WHY IT IS THIS ORDER. Everything that can fail for free fails first,
+# so a run that could not be adjudicated never spends the bank:
+#
+#     1. the bank is unspent       the result file must not already exist
+#     2. the approved tree         nothing changed since the tested head, and
+#                                  no product commit rides with the deploy
+#     3. the bank hash             and every historical manifest
+#     4. the scorer                --self-test, both directions of the S07/S08
+#                                  temporal fault that misread the last run
+#     5. the deployed commit       GET / (the app's own liveness probe), read
+#                                  from the artefact stamp
+#     6. the bearer                an authenticated GET that resolves no question
+#     7. THEN the five             once each, no retries, no rephrasing
+#
+# Steps 1-6 cost nothing and none of them reaches `interpretation_v2`, so no Opus
+# call is consumed to reach the gate. Step 6 is the one that protects the bank:
+# the previous run found MI_BEARER fifteen hours past expiry, and had the
+# questions been asked anyway they would have spent the single authorised attempt
+# on 401s.
+#
+# THE GATE S03 TAUGHT. S03 of the spent bank read its question flawlessly and
+# still reached no owner, because no adapter claimed `metric_delta`. So a metric
+# delta answered only by legacy fallback is a FAIL here even when the number
+# looks right: every case pins the ROUTE, the CALCULATION OWNER and the MODE, and
+# `serving.response_served_from` must be NEW.
+#
+# THE PUSH PATH NEVER ASKS THE FIVE. A dispatchable workflow must exist on the
+# default branch before the API will resolve it, so the convention this repo
+# established registers it with a `push` trigger scoped to this file. For a
+# workflow that spends nothing that is harmless; for this one it is not, so the
+# five are gated on `workflow_dispatch`. The push runs gates 1-6, which are free,
+# and stops. Nothing about a registration push can spend the bank.
+#
+# NOR CAN A GATE FAILURE SPEND IT. The runner writes its report even when it
+# stops at provenance or auth, and that report is NOT a spent bank — it records
+# that zero questions were asked. So the commit step below refuses to commit a
+# report with `questions_asked = 0`: only a run that actually reached the
+# questions marks the bank spent.
+#
+# ONE ATTEMPT, AND THIS TIME THE GUARD IS REAL. The previous bank's protection
+# was a check that the result file did not exist — which a fresh CI checkout can
+# never fail, so it protected nothing, and I said so. Here the job COMMITS the
+# result to this branch as its own final step, so the guard the next checkout
+# reads is a committed file rather than a runner-local one. That is why this job
+# takes `contents: write` and why the push step is `if: always()`.
+#
+# THE BANK'S RECORDED BASELINE IS NOT THE DEPLOY TARGET, on purpose. The manifest
+# was hashed before the connectivity commit existed, so it records
+# `product_baseline = 88cf5fde` — the tree its cases were designed against. A
+# hashed bank is never edited, so the deploy target is asserted here instead:
+# 5d84a6a3 is 88cf5fde plus exactly one commit, and step 2 proves that commit
+# touches only the three plan modules and their test.
+#
+# NO NUMERIC PARITY IS CLAIMED. CI has no governed book, so the independent owner
+# run cannot happen here. Each case records what a reader with data access needs
+# to reconcile it; offline parity against fixtures is separate, passing evidence.
+#
+# SECRETS. `MI_BEARER` and the publish profile reach the scripts through `env:`
+# only, never argv. Only their lengths are printed, and the report is rescanned
+# for both before it is written.
+
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths: [ '.github/workflows/metric-delta-canary.yml' ]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: true
+      portfolio_id:
+        default: ERE/2026-06-30
+        required: true
+      preflight_only:
+        description: >-
+          Run gates 1-6 and stop before the five. Free, and safe to repeat while
+          waiting for the operator to enable the canary.
+        type: boolean
+        default: false
+      ref:
+        default: ''
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: metric-delta-canary
+  cancel-in-progress: false
+
+env:
+  PRODUCT_HEAD: 5d84a6a31ccf0f255c6c9170de97b01532fa35da
+  PREVIOUS_DEPLOY: 88cf5fde759c29f1cff29b9adbf003a2d6ebd530
+  BANK_SHA256: 9705705c7c66a605ccd3f16a08275b33f1b05b201c5f09f99bcd24386eb7d065
+  CANARY_DIR: due_diligence/evidence/metric_delta_confirmation_canary
+  BASE_URL: https://app.traktinfra.io/api
+  PORTFOLIO_ID: ERE/2026-06-30
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 1. THE BANK MUST BE UNSPENT. First, before anything else, because a
+      #    second run of a one-attempt bank voids it whatever else is true.
+      - name: The bank must be unspent
+        run: |
+          set -euo pipefail
+          if [ -f "${CANARY_DIR}/metric_delta_canary_result.json" ]; then
+            echo "::error::${CANARY_DIR}/metric_delta_canary_result.json is"
+            echo "::error::already committed — this bank authorises ONE"
+            echo "::error::execution and it has been spent. Read the committed"
+            echo "::error::result; do not re-run."
+            exit 1
+          fi
+          echo "BANK_STATE = UNSPENT"
+
+      - name: Pre-run assertions
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          echo "git rev-parse HEAD = ${HEAD_SHA}"
+          echo "PRODUCT_HEAD       = ${PRODUCT_HEAD}"
+
+          # 2a. the tested head must be an ancestor, and nothing may have changed
+          #     since it beyond this sprint's evidence directory and this file.
+          if ! git merge-base --is-ancestor "${PRODUCT_HEAD}" HEAD; then
+            echo "::error::product head ${PRODUCT_HEAD} is not an ancestor of \
+          ${HEAD_SHA}: this is not the tested tree"
+            exit 1
+          fi
+          SINCE="$(git diff --name-only "${PRODUCT_HEAD}..HEAD")"
+          echo "--- changed since the product head ---"; echo "${SINCE}"
+          STRAY="$(echo "${SINCE}" | grep -v \
+            -e "^${CANARY_DIR}/" \
+            -e '^\.github/workflows/metric-delta-canary\.yml$' || true)"
+          if [ -n "${STRAY}" ]; then
+            echo "::error::changed beyond the evidence directory and this \
+          workflow:"
+            echo "${STRAY}"; exit 1
+          fi
+          echo "PRODUCT_CODE_CHANGED_SINCE_THE_TESTED_HEAD = NO"
+
+          # 2b. NO ADDITIONAL PRODUCT COMMIT MAY RIDE WITH THE DEPLOY. The
+          #     operator pinned this: between the build already running in
+          #     production and the one being deployed, the only product files
+          #     that may differ are the three the closeout touched.
+          PRODUCT_DELTA="$(git diff --name-only \
+            "${PREVIOUS_DEPLOY}..${PRODUCT_HEAD}" \
+            | grep -v -e '^due_diligence/' -e '^\.github/' -e '^tests/' || true)"
+          echo "--- product files differing from the running build ---"
+          echo "${PRODUCT_DELTA}"
+          EXPECTED="mi_agent/plan_material_summary.py
+          mi_agent/plan_metric_delta.py
+          mi_agent/plan_serving_canary.py"
+          if [ "$(echo "${PRODUCT_DELTA}" | tr -d ' ')" \
+               != "$(echo "${EXPECTED}" | tr -d ' ')" ]; then
+            echo "::error::an unexpected product change would ride with this"
+            echo "::error::deploy; expected exactly the three plan modules"
+            exit 1
+          fi
+          echo "NO_ADDITIONAL_PRODUCT_COMMIT_RIDES_WITH_THE_DEPLOY = CONFIRMED"
+
+          # 3. the bank must be the one that was pre-registered, and every
+          #    historical bank must still hash to its own pin. The integrity of
+          #    this programme rests on never having edited a hashed bank, and
+          #    that is re-proved on every run rather than assumed.
+          RECOMPUTED="$(sha256sum "${CANARY_DIR}/metric_delta_canary_bank_manifest.json" \
+            | cut -d' ' -f1)"
+          FOUND="$(cut -d' ' -f1 "${CANARY_DIR}/metric_delta_canary_bank_manifest.sha256")"
+          echo "bank committed  = ${FOUND}"
+          echo "bank recomputed = ${RECOMPUTED}"
+          if [ "${FOUND}" != "${BANK_SHA256}" ] || [ "${RECOMPUTED}" != "${BANK_SHA256}" ]; then
+            echo "::error::bank mismatch: expected ${BANK_SHA256}"; exit 1
+          fi
+          echo "bank ${BANK_SHA256} is the one that was pre-registered: ok"
+
+          python - <<'PY'
+          import hashlib, pathlib, sys
+          for directory, manifest in (
+                  ("live_change_form_gate", "change_form_bank_manifest"),
+                  ("live_change_form_gate_v2", "change_form_v2_bank_manifest"),
+                  ("live_change_form_gate_v3", "change_form_v3_bank_manifest"),
+                  ("live_change_form_gate_v4", "change_form_v4_bank_manifest"),
+                  ("change_intelligence_serving_canary",
+                   "serving_canary_bank_manifest")):
+              base = pathlib.Path("due_diligence/evidence") / directory
+              body = (base / f"{manifest}.json").read_bytes()
+              pinned = (base / f"{manifest}.sha256").read_text().split()[0].strip()
+              digest = hashlib.sha256(body).hexdigest()
+              if digest != pinned:
+                  sys.exit(f"{directory} was edited after hashing: "
+                           f"{digest} != {pinned}")
+              print(f"{directory}: intact")
+          PY
+
+      # 4. THE INSTRUMENT BEFORE THE MEASUREMENT. The last run's two false FAILs
+      #    were a scorer defect, not a product defect. This exercises both
+      #    directions of it and costs nothing.
+      - name: The scorer must pass its own self-test
+        run: |
+          set -euo pipefail
+          python "${CANARY_DIR}/metric_delta_canary_run.py" --self-test
+
+      - name: Refuse to run without the credentials
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set"; exit 1
+          fi
+          if [ -z "${AZURE_MI_API_PUBLISH_PROFILE:-}" ]; then
+            echo "::error::AZURE_MI_API_PUBLISH_PROFILE is not set; which path"
+            echo "::error::served could not be proved, so the run must not start"
+            exit 1
+          fi
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      # 5 and 6. THE GATE THAT PROTECTS THE BANK. Free, and it fails the job
+      #    before the runner is invoked if the deployed commit is wrong or the
+      #    bearer has aged out again.
+      # On the registration push this reports which commit is actually running
+      # without failing the job: before the deploy the answer is the OLD build,
+      # and that is the expected, informative answer rather than a defect. On a
+      # dispatch it is fatal, which is what makes it the gate.
+      - name: Provenance and authenticated preflight
+        continue-on-error: ${{ github.event_name != 'workflow_dispatch' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          python "due_diligence/evidence/change_intelligence_serving_canary/provenance.py" \
+            --base-url "${{ inputs.base_url || env.BASE_URL }}" \
+            --expect-commit "${PRODUCT_HEAD}" \
+            --preflight-path /mi/catalogue \
+            --out provenance_result.json
+
+      - name: Stop here when only the free gates were asked for
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.preflight_only }}
+        run: |
+          echo "Gates 1-6 passed and the bank is STILL UNSPENT."
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "This was the registration push, which never asks the five."
+          else
+            echo "PREFLIGHT_ONLY was requested."
+          fi
+          echo "To spend the bank: dispatch this workflow with"
+          echo "preflight_only = false, once MI_AGENT_PLAN_SERVE = canary."
+
+      - name: The pre-registered five, once each
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.preflight_only }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          # The runner writes its report before returning a non-zero verdict, so
+          # the exit code is captured and re-raised after the artefact exists —
+          # a gate that fails without saying why is a gate nobody can act on.
+          set +e
+          python "${CANARY_DIR}/metric_delta_canary_run.py" \
+            --base-url "${{ inputs.base_url || env.BASE_URL }}" \
+            --path /mi/query \
+            --portfolio-id "${{ inputs.portfolio_id || env.PORTFOLIO_ID }}" \
+            --expect-commit "${PRODUCT_HEAD}" \
+            --out "${CANARY_DIR}/metric_delta_canary_result.json"
+          echo "RUNNER_EXIT=$?" >> "${GITHUB_ENV}"
+          set -e
+
+      # THE REAL ONE-ATTEMPT GUARD. Committed immediately, pass or fail, so the
+      # next checkout of this branch finds the bank spent. The push cannot
+      # re-trigger this workflow: the push trigger is scoped to this file's own
+      # path, and the commit touches only the evidence directory.
+      - name: Commit the result immediately
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && !inputs.preflight_only }}
+        run: |
+          set -euo pipefail
+          RESULT="${CANARY_DIR}/metric_delta_canary_result.json"
+          if [ ! -f "${RESULT}" ]; then
+            echo "no result file was written — nothing to commit"; exit 0
+          fi
+          # A report that stopped at a free gate asked nothing, so it is not a
+          # spent bank and must not be committed as one.
+          ASKED="$(python -c "import json,sys; \
+            print(json.load(open(sys.argv[1])).get('questions_asked') or 0)" \
+            "${RESULT}")"
+          if [ "${ASKED}" = "0" ]; then
+            echo "the run stopped before the first question — zero asked, so"
+            echo "the bank is still unspent and the report is not committed."
+            rm -f "${RESULT}"
+            exit 0
+          fi
+          echo "questions asked: ${ASKED} — the bank is spent, committing."
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${RESULT}"
+          git commit -m "metric_delta confirmation canary: the five, spent once
+
+          Committed by the run itself so the bank cannot be treated as unspent
+          by a later checkout. Run ${GITHUB_RUN_ID}."
+          for attempt in 1 2 3 4; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "result committed"; exit 0
+            fi
+            sleep $((2 ** attempt))
+            git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          done
+          echo "::error::the result could not be pushed; it is in the artefact"
+          exit 1
+
+      - name: Publish the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metric-delta-canary
+          path: |
+            provenance_result.json
+            due_diligence/evidence/metric_delta_confirmation_canary/metric_delta_canary_result.json
+          if-no-files-found: warn
+
+      - name: The verdict
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && !inputs.preflight_only }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, pathlib
+          path = pathlib.Path(os.environ["CANARY_DIR"]) / "metric_delta_canary_result.json"
+          if not path.exists():
+              print("no result was written — the run stopped before the five")
+              raise SystemExit(1)
+          report = json.load(open(path))
+          print(f"bank      {report.get('bank_id')}")
+          print(f"verdict   {report.get('verdict')}")
+          print(f"asked     {report.get('questions_asked')} of 5")
+          if report.get("stopped_at"):
+              print(f"stopped   {report['stopped_at']}: {report.get('detail')}")
+          for case in report.get("cases") or []:
+              flag = "PASS" if case["pass"] else "FAIL"
+              read = case["read"]
+              print(f"  {case['case_id']}  {flag}  "
+                    f"{read.get('change_form_claimed')}  "
+                    f"served={read.get('serving_provenance')}  "
+                    f"route={read.get('serving_route')}  "
+                    f"{'; '.join(case['failures'])[:160]}")
+          raise SystemExit(0 if report.get("verdict") == "PASS" else 1)
+          PY

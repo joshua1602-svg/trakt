@@ -1,0 +1,973 @@
+"""The authoritative governed concept index — one index, two readers.
+
+WHAT CHANGED, AND WHY
+---------------------
+The first build projected ONE registry into business names and hid every
+canonical identifier from the model. Measurement showed the cost: the
+interpreter could not verify that "drawdown" is a product or "Offer" a stage,
+and clarified on sixteen of twenty questions for want of metadata that was
+governed all along.
+
+So the index is now keyed by CANONICAL CONCEPT IDENTIFIER, built from the whole
+authoritative estate via :mod:`mi_agent.interpretation_v2.metadata`, and Opus
+reads it through read-only retrieval tools rather than a prompt dump. Opus may
+see an identifier and name it.
+
+That does not make Opus authoritative. This same index is what the compiler
+validates against — deliberately the same object, so that what the model is
+shown and what the compiler will accept cannot drift apart — and the compiler
+re-derives existence, asset applicability, portfolio availability, permitted
+operation and physical binding for every concept before anything enters a plan.
+
+Business names survive as ALIASES. "balance" still resolves to
+``current_outstanding_balance``; "region" resolves to nothing, because seven
+governed fields wear that word, and :meth:`GovernedVocabulary.candidates` names
+all seven rather than picking one.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field, replace
+from functools import lru_cache
+from typing import (Any, Dict, FrozenSet, Iterable, List, Mapping, Optional,
+                    Sequence, Tuple)
+
+from .metadata import (
+    applies_to_asset_class,
+    business_semantics,
+    canonical_fields,
+    governed_values_for_field,
+    portfolio_semantic_context,
+)
+from .metadata import _load as _load_source
+from .metadata import _slug
+
+#: 2.1.0 added the capability-boundary block. 2.2.0 adds the portfolio-scope
+#: axes block and the seasoning concept boundary — the four scope axes stated as
+#: independent, and the rule that a governed source portfolio's name is atomic.
+#: The version moves because `PlanProvenance.vocabulary_version` records what the
+#: model was SHOWN, and an interpretation made against a different orientation
+#: block is not comparable with one made against this. Every run recorded before
+#: this change was made at 2.0.0 or 2.1.0 and says so.
+VOCABULARY_VERSION = "2.2.0"
+
+
+# --------------------------------------------------------------------------- #
+# Closed enumerations — the axes the model chooses ON.
+# --------------------------------------------------------------------------- #
+
+CAPABILITIES: FrozenSet[str] = frozenset({
+    "generic_analysis",
+    "portfolio_summary",
+    "concentration",
+    "limit_assessment",
+    "period_movement",
+    "borrowing_base",
+    "funded_bridge",
+    "pipeline",
+    "pipeline_stage_movement",
+    "forecast",
+})
+
+OPERATIONS: FrozenSet[str] = frozenset({
+    "point_in_time", "breakdown", "rank", "distribution", "series", "compare",
+    "movement", "bridge", "summary",
+    # specialist capability operations
+    "headroom", "utilisation", "eligibility", "transition", "arrivals",
+    "departures", "stayers", "reconciliation", "forecast_milestone",
+    "forecast_projection",
+})
+
+CAPABILITY_OPERATIONS: Mapping[str, FrozenSet[str]] = {
+    "generic_analysis": frozenset({
+        "point_in_time", "breakdown", "rank", "distribution", "series",
+        "compare", "movement"}),
+    "portfolio_summary": frozenset({"summary", "compare"}),
+    "concentration": frozenset({"summary", "rank", "breakdown", "point_in_time"}),
+    "limit_assessment": frozenset({"summary", "rank", "point_in_time",
+                                   "forecast_projection", "headroom"}),
+    # `summary` was added when the funded material-change composition was built.
+    # It is "summarise this period's movements" — the operation
+    # `period_change` has always implemented as MODE_PORTFOLIO_OVERVIEW, over
+    # every governed measure and dimension rather than one named measure. It was
+    # absent while nothing composed that output into findings; it is present now
+    # that `mi_agent_api.insight_funded` does.
+    "period_movement": frozenset({"movement", "rank", "breakdown", "compare",
+                                  "series", "summary"}),
+    "borrowing_base": frozenset({"point_in_time", "headroom", "utilisation",
+                                 "eligibility", "breakdown", "movement",
+                                 "bridge", "series"}),
+    "funded_bridge": frozenset({"bridge", "movement"}),
+    "pipeline": frozenset({"summary", "breakdown", "point_in_time", "series"}),
+    "pipeline_stage_movement": frozenset({
+        "transition", "arrivals", "departures", "stayers", "reconciliation",
+        "movement", "breakdown"}),
+    "forecast": frozenset({"forecast_milestone", "forecast_projection",
+                           "series", "point_in_time"}),
+}
+
+STATISTICS: FrozenSet[str] = frozenset({
+    "count", "count_distinct", "sum", "average", "weighted_average",
+    "median", "min", "max", "share", "contribution",
+})
+
+#: ANALYTIC MODES rather than statistics of a field. A share is a ratio of two
+#: populations and a contribution decomposes an aggregate across groups; both
+#: are governed elsewhere in this repository (``mi_agent.statistic``, P1A, P1D)
+#: and neither appears in a field's ``allowed_aggregations``, because neither is
+#: an aggregation OF the field.
+ANALYTIC_MODES: FrozenSet[str] = frozenset({"share", "contribution"})
+ADDITIVE_STATISTICS: FrozenSet[str] = frozenset({"sum", "count", "count_distinct"})
+
+#: Only a weighted average NEEDS a weight named. A contribution takes one
+#: optionally: decomposing a weighted average needs it, decomposing an additive
+#: total does not — there the measure is its own weight.
+STATISTICS_REQUIRING_WEIGHT: FrozenSet[str] = frozenset({"weighted_average"})
+STATISTICS_FORBIDDING_WEIGHT: FrozenSet[str] = frozenset({
+    "count", "count_distinct", "sum", "median", "min", "max", "share"})
+
+COMPARATORS: FrozenSet[str] = frozenset({
+    "gt", "gte", "lt", "lte", "eq", "ne", "between", "in", "not_in"})
+
+TIME_FORMS: FrozenSet[str] = frozenset({
+    "current", "previous_reporting_period", "relative_pair", "explicit_period",
+    "range", "series", "forward_looking"})
+TIME_GRAINS: FrozenSet[str] = frozenset({"daily", "weekly", "monthly",
+                                         "quarterly", "annual"})
+
+GEOGRAPHY_BASES: FrozenSet[str] = frozenset({"obligor", "collateral",
+                                             "reporting_taxonomy"})
+GEOGRAPHY_LEVELS: FrozenSet[str] = frozenset({"reporting", "nuts3", "itl3",
+                                              "postcode"})
+
+POPULATION_BASES: FrozenSet[str] = frozenset({"funded", "pipeline", "forecast",
+                                              "whole_book"})
+POPULATION_LENSES: FrozenSet[str] = frozenset({"direct", "acquired", "all"})
+SEASONING_SEGMENTS: FrozenSet[str] = frozenset({"front_book", "back_book", "any"})
+
+#: PORTFOLIO SCOPE IS FOUR AXES, NOT ONE. Declared here for the same reason
+#: ``CAPABILITY_BOUNDARIES`` is: these are things whose NAMES do not separate
+#: them, and a reader's sentence routinely touches two at once. A book's own
+#: proper name may contain the words of two other axes ("... Acquired Back
+#: Book"), and "back book" means one thing said on its own and another thing
+#: said against "recent originations".
+#:
+#: Left deliberately out: the legal vehicle / SPV that OWNS a book. It is a real
+#: fifth axis and it is not governed yet, so it is not offered here — naming it
+#: would invite a scope nothing downstream can resolve. A source portfolio is
+#: NOT its SPV.
+#:
+#: Nothing here is client data. It is the shape of the vocabulary, and it holds
+#: for a book called "Portfolio Phoenix" exactly as for any other.
+PORTFOLIO_SCOPE_AXES: Mapping[str, Any] = {
+    "axes": [
+        {
+            "axis": "population lifecycle",
+            "slot": "population.base",
+            "asks": "WHICH POPULATION — where a loan is in its life.",
+            "values": {
+                "funded": "already advanced and on the book. This is what a "
+                          "reader means by THE BACK BOOK, the existing book, "
+                          "the funded book, loans already written.",
+                "pipeline": "applications not yet funded — business in "
+                            "progress. This is what a reader means by THE "
+                            "FRONT BOOK, new originations, new lending, the "
+                            "new origination book.",
+                "forecast": "projected forward, not yet real.",
+                "whole_book": "spanning funded and pipeline together.",
+            },
+        },
+        {
+            "axis": "origination role",
+            "slot": "population.lens",
+            "asks": "WHO originated it — a role held WITHIN a population, not "
+                    "a stage of life and not a particular book's name.",
+            "values": {
+                "direct": "originated by the lender itself. Also: originated, "
+                          "organically originated, own origination.",
+                "acquired": "purchased or acquired from another originator. "
+                            "Also: purchased, bought, acquired book.",
+                "all": "no role restriction. The default.",
+            },
+        },
+        {
+            "axis": "named source identity",
+            "slot": "population.source_reference",
+            "asks": "WHICH BOOK by name — a governed identity, not a role and "
+                    "not a lifecycle stage. A client may hold several acquired "
+                    "books, and naming one is not the same as asking for the "
+                    "acquired role.",
+            "values": {
+                "the reader's phrase": "call get_source_portfolios for the "
+                                       "governed names this client declares, "
+                                       "and put the reader's phrase here. "
+                                       "Never an id, a path or a dataset.",
+            },
+        },
+        {
+            "axis": "seasoning / vintage",
+            "slot": "population.seasoning",
+            "asks": "HOW SEASONED — how long loans have been on book. A "
+                    "property of loans inside a population, measured on months "
+                    "on book.",
+            "values": {
+                "front_book": "recently written, by months on book.",
+                "back_book": "seasoned, by months on book.",
+                "any": "no seasoning restriction. The default.",
+            },
+        },
+    ],
+    "these_are_independent": (
+        "Any combination may be stated and each applies on its own terms. "
+        "'The acquired back book' is the funded population (lifecycle) with the "
+        "acquired role (role) — it is NOT a seasoning restriction. 'The direct "
+        "book' is the direct role. 'The back book' on its own is the funded "
+        "population."
+    ),
+    "seasoning_is_not_the_lifecycle_axis": (
+        "Use population.seasoning ONLY when the question CONTRASTS how seasoned "
+        "loans are — 'recent originations versus older vintages', 'are older "
+        "loans riskier than the ones we wrote recently', 'seasoned loans', "
+        "'months on book'. A question that simply names the back book or the "
+        "front book is naming a POPULATION, and belongs in population.base. "
+        "Reading a bare 'back book' as a seasoning restriction silently drops "
+        "part of the funded book from the answer."
+    ),
+    "a_governed_name_is_atomic": (
+        "Once a phrase matches a governed source portfolio name or an approved "
+        "alias, the WHOLE phrase is that book's identity and the words inside "
+        "it are part of its name. Do NOT also read those words as other axes: a "
+        "book called 'X Acquired Back Book' does not by itself imply the "
+        "acquired role or a back-book seasoning, any more than a person called "
+        "Baker is a baker. Put the phrase in population.source_reference and "
+        "stop — the identity alone is sufficient, and the deterministic "
+        "registry resolves it. Add another axis ONLY when the reader asks for "
+        "it OUTSIDE the name: 'the acquired loans in X Acquired Back Book' "
+        "states the role separately, 'drawdown loans in X Acquired Back Book' "
+        "states a filter separately."
+    ),
+}
+
+#: Concepts whose NAME invites a reading the governed model does not support.
+#: Surfaced on the concept's own metadata so the correction arrives at the
+#: moment the model looks the concept up, rather than only in the standing
+#: context it read many tool calls earlier.
+CONCEPT_BOUNDARIES: Mapping[str, str] = {
+    "seasoning_segment": (
+        "This is the VINTAGE axis — how long a loan has been on book. It is NOT "
+        "the funded/pipeline lifecycle axis and NOT direct/acquired provenance. "
+        "A question naming 'the back book' or 'the front book' as the "
+        "population it is about is naming population.base (funded / pipeline); "
+        "use this concept when the question contrasts how SEASONED loans are."
+    ),
+}
+
+#: A comparison names two POPULATIONS or two DIMENSION VALUES held against each
+#: other. It deliberately has no `period_pair` member: ``operation: movement``
+#: plus ``time.form: relative_pair`` already says "two periods", and a third
+#: slot saying it again is a slot the model fills inconsistently — measured, on
+#: run 4, as nine scoring misses and several paraphrase divergences where the
+#: bindings agreed and only this flag differed. Removing the redundancy removes
+#: the inconsistency.
+COMPARISON_KINDS: FrozenSet[str] = frozenset({
+    "none", "population_pair", "dimension_pair"})
+
+#: WHAT ANALYTICAL QUESTION IS BEING ASKED ABOUT A CHANGE — as its own slot.
+#:
+#: Measured on the signed-off 135 corpus: one business question, "how did the
+#: book change last month?", reached the compiler as three different contracts
+#: because the reading was spread across three slots that can disagree —
+#: `capability`, `operation`, and the MEASURE. Three paraphrases chose
+#: `current_outstanding_balance`, `portfolio_overview` and
+#: `funded_balance_movement`, and since a specialist measure determines its
+#: owner, the owner followed the measure rather than the question.
+#:
+#: `operation` cannot carry this distinction: `movement` is an operation of five
+#: capabilities and `summary` of four, so the same word means "the movement of a
+#: governed metric" under one owner and "the funded bridge" under another.
+#:
+#: So the form of the change is stated separately from WHAT is measured
+#: (`measures`) and from WHO executes it (`capability`). The model answers what
+#: the reader asked for; the compiler decides the owner.
+#:
+#: These four are analytical forms, not business vocabulary. They carry no
+#: lender's words and no asset class: a residential mortgage book, an
+#: equity-release book and an asset-finance book each ask "what changed", "by
+#: how much did X move", "what drove it" and "compare these two periods", and
+#: the distinction between those four is the same in every one.
+CHANGE_FORMS: FrozenSet[str] = frozenset({
+    #: "Tell me what materially changed that I should care about." No single
+    #: metric named, no decomposition asked for, no two levels to compare.
+    "material_summary",
+    #: "By how much did <governed metric> move?" The metric is stated.
+    "metric_delta",
+    #: "What drove it?" / "bridge the movement" — a decomposition is asked for.
+    #: Never inferred from the mere fact that something changed.
+    "attribution",
+    #: "What was it in March and in June?" Two states, compared as levels,
+    #: without movement intelligence or drivers.
+    "level_comparison",
+})
+
+#: THE OWNER OF EACH FORM. The compiler's mapping, stated once here so the model
+#: never has to predict an internal owner correctly.
+#:
+#: A FORM WHOSE ENTRY IS ``None`` IS REFUSED, NOT SUBSTITUTED. The compiler
+#: applies that rule to this table generically; it is the reason the table exists
+#: rather than being inlined, and it is what stops "what changed?" being answered
+#: with the nearest available analysis when its owner is not built.
+#:
+#: `material_summary` was such an entry until the funded material-change
+#: composition was built. It now maps to `period_movement`, which is the same
+#: owner `metric_delta` maps to — `period_change.workflow`. The two forms are not
+#: the same question and are not served the same way: `metric_delta` names one
+#: measure and runs MODE_REQUESTED_METRIC, `material_summary` names none and runs
+#: MODE_PORTFOLIO_OVERVIEW over every governed measure and dimension, whose
+#: output `mi_agent_api.insight_funded` composes into findings. The distinction
+#: between them is the MODE, which is a first-class governed concept of that
+#: workflow — so connecting the form needed no new capability and no new owner.
+CHANGE_FORM_CAPABILITY: Mapping[str, Optional[str]] = {
+    "metric_delta": "period_movement",
+    "attribution": "funded_bridge",
+    "level_comparison": "generic_analysis",
+    "material_summary": "period_movement",
+}
+
+#: THE MODE EACH FORM RUNS THE SHARED OWNER IN, where the capability alone does
+#: not separate two forms. Only `period_change` has such a pair today.
+#: A form absent from this table states no mode and the owner's default applies.
+CHANGE_FORM_MODE: Mapping[str, str] = {
+    "metric_delta": "requested_metric",
+    "material_summary": "portfolio_overview",
+}
+
+#: WHERE `change_form` AND `operation` OVERLAP, AND WHICH ONE WINS.
+#:
+#: `change_form` is authoritative over the analytical FORM: which owner
+#: implements the question, which governed mode that owner runs in, and
+#: therefore WHO DECIDES THE CANDIDATE SET OF MEASURES. `operation` is
+#: authoritative over the result SHAPE requested within that form, and is
+#: checked for compatibility against `CAPABILITY_OPERATIONS` for the form's
+#: capability. The form wins on ownership; the operation wins on shape.
+#:
+#: The consequence for a broad request. `material_summary` MEANS "determine
+#: which governed changes are materially relevant", so the composition owns the
+#: candidate set by definition and no measure need be named. A reader asking
+#: that question will say it as "what changed", "what moved", or "compare these
+#: two periods for anything material" — one analytical form, three linguistic
+#: spellings of its action. Requiring the model to emit the implementation's
+#: spelling in order to make the plan executable would make the contract depend
+#: on an implementation detail the model is not shown.
+#:
+#: So a variant is CANONICALISED to the form's own operation, deterministically
+#: and from the structured slots alone — no wording is read to reach this.
+#: Everything else that the form's capability admits (`rank`, `breakdown`,
+#: `series`) states a SHAPE this composition does not produce and is refused
+#: rather than flattened into a summary.
+#:
+#: This is not a default from `movement` to `material_summary`. It applies ONLY
+#: where the form was already stated. An intent with no `change_form` is
+#: untouched: whether a bare "what changed" IS a material summary is an
+#: interpretation question, and the compiler does not guess it.
+CHANGE_FORM_CANONICAL_OPERATION: Mapping[str, str] = {
+    "material_summary": "summary",
+    "metric_delta": "movement",
+}
+
+#: WHICH FORMS OWN AN AUTHORISED DEFAULT COMPARISON WINDOW when the reading states
+#: no temporal semantic at all.
+#:
+#: THE DISTINCTION THIS TABLE EXISTS TO MAKE. A construction default is not a
+#: business default. `SemanticTime.form` carries `current` whether the reader asked
+#: about the current state or said nothing about time, and the live v3 gate
+#: measured three readings that deliberately said nothing — "no period is stated on
+#: the intent because the funded_bridge capability defines the movement period
+#: itself". The interpreter is right not to restate deterministic execution policy.
+#: So where the FORM owns the window, the deterministic layer supplies it, and says
+#: in the receipt that it did.
+#:
+#: EACH ENTRY IS DERIVED FROM AN OWNER CONTRACT THAT ALREADY EXISTS, not from
+#: wording and not from the measure:
+#:
+#:   material_summary   its runtime already completes a `current` anchor through
+#:                      `current_vs_previous`, the resolver's own method for the
+#:                      two adjacent GOVERNED snapshots. A comparison state is part
+#:                      of what the form IS, so an unstated one is the form's.
+#:   attribution        `period_change.workflow` resolves the bridge's pair with the
+#:                      same `resolve_periods` call as every other figure, so the
+#:                      calculation owner already accepts `current_vs_previous`.
+#:                      Governed-plan connectivity is a separate, pending item and
+#:                      does not change what the form owns.
+#:   metric_delta       names ONE quantity and asks how much it moved. Its owner
+#:                      requires a period richer than a single point, and no
+#:                      existing policy gives it a default. `None` means INCOMPLETE,
+#:                      never "substitute the nearest thing".
+#:   level_comparison   asks for two states the reader has in mind. Its owner wants
+#:                      the pair named, so an unstated window is incomplete.
+#:
+#: A form absent from this table, or mapped to `None`, gets NO implicit default.
+#: The string is the resolver's `METHOD_CURRENT_VS_PREVIOUS`; it is written as a
+#: literal because this module may not import the execution layer, and
+#: `tests/interpretation_v2/test_temporal_presence_and_defaults.py` asserts the two
+#: cannot drift apart.
+CHANGE_FORM_ABSENT_PERIOD_DEFAULT: Mapping[str, Optional[str]] = {
+    "material_summary": "current_vs_previous",
+    "attribution": "current_vs_previous",
+    "metric_delta": None,
+    "level_comparison": None,
+}
+
+#: The operations that are linguistic variants of each form's own action, and so
+#: canonicalise to it. A form absent from this table canonicalises nothing, and
+#: its operation is checked against its capability in the ordinary way.
+#:
+#: `metric_delta` WAS ABSENT, AND THE LIVE CANARY PROVED THAT WRONG. A reader who
+#: says "compare outstanding balance across the two most recent reporting dates
+#: and tell me the size of the shift" is asking one analytical question, and the
+#: interpreter read every slot of it correctly: form `metric_delta`, measure
+#: `current_outstanding_balance`, a stated relative pair, operation `compare` —
+#: the verb the reader used. The compiler validated `compare` against
+#: `CAPABILITY_OPERATIONS["period_movement"]`, which admits it, and emitted a
+#: plan. Nothing canonicalised it, so the form's owner was handed the one shape
+#: it does not name and refused. That is this table's absence, not a defect
+#: downstream of it.
+#:
+#: WHY `compare` IS A VARIANT OF THIS FORM AND NOT ANOTHER FORM'S ACTION. It is
+#: `level_comparison` that owns "two states, compared as levels, without movement
+#: intelligence" — and it runs `generic_analysis`, a DIFFERENT capability. A
+#: `compare` that reached `period_movement` did so because the form it was stated
+#: with owns that capability, which is `CHANGE_FORM_CAPABILITY`'s own rule
+#: applying. There is no second form that owns `compare` over `period_movement`
+#: with a named measure, so collapsing it here takes nothing from anyone.
+#:
+#: AND WHY THE SET STOPS THERE. `period_movement` also admits `rank`, `breakdown`,
+#: `series` and `summary`. Each states a result SHAPE the requested-metric mode
+#: does not produce — an ordering, a dimensional split, a many-period line, a
+#: portfolio composition — so each is left exactly as it is and refused against
+#: the capability or by the owner's perimeter, rather than flattened into a
+#: movement. `attribution` and `level_comparison` remain absent: their measure and
+#: target requirements are unchanged by any of this.
+CHANGE_FORM_OPERATION_VARIANTS: Mapping[str, FrozenSet[str]] = {
+    "material_summary": frozenset({"summary", "movement", "compare"}),
+    "metric_delta": frozenset({"movement", "compare"}),
+}
+
+#: WHERE A CAPABILITY NAME IS NOT ENOUGH TO SEPARATE TWO CAPABILITIES, the
+#: boundary is STATED rather than left to be inferred from the word.
+#:
+#: The orientation block gives the model capability names and no descriptions —
+#: deliberately, because the registry is retrieved rather than dumped. That works
+#: while the names are self-separating, and the live temporal run measured where
+#: they are not: four questions of the form "how has <measure> changed over
+#: <N periods>" were read as `period_movement`, on the strength of the word
+#: "changed". Their temporal semantics were correct; only the owner was wrong.
+#:
+#: Both capabilities are real and neither is preferred here. Each entry states
+#: what the two OWN, which is a fact about the governed estate, and leaves the
+#: reading of any particular question to the model. Scoped to the one pair that
+#: was measured to need it: a pair with no evidence behind it does not belong.
+CAPABILITY_BOUNDARIES: Tuple[Dict[str, Any], ...] = (
+    {
+        "between": ["generic_analysis", "period_movement"],
+        "generic_analysis": [
+            "the LEVEL of a measure at one governed reporting period",
+            "a series or evolution of that level across governed periods",
+            "the current period against the previous one",
+            "the absolute or percentage change BETWEEN two governed snapshot "
+            "results",
+            "'how has X changed over N periods' where no cause, decomposition "
+            "or transition is asked for",
+        ],
+        "period_movement": [
+            "what CAUSED a movement",
+            "movement attribution",
+            "the contribution or decomposition of a change",
+            "inflow and outflow",
+            "transition analysis",
+            "which populations drove the movement",
+        ],
+        "decide_by": (
+            "WHAT a measure was, or BY HOW MUCH it changed, is "
+            "generic_analysis. WHY it changed, or WHICH parts of the book "
+            "drove it, is period_movement. The word 'changed' does not decide "
+            "it on its own."
+        ),
+    },
+)
+
+
+#: Specialist measures OWNED by a capability, not composed from fields. Opus may
+#: name them; it is never shown how they are built.
+SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
+    "borrowing_base": (
+        "borrowing_base", "borrowing_base_headroom", "borrowing_base_utilisation",
+        "facility_utilisation", "facility_drawn", "facility_commitment",
+        "eligible_balance", "ineligible_balance", "ineligible_loan_count",
+        "ineligible_loan_share", "ineligible_balance_share"),
+    "funded_bridge": ("funded_balance_movement", "bridge_component"),
+    "pipeline": ("pipeline_amount", "pipeline_case_count"),
+    "pipeline_stage_movement": (
+        "cases_moved", "amount_moved", "cases_arrived", "cases_departed",
+        "cases_stayed", "stayer_amount_change", "stage_opening", "stage_closing"),
+    "forecast": ("forecast_funded_balance", "forecast_completion_rate",
+                 "forecast_milestone_date"),
+    "concentration": ("concentration_exposure", "concentration_share"),
+    "limit_assessment": ("limit_headroom", "limit_utilisation",
+                         "limit_breach_status"),
+    "portfolio_summary": ("portfolio_overview",),
+}
+
+SPECIALIST_DIMENSIONS: Mapping[str, Tuple[str, ...]] = {
+    "borrowing_base": ("ineligibility_reason",),
+    "pipeline_stage_movement": ("origin_stage", "destination_stage"),
+    "limit_assessment": ("concentration_test",),
+    "concentration": ("concentration_test",),
+    "funded_bridge": ("bridge_component",),
+}
+
+#: The row itself. "How many loans?" counts rows and needs no field; without a
+#: concept for it the model would have to nominate some arbitrary column to
+#: count, which is a binding decision over an irrelevant field.
+_BASE_CONCEPTS: Tuple[Dict[str, Any], ...] = (
+    {"concept_id": "loan", "label": "Loan",
+     "description": "The loan itself. Count it to answer 'how many loans'.",
+     "role": "measure",
+     "allowed_statistics": ("count", "count_distinct", "share", "contribution"),
+     "default_statistic": "count", "aliases": ("loans", "case_count", "cases")},
+    {"concept_id": "case", "label": "Pipeline case",
+     "description": "A pipeline case. Count it to answer 'how many cases'.",
+     "role": "measure",
+     "allowed_statistics": ("count", "count_distinct", "share", "contribution"),
+     "default_statistic": "count", "aliases": ("pipeline_case",)},
+)
+
+#: The seven governed region fields, each with the (basis, level) it represents.
+#: Named here because ``mi_agent.region_basis`` governs the three families and
+#: this is the projection of that ruling into the concept index — a geography
+#: concept the model names as a dimension is routed into the geography contract
+#: by the compiler rather than grouped as a bare column.
+GEOGRAPHY_CONCEPTS: Mapping[str, Tuple[str, str]] = {
+    "canonical_region_reporting": ("reporting_taxonomy", "reporting"),
+    "canonical_region_detail": ("reporting_taxonomy", "reporting"),
+    "collateral_geography": ("collateral", "reporting"),
+    "geographic_region_obligor": ("obligor", "nuts3"),
+    "geographic_region_collateral": ("collateral", "nuts3"),
+    "geographic_region_obligor_itl3": ("obligor", "itl3"),
+    "geographic_region_collateral_itl3": ("collateral", "itl3"),
+    "postcode": ("collateral", "postcode"),
+}
+
+#: Internal snapshot/reporting mechanics. Excluded because they are handles on
+#: a physical extract, not concepts a reader asks about, and offering one would
+#: hand the model a snapshot selector by another name.
+_MECHANIC_FIELDS = frozenset({
+    "reporting_date", "cut_off_date", "upload_timestamp",
+    "pipeline_snapshot_date", "portfolio_id", "spv_id", "acquired_portfolio_id"})
+
+_AGG_TRANSLATION = {
+    "sum": "sum", "avg": "average", "average": "average",
+    "weighted_avg": "weighted_average", "weighted_average": "weighted_average",
+    "median": "median", "min": "min", "max": "max", "count": "count",
+    "count_distinct": "count_distinct", "share": "share",
+    "contribution": "contribution", "distribution": None, "loan_level": None,
+    "balance_sum": "sum",
+}
+_ROLE_TRANSLATION = {"metric": "measure", "dimension": "dimension",
+                     "date": "date", "flag": "flag"}
+
+
+# --------------------------------------------------------------------------- #
+# Concepts
+# --------------------------------------------------------------------------- #
+
+@dataclass(frozen=True)
+class SemanticConcept:
+    """One governed concept, as both the model and the compiler see it.
+
+    ``concept_id`` IS the canonical identifier. Opus may read it and name it;
+    the compiler still re-derives everything about it from the registry before a
+    plan can carry it.
+    """
+
+    concept_id: str
+    label: str
+    description: str
+    role: str                                   # measure | dimension | date | flag
+    aliases: Tuple[str, ...] = ()
+    allowed_statistics: Tuple[str, ...] = ()
+    default_statistic: Optional[str] = None
+    default_weight_concept: Optional[str] = None
+    unit: Optional[str] = None
+    data_type: Optional[str] = None
+    values: Tuple[str, ...] = ()
+    values_source: str = ""
+    analytical_concept: Optional[str] = None
+    temporality: Optional[str] = None
+    categories: Tuple[str, ...] = ()
+    workflow_tags: Tuple[str, ...] = ()
+    asset_applicability: Tuple[str, ...] = ()
+    bucket_concept: Optional[str] = None
+    geography_basis: Optional[str] = None
+    geography_level: Optional[str] = None
+    canonical_field: Optional[str] = None
+    owning_capability: Optional[str] = None
+
+    @property
+    def is_specialist(self) -> bool:
+        return self.owning_capability is not None
+
+    @property
+    def is_geography(self) -> bool:
+        return self.geography_level is not None
+
+    def search_view(self) -> Dict[str, Any]:
+        """The compact row a search returns."""
+        view: Dict[str, Any] = {"concept_id": self.concept_id,
+                                "label": self.label, "role": self.role}
+        if self.description:
+            view["definition"] = self.description
+        if self.aliases:
+            view["aliases"] = list(self.aliases[:8])
+        if self.unit:
+            view["unit"] = self.unit
+        if self.owning_capability:
+            view["owned_by_capability"] = self.owning_capability
+        if self.is_geography:
+            view["geography"] = {"basis": self.geography_basis,
+                                 "level": self.geography_level}
+        return view
+
+    def metadata_view(self) -> Dict[str, Any]:
+        """Everything governed about this concept."""
+        view = self.search_view()
+        view.update({
+            "data_type": self.data_type,
+            "temporality": self.temporality,
+            "analytical_concept": self.analytical_concept,
+            "categories": list(self.categories),
+            "workflow_tags": list(self.workflow_tags),
+            "asset_applicability": list(self.asset_applicability) or ["cross_asset"],
+            "has_governed_values": bool(self.values),
+        })
+        if self.allowed_statistics:
+            view["permitted_statistics"] = list(self.allowed_statistics)
+        if self.default_statistic:
+            view["default_statistic"] = self.default_statistic
+        if self.default_weight_concept:
+            view["default_weight_concept"] = self.default_weight_concept
+        if self.bucket_concept:
+            view["banded_as"] = self.bucket_concept
+        if self.is_specialist:
+            view["note"] = ("Owned by a capability. Name it; do not impose a "
+                            "statistic or weight and do not decompose it.")
+        boundary = CONCEPT_BOUNDARIES.get(self.concept_id)
+        if boundary:
+            view["axis_boundary"] = boundary
+        return view
+
+
+@dataclass(frozen=True)
+class GovernedVocabulary:
+    """The authoritative concept index for one governed context. Immutable."""
+
+    concepts: Mapping[str, SemanticConcept]
+    alias_index: Mapping[str, Tuple[str, ...]]
+    capabilities: FrozenSet[str]
+    asset_class: str = ""
+    version: str = VOCABULARY_VERSION
+    book_id: Optional[str] = None
+    available_fields: FrozenSet[str] = frozenset()
+
+    # -- lookups ------------------------------------------------------------ #
+
+    def resolve(self, term: Optional[str]) -> Optional[SemanticConcept]:
+        """A term -> the one concept it names, or None.
+
+        Exact identifier first, then a UNIQUE alias. Never fuzzy, and never
+        first-wins on an ambiguous alias: "region" is claimed by seven governed
+        fields and resolving it to any one of them would be the compiler
+        deciding what the reader meant.
+        """
+        if not isinstance(term, str):
+            return None
+        key = term.strip().lower()
+        if key in self.concepts:
+            return self.concepts[key]
+        matches = self.alias_index.get(key, ())
+        if len(matches) == 1:
+            return self.concepts.get(matches[0])
+        return None
+
+    def candidates(self, term: Optional[str]) -> Tuple[SemanticConcept, ...]:
+        """Every concept a term could mean. Non-empty only when ambiguous."""
+        if not isinstance(term, str):
+            return ()
+        key = term.strip().lower()
+        if key in self.concepts:
+            return (self.concepts[key],)
+        return tuple(self.concepts[c] for c in self.alias_index.get(key, ())
+                     if c in self.concepts)
+
+    def terms(self, role: Optional[str] = None) -> Tuple[str, ...]:
+        if role is None:
+            return tuple(sorted(self.concepts))
+        return tuple(sorted(c for c, v in self.concepts.items() if v.role == role))
+
+    def measures(self) -> Tuple[str, ...]:
+        return self.terms("measure")
+
+    def dimensions(self) -> Tuple[str, ...]:
+        return self.terms("dimension")
+
+    def applies_here(self, concept: SemanticConcept) -> bool:
+        """Whether this concept applies to the configured asset class."""
+        return applies_to_asset_class(concept.asset_applicability, self.asset_class)
+
+    def is_available(self, concept: SemanticConcept) -> bool:
+        if concept.is_specialist or concept.canonical_field is None:
+            return True
+        if not self.available_fields:
+            return True
+        return concept.canonical_field in self.available_fields
+
+    def for_book(self, available_fields: Iterable[str], *,
+                 book_id: Optional[str] = None,
+                 capabilities: Optional[Iterable[str]] = None
+                 ) -> "GovernedVocabulary":
+        """A view narrowed to what this book can actually answer."""
+        present = frozenset(str(f).strip() for f in available_fields if f)
+        caps = (frozenset(capabilities) & self.capabilities
+                if capabilities is not None else self.capabilities)
+        kept = {k: c for k, c in self.concepts.items()
+                if (c.is_specialist or c.canonical_field is None
+                    or not present or c.canonical_field in present)
+                and (not c.is_specialist or c.owning_capability in caps)}
+        aliases = {a: tuple(c for c in ids if c in kept)
+                   for a, ids in self.alias_index.items()}
+        aliases = {a: ids for a, ids in aliases.items() if ids}
+        return replace(self, concepts=kept, alias_index=aliases, capabilities=caps,
+                       available_fields=present, book_id=book_id or self.book_id)
+
+    # -- the standing context shown to the model ---------------------------- #
+
+    def orientation_payload(self) -> Dict[str, Any]:
+        """The small standing block the interpreter is given up front.
+
+        Deliberately NOT the registry. It is the closed enumerations, the
+        capability names, and the counts — enough to orient, after which the
+        model RETRIEVES what it needs. Dumping 150 concepts into every prompt
+        was the previous design's other mistake: it cost 24k tokens a question
+        and still under-described every one of them.
+        """
+        return {
+            "vocabulary_version": self.version,
+            "asset_class": self.asset_class,
+            "capabilities": sorted(self.capabilities),
+            "capability_operations": {k: sorted(v) for k, v in
+                                      sorted(CAPABILITY_OPERATIONS.items())
+                                      if k in self.capabilities},
+            # Stated ownership for the capability pairs whose NAMES do not
+            # separate them. Carried only for pairs this book actually offers.
+            "capability_boundaries": [
+                dict(boundary) for boundary in CAPABILITY_BOUNDARIES
+                if set(boundary["between"]) <= set(self.capabilities)],
+            "operations": sorted(OPERATIONS),
+            "statistics": sorted(STATISTICS),
+            "comparators": sorted(COMPARATORS),
+            "time_forms": sorted(TIME_FORMS),
+            "time_grains": sorted(TIME_GRAINS),
+            "geography_bases": sorted(GEOGRAPHY_BASES),
+            "geography_levels": sorted(GEOGRAPHY_LEVELS),
+            "population_bases": sorted(POPULATION_BASES),
+            "population_lenses": sorted(POPULATION_LENSES),
+            "seasoning_segments": sorted(SEASONING_SEGMENTS),
+            # The four enums above are TOKENS. This says what they MEAN and
+            # which of them a reader's sentence is actually on — the same
+            # service `capability_boundaries` performs for the capability names.
+            "portfolio_scope_axes": dict(PORTFOLIO_SCOPE_AXES),
+            "comparison_kinds": sorted(COMPARISON_KINDS),
+            "governed_defaults": dict(GOVERNED_DEFAULTS),
+            "concept_counts": {
+                "total": len(self.concepts),
+                "measures": len(self.measures()),
+                "dimensions": len(self.dimensions()),
+            },
+            "how_to_find_a_concept": (
+                "Call search_concepts to find the governed identifier for a "
+                "business word, get_concept_metadata for its full definition, "
+                "and get_allowed_values before asserting any filter value."),
+        }
+
+
+#: Slots the compiler fills from a governed default when the question leaves
+#: them empty. Declared so the model knows an empty slot is SAFE — the first
+#: live run had the interpreter blocking on every bare "region" because nothing
+#: told it a governed default exists.
+GOVERNED_DEFAULTS: Mapping[str, str] = {
+    "geography.basis": (
+        "at level 'reporting' an empty basis resolves to the client's "
+        "harmonised reporting taxonomy. At 'nuts3' and 'itl3' there is NO "
+        "default — the borrower's region and the property's region are "
+        "different answers — so leaving basis empty there asks the user."),
+    "geography.level": "empty resolves to 'reporting'.",
+    "measures[].statistic": (
+        "empty resolves to the governed registry default for that concept "
+        "(a sum for balances, an exposure-weighted average for LTV and rates)."),
+    "measures[].weight": (
+        "empty resolves to the governed registry weight for that concept."),
+    "population.base": "empty resolves to 'funded'.",
+    "time.form": "empty resolves to 'current'.",
+}
+
+
+# --------------------------------------------------------------------------- #
+# Building the index from the authoritative estate
+# --------------------------------------------------------------------------- #
+
+def _concept_from_registry(canonical_field: str, mi_entry: Mapping[str, Any],
+                           business: Mapping[str, Any],
+                           canonical: Mapping[str, Any],
+                           values: Mapping[str, Tuple[str, ...]]
+                           ) -> Optional[SemanticConcept]:
+    role = _ROLE_TRANSLATION.get(str(mi_entry.get("role") or "").strip().lower())
+    if role is None:
+        return None
+
+    stats: List[str] = []
+    for raw in mi_entry.get("allowed_aggregations") or ():
+        mapped = _AGG_TRANSLATION.get(str(raw).strip().lower())
+        if mapped and mapped in STATISTICS and mapped not in stats:
+            stats.append(mapped)
+    default = _AGG_TRANSLATION.get(
+        str(mi_entry.get("default_aggregation") or "").strip().lower())
+    if default is not None and default not in stats:
+        stats.append(default)
+    # Additivity is the REGISTRY's statement, read before the universal
+    # statistics are added — every measure can be counted, and letting that
+    # count make everything look additive would permit a share of an average.
+    additive = not ADDITIVE_STATISTICS.isdisjoint(stats)
+    if role == "measure":
+        for extra in ("count", "min", "max"):
+            if extra not in stats:
+                stats.append(extra)
+        if additive:
+            stats.extend(m for m in sorted(ANALYTIC_MODES) if m not in stats)
+
+    aliases = {_slug(mi_entry.get("business_name"))}
+    aliases.update(_slug(s) for s in (mi_entry.get("synonyms") or ()))
+    aliases.update(_slug(s) for s in (business.get("aliases") or ()))
+    aliases.discard("")
+    aliases.discard(canonical_field)
+
+    basis, level = GEOGRAPHY_CONCEPTS.get(canonical_field, (None, None))
+    return SemanticConcept(
+        concept_id=canonical_field,
+        label=str(mi_entry.get("business_name")
+                  or mi_entry.get("display_name") or canonical_field),
+        description=str(mi_entry.get("business_description")
+                        or business.get("rationale") or "").strip(),
+        role=role,
+        aliases=tuple(sorted(aliases)),
+        allowed_statistics=tuple(sorted(stats)),
+        default_statistic=default,
+        unit=mi_entry.get("format"),
+        data_type=str(canonical.get("format") or mi_entry.get("format") or ""),
+        values=values.get(canonical_field, ()),
+        values_source="governed registry" if canonical_field in values else "",
+        analytical_concept=business.get("analytical_concept"),
+        temporality=business.get("temporality"),
+        categories=tuple(str(c) for c in (business.get("categories") or ())),
+        workflow_tags=tuple(str(t) for t in (business.get("workflow_tags") or ())),
+        asset_applicability=tuple(str(a) for a in
+                                  (business.get("asset_applicability") or ())),
+        bucket_concept=mi_entry.get("bucket_field"),
+        geography_basis=basis,
+        geography_level=level,
+        canonical_field=canonical_field,
+    )
+
+
+def _specialist_concepts(capabilities: Iterable[str]) -> Dict[str, SemanticConcept]:
+    out: Dict[str, SemanticConcept] = {}
+    caps = set(capabilities)
+    for cap, ids in SPECIALIST_MEASURES.items():
+        if cap not in caps:
+            continue
+        for concept_id in ids:
+            out[concept_id] = SemanticConcept(
+                concept_id=concept_id,
+                label=concept_id.replace("_", " ").title(),
+                description=(f"Owned by the {cap} capability. Its methodology is "
+                             f"deterministic and is not composed by the "
+                             f"interpreter."),
+                role="measure", allowed_statistics=(), owning_capability=cap)
+    for cap, ids in SPECIALIST_DIMENSIONS.items():
+        if cap not in caps:
+            continue
+        for concept_id in ids:
+            if concept_id in out:
+                continue
+            out[concept_id] = SemanticConcept(
+                concept_id=concept_id,
+                label=concept_id.replace("_", " ").title(),
+                description=f"A governed dimension of the {cap} capability.",
+                role="dimension", owning_capability=cap,
+                values=governed_values_for_field().get("pipeline_stage", ())
+                if concept_id.endswith("_stage") else ())
+    return out
+
+
+@lru_cache(maxsize=1)
+def load_governed_vocabulary() -> GovernedVocabulary:
+    """Build the authoritative concept index from the committed estate."""
+    mi_fields = (_load_source("mi_semantics") or {}).get("fields") or {}
+    business = business_semantics()
+    canonical = canonical_fields()
+    values = governed_values_for_field()
+
+    concepts: Dict[str, SemanticConcept] = {}
+    for canonical_field, entry in sorted(mi_fields.items()):
+        if canonical_field in _MECHANIC_FIELDS:
+            continue
+        concept = _concept_from_registry(
+            canonical_field, entry, business.get(canonical_field) or {},
+            canonical.get(canonical_field) or {}, values)
+        if concept is not None:
+            concepts[concept.concept_id] = concept
+
+    # Default weights, now that every identifier exists.
+    for concept_id, concept in list(concepts.items()):
+        weight_field = (mi_fields.get(concept.canonical_field) or {}).get("weight_field")
+        if weight_field and weight_field in concepts:
+            concepts[concept_id] = replace(concept,
+                                           default_weight_concept=weight_field)
+
+    for base in _BASE_CONCEPTS:
+        payload = dict(base)
+        payload["aliases"] = tuple(payload.get("aliases", ()))
+        concepts[payload["concept_id"]] = SemanticConcept(**payload)
+
+    caps = CAPABILITIES
+    concepts.update(_specialist_concepts(caps))
+
+    #: alias -> every concept that claims it. A word claimed by more than one
+    #: governed concept resolves to NONE and reports all the candidates, which
+    #: is how "region" becomes a question rather than a guess.
+    alias_index: Dict[str, List[str]] = {}
+    for concept in concepts.values():
+        for alias in concept.aliases:
+            if alias and alias not in concepts:
+                alias_index.setdefault(alias, []).append(concept.concept_id)
+
+    return GovernedVocabulary(
+        concepts=concepts,
+        alias_index={a: tuple(sorted(ids)) for a, ids in alias_index.items()},
+        capabilities=caps,
+        asset_class=str(portfolio_semantic_context().get("asset_class") or ""),
+    )
+
+
+def canonical_field_names() -> FrozenSet[str]:
+    """Every canonical field the MI semantics registry knows."""
+    return frozenset(((_load_source("mi_semantics") or {}).get("fields") or {}).keys())

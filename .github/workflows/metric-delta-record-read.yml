@@ -1,0 +1,72 @@
+name: Output contract — read the M01 and M03 records
+
+# OBJECTIVE A's EVIDENCE, AND NOTHING ELSE.
+#
+# It asks no question, calls no model, touches no MI endpoint and changes no
+# configuration. It reads two records the confirmation canary already wrote and
+# prints the operation chain — what the model emitted, what normalisation did,
+# what the compiler bound — so the root cause is read from structured slots
+# rather than inferred from the English question.
+#
+# The spent bank is opened for the two QUESTION TEXTS only, to identify which
+# records to project. No expectation is read and nothing is re-scored.
+#
+# SECRETS. The publish profile reaches the script through `env:` only. The
+# projection is rescanned for it and for the Kudu password before it is written.
+
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths: [ '.github/workflows/metric-delta-record-read.yml' ]
+  workflow_dispatch:
+    inputs:
+      ref:
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metric-delta-record-read
+  cancel-in-progress: false
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: The spent bank must still hash to its pin
+        run: |
+          set -euo pipefail
+          D=due_diligence/evidence/metric_delta_confirmation_canary
+          RECOMPUTED="$(sha256sum "$D/metric_delta_canary_bank_manifest.json" | cut -d' ' -f1)"
+          PINNED="$(cut -d' ' -f1 "$D/metric_delta_canary_bank_manifest.sha256")"
+          if [ "$RECOMPUTED" != "$PINNED" ]; then
+            echo "::error::the spent bank was edited after hashing"; exit 1
+          fi
+          echo "spent bank intact: $PINNED"
+
+      - name: Read the two records
+        env:
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/metric_delta_output_contract/record_read.py \
+            --out record_projection.json
+
+      - name: Publish the projection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metric-delta-record-read
+          path: record_projection.json
+          if-no-files-found: warn

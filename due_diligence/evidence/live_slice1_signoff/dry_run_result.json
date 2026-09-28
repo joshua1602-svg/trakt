@@ -1,0 +1,1559 @@
+{
+  "phase": "Slice 1 live Opus integration sign-off \u2014 phases 2-6",
+  "manifest": "due_diligence/evidence/live_slice1_signoff/live_bank_manifest.json",
+  "manifest_sha256": "9d2044d357c7463536010ae90c080df2d708b257df3edd93327069ce908fb891",
+  "manifest_verified_unchanged": true,
+  "required_model": "claude-opus-5",
+  "models_returned": {
+    "REPLAY-NOT-A-LIVE-CALL": 20
+  },
+  "model_substitutions": 20,
+  "calls": {
+    "attempted": 20,
+    "successful": 20,
+    "transport_failures": 0,
+    "retries": 0
+  },
+  "legacy_watch": {
+    "profile_hits": {},
+    "profile_total_calls": 0,
+    "shim_hits": {},
+    "shim_total_calls": 0,
+    "entry_points_wrapped": 19,
+    "entry_points_not_found": [],
+    "disclosure": "sys.setprofile sees only the calling thread; the named entry-point shims catch a call from any thread"
+  },
+  "forced_executor_failure_with_a_live_plan": {
+    "control_unchanged": true,
+    "exception_escaped": "",
+    "ledger_classification": "SHADOW_EXECUTION_ERROR",
+    "ledger_classification_is_not_a_parity_result": true,
+    "shadow_returned_a_row": true,
+    "ran": true
+  },
+  "cases": [
+    {
+      "case_id": "E01",
+      "frozen_question_id": "Q01A",
+      "question": "How many loans are to borrowers over 55 with LTV above 50%?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 2,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_08020e58b735f771",
+      "expected_frozen_plan_id": "plan_08020e58b735f771",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "statistic": "count",
+          "measure_concept": "loan",
+          "measure_field": null,
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [
+            [
+              "current_loan_to_value",
+              "gt",
+              50
+            ],
+            [
+              "youngest_borrower_age",
+              "gt",
+              55
+            ]
+          ],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "shadow_error": "",
+        "receipt": {
+          "aggregation": "count",
+          "group_field_keys": [],
+          "applied_predicates": [
+            {
+              "field": "youngest_borrower_age",
+              "canonical_field": "youngest_borrower_age",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "55"
+              ],
+              "rows_before": 400,
+              "rows_after": 400
+            },
+            {
+              "field": "current_loan_to_value",
+              "canonical_field": "current_loan_to_value",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "50"
+              ],
+              "rows_before": 400,
+              "rows_after": 195
+            }
+          ],
+          "input_row_count": 400,
+          "filtered_row_count": 195,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "summary",
+          "row_count": 1
+        },
+        "spec": {
+          "metric": null,
+          "aggregation": "count",
+          "dimensions": [],
+          "filters": {
+            "youngest_borrower_age": {
+              "op": "gt",
+              "value": 55
+            },
+            "current_loan_to_value": {
+              "op": "gt",
+              "value": 50
+            }
+          }
+        },
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_drop": false,
+        "disposition": "EXECUTED_SCALAR",
+        "expected_value": 195.0,
+        "produced_value": 195.0,
+        "independently_correct": true
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NUMERICAL_DIFFERENCE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E02",
+      "frozen_question_id": "Q01B",
+      "question": "How many loans have a borrower older than 55 and an LTV greater than 50%?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_08020e58b735f771",
+      "expected_frozen_plan_id": "plan_08020e58b735f771",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "statistic": "count",
+          "measure_concept": "loan",
+          "measure_field": null,
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [
+            [
+              "current_loan_to_value",
+              "gt",
+              50
+            ],
+            [
+              "youngest_borrower_age",
+              "gt",
+              55
+            ]
+          ],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "shadow_error": "",
+        "receipt": {
+          "aggregation": "count",
+          "group_field_keys": [],
+          "applied_predicates": [
+            {
+              "field": "youngest_borrower_age",
+              "canonical_field": "youngest_borrower_age",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "55"
+              ],
+              "rows_before": 400,
+              "rows_after": 400
+            },
+            {
+              "field": "current_loan_to_value",
+              "canonical_field": "current_loan_to_value",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "50"
+              ],
+              "rows_before": 400,
+              "rows_after": 195
+            }
+          ],
+          "input_row_count": 400,
+          "filtered_row_count": 195,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "summary",
+          "row_count": 1
+        },
+        "spec": {
+          "metric": null,
+          "aggregation": "count",
+          "dimensions": [],
+          "filters": {
+            "youngest_borrower_age": {
+              "op": "gt",
+              "value": 55
+            },
+            "current_loan_to_value": {
+              "op": "gt",
+              "value": 50
+            }
+          }
+        },
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_drop": false,
+        "disposition": "EXECUTED_SCALAR",
+        "expected_value": 195.0,
+        "produced_value": 195.0,
+        "independently_correct": true
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NUMERICAL_DIFFERENCE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E03",
+      "frozen_question_id": "Q02A",
+      "question": "What is the balance of loans to borrowers over 75 with LTV above 40%?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 30,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_e096446463a30208",
+      "expected_frozen_plan_id": "plan_e096446463a30208",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [
+            [
+              "current_loan_to_value",
+              "gt",
+              40
+            ],
+            [
+              "youngest_borrower_age",
+              "gt",
+              75
+            ]
+          ],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "shadow_error": "",
+        "receipt": {
+          "aggregation": "sum",
+          "group_field_keys": [],
+          "applied_predicates": [
+            {
+              "field": "youngest_borrower_age",
+              "canonical_field": "youngest_borrower_age",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "75"
+              ],
+              "rows_before": 400,
+              "rows_after": 227
+            },
+            {
+              "field": "current_loan_to_value",
+              "canonical_field": "current_loan_to_value",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "40"
+              ],
+              "rows_before": 227,
+              "rows_after": 130
+            }
+          ],
+          "input_row_count": 400,
+          "filtered_row_count": 130,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "summary",
+          "row_count": 1
+        },
+        "spec": {
+          "metric": "current_outstanding_balance",
+          "aggregation": "sum",
+          "dimensions": [],
+          "filters": {
+            "youngest_borrower_age": {
+              "op": "gt",
+              "value": 75
+            },
+            "current_loan_to_value": {
+              "op": "gt",
+              "value": 40
+            }
+          }
+        },
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_drop": false,
+        "disposition": "EXECUTED_SCALAR",
+        "expected_value": 37948448.76,
+        "produced_value": 37948448.76,
+        "independently_correct": true
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NUMERICAL_DIFFERENCE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E04",
+      "frozen_question_id": "Q02C",
+      "question": "Show the total balance for loans with borrowers older than 75 and current LTV greater than 40%.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 2,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_e096446463a30208",
+      "expected_frozen_plan_id": "plan_e096446463a30208",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [
+            [
+              "current_loan_to_value",
+              "gt",
+              40
+            ],
+            [
+              "youngest_borrower_age",
+              "gt",
+              75
+            ]
+          ],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "shadow_error": "",
+        "receipt": {
+          "aggregation": "sum",
+          "group_field_keys": [],
+          "applied_predicates": [
+            {
+              "field": "youngest_borrower_age",
+              "canonical_field": "youngest_borrower_age",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "75"
+              ],
+              "rows_before": 400,
+              "rows_after": 227
+            },
+            {
+              "field": "current_loan_to_value",
+              "canonical_field": "current_loan_to_value",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "40"
+              ],
+              "rows_before": 227,
+              "rows_after": 130
+            }
+          ],
+          "input_row_count": 400,
+          "filtered_row_count": 130,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "summary",
+          "row_count": 1
+        },
+        "spec": {
+          "metric": "current_outstanding_balance",
+          "aggregation": "sum",
+          "dimensions": [],
+          "filters": {
+            "youngest_borrower_age": {
+              "op": "gt",
+              "value": 75
+            },
+            "current_loan_to_value": {
+              "op": "gt",
+              "value": 40
+            }
+          }
+        },
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_drop": false,
+        "disposition": "EXECUTED_SCALAR",
+        "expected_value": 37948448.76,
+        "produced_value": 37948448.76,
+        "independently_correct": true
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NUMERICAL_DIFFERENCE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E05",
+      "frozen_question_id": "Q03A",
+      "question": "How many drawdown loans have LTV above 50%?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 6,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_d7adabfaa9308f12",
+      "expected_frozen_plan_id": "plan_d7adabfaa9308f12",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "statistic": "count",
+          "measure_concept": "loan",
+          "measure_field": null,
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [
+            [
+              "current_loan_to_value",
+              "gt",
+              50
+            ],
+            [
+              "erm_product_type",
+              "eq",
+              "drawdown"
+            ]
+          ],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "shadow_error": "",
+        "receipt": {
+          "aggregation": "count",
+          "group_field_keys": [],
+          "applied_predicates": [
+            {
+              "field": "erm_product_type",
+              "canonical_field": "erm_product_type",
+              "op": "eq",
+              "kind": "categorical",
+              "values": [
+                "drawdown"
+              ],
+              "rows_before": 400,
+              "rows_after": 205
+            },
+            {
+              "field": "current_loan_to_value",
+              "canonical_field": "current_loan_to_value",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "50"
+              ],
+              "rows_before": 205,
+              "rows_after": 93
+            }
+          ],
+          "input_row_count": 400,
+          "filtered_row_count": 93,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "summary",
+          "row_count": 1
+        },
+        "spec": {
+          "metric": null,
+          "aggregation": "count",
+          "dimensions": [],
+          "filters": {
+            "erm_product_type": "drawdown",
+            "current_loan_to_value": {
+              "op": "gt",
+              "value": 50
+            }
+          }
+        },
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_drop": false,
+        "disposition": "EXECUTED_SCALAR",
+        "expected_value": 93.0,
+        "produced_value": 93.0,
+        "independently_correct": true
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NUMERICAL_DIFFERENCE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E06",
+      "frozen_question_id": "Q03B",
+      "question": "Of the drawdown loans, how many are over 50% LTV?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_d7adabfaa9308f12",
+      "expected_frozen_plan_id": "plan_d7adabfaa9308f12",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "statistic": "count",
+          "measure_concept": "loan",
+          "measure_field": null,
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [
+            [
+              "current_loan_to_value",
+              "gt",
+              50
+            ],
+            [
+              "erm_product_type",
+              "eq",
+              "drawdown"
+            ]
+          ],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "shadow_error": "",
+        "receipt": {
+          "aggregation": "count",
+          "group_field_keys": [],
+          "applied_predicates": [
+            {
+              "field": "erm_product_type",
+              "canonical_field": "erm_product_type",
+              "op": "eq",
+              "kind": "categorical",
+              "values": [
+                "drawdown"
+              ],
+              "rows_before": 400,
+              "rows_after": 205
+            },
+            {
+              "field": "current_loan_to_value",
+              "canonical_field": "current_loan_to_value",
+              "op": "gt",
+              "kind": "numeric",
+              "values": [
+                "50"
+              ],
+              "rows_before": 205,
+              "rows_after": 93
+            }
+          ],
+          "input_row_count": 400,
+          "filtered_row_count": 93,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "summary",
+          "row_count": 1
+        },
+        "spec": {
+          "metric": null,
+          "aggregation": "count",
+          "dimensions": [],
+          "filters": {
+            "erm_product_type": "drawdown",
+            "current_loan_to_value": {
+              "op": "gt",
+              "value": 50
+            }
+          }
+        },
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_drop": false,
+        "disposition": "EXECUTED_SCALAR",
+        "expected_value": 93.0,
+        "produced_value": 93.0,
+        "independently_correct": true
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NUMERICAL_DIFFERENCE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E07",
+      "frozen_question_id": "Q12A",
+      "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_92964eb7c19d2b43",
+      "expected_frozen_plan_id": "plan_92964eb7c19d2b43",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "shadow_error": "",
+        "receipt": {
+          "aggregation": "sum",
+          "group_field_keys": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "applied_predicates": [],
+          "input_row_count": 400,
+          "filtered_row_count": 400,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "table",
+          "row_count": 20
+        },
+        "spec": {
+          "metric": "current_outstanding_balance",
+          "aggregation": "sum",
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "filters": {}
+        },
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_drop": false,
+        "disposition": "EXECUTED_GROUPED",
+        "grouped_verdict": "GROUPED_CELL_PARITY",
+        "grouped_note": "20 cells, all within 0.01",
+        "cells_expected_in_manifest": 20,
+        "independently_correct": true
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "PRESENTATION_ONLY",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E08",
+      "frozen_question_id": "Q12B",
+      "question": "Show me balance split by both LTV band and age band.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_92964eb7c19d2b43",
+      "expected_frozen_plan_id": "plan_92964eb7c19d2b43",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "shadow_error": "",
+        "receipt": {
+          "aggregation": "sum",
+          "group_field_keys": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "applied_predicates": [],
+          "input_row_count": 400,
+          "filtered_row_count": 400,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "table",
+          "row_count": 20
+        },
+        "spec": {
+          "metric": "current_outstanding_balance",
+          "aggregation": "sum",
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "filters": {}
+        },
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_drop": false,
+        "disposition": "EXECUTED_GROUPED",
+        "grouped_verdict": "GROUPED_CELL_PARITY",
+        "grouped_note": "20 cells, all within 0.01",
+        "cells_expected_in_manifest": 20,
+        "independently_correct": true
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "PRESENTATION_ONLY",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E09",
+      "frozen_question_id": "Q11A",
+      "question": "Show a table of balance by LTV bucket and ticket-size bucket.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_d9bfe5fd29761fb5",
+      "expected_frozen_plan_id": "plan_d9bfe5fd29761fb5",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [
+            "ltv_bucket",
+            "ticket_bucket"
+          ],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "UNEXECUTABLE_FIXTURE_GAP",
+        "detail": "the replay frame does not carry ['ticket_bucket']"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "SHADOW_EXECUTION_ERROR",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "E10",
+      "frozen_question_id": "Q13A",
+      "question": "Show a table of balance by LTV bucket and interest-rate bucket.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_ca02491b13e8e042",
+      "expected_frozen_plan_id": "plan_ca02491b13e8e042",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [
+            "ltv_bucket",
+            "interest_rate_bucket"
+          ],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": true,
+        "live_reason": "",
+        "live_detail": "",
+        "expected_eligible": true,
+        "expected_reason": "",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "UNEXECUTABLE_FIXTURE_GAP",
+        "detail": "the replay frame does not carry ['interest_rate_bucket']"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "SHADOW_EXECUTION_ERROR",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I01",
+      "frozen_question_id": "Q04A",
+      "question": "What is the balance of Direct-book loans in London to borrowers over 75?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_6b4ced7ca93be1cb",
+      "expected_frozen_plan_id": "plan_6b4ced7ca93be1cb",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [
+            [
+              "youngest_borrower_age",
+              "gt",
+              75
+            ]
+          ],
+          "population_base": "funded",
+          "population_lens": "direct",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": true,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "EXPLICIT_LENS",
+        "live_detail": "population.lens='direct' is resolved and applied by portfolio_lens on the production path",
+        "expected_eligible": false,
+        "expected_reason": "EXPLICIT_LENS",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I02",
+      "frozen_question_id": "Q05A",
+      "question": "What is the weighted-average LTV of lump sum loans in the Direct book?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_7f9dcc7e0705c75a",
+      "expected_frozen_plan_id": "plan_7f9dcc7e0705c75a",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "statistic": "weighted_average",
+          "measure_concept": "current_loan_to_value",
+          "measure_field": "current_loan_to_value",
+          "weight_field": "current_outstanding_balance",
+          "dimensions": [],
+          "filters": [
+            [
+              "erm_product_type",
+              "eq",
+              "lump_sum"
+            ]
+          ],
+          "population_base": "funded",
+          "population_lens": "direct",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "EXPLICIT_LENS",
+        "live_detail": "population.lens='direct' is resolved and applied by portfolio_lens on the production path",
+        "expected_eligible": false,
+        "expected_reason": "EXPLICIT_LENS",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I03",
+      "frozen_question_id": "Q14A",
+      "question": "Show loan count by region and product type.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_9c6ebdc78046f1c2",
+      "expected_frozen_plan_id": "plan_9c6ebdc78046f1c2",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "statistic": "count",
+          "measure_concept": "loan",
+          "measure_field": null,
+          "weight_field": null,
+          "dimensions": [
+            "erm_product_type"
+          ],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": true,
+          "geography_group_by": true,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "GEOGRAPHY_REQUESTED",
+        "live_detail": "geography level='reporting' field='canonical_region_reporting' group_by=True \u2014 owned by the geography basis resolver, which this slice does not touch",
+        "expected_eligible": false,
+        "expected_reason": "GEOGRAPHY_REQUESTED",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I04",
+      "frozen_question_id": "Q12C",
+      "question": "Plot portfolio balance across LTV buckets and borrower-age buckets.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_c56510dee3605727",
+      "expected_frozen_plan_id": "plan_c56510dee3605727",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "distribution",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "OPERATION_NOT_GENERIC",
+        "live_detail": "operation='distribution' is not expressible in the generic executor's vocabulary",
+        "expected_eligible": false,
+        "expected_reason": "OPERATION_NOT_GENERIC",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I05",
+      "frozen_question_id": "Q17A",
+      "question": "For the Direct book, show balance by LTV bucket, ticket-size bucket and borrower-age bucket.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_e5856fc8ef54e8d8",
+      "expected_frozen_plan_id": "plan_e5856fc8ef54e8d8",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [
+            "ltv_bucket"
+          ],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "direct",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 3
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "EXPLICIT_LENS",
+        "live_detail": "population.lens='direct' is resolved and applied by portfolio_lens on the production path",
+        "expected_eligible": false,
+        "expected_reason": "EXPLICIT_LENS",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I06",
+      "frozen_question_id": "Q06A",
+      "question": "Summarise the portfolio.",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_969d65b542c899b8",
+      "expected_frozen_plan_id": "plan_969d65b542c899b8",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "portfolio_summary",
+          "operation": "summary",
+          "statistic": "capability",
+          "measure_concept": "portfolio_overview",
+          "measure_field": null,
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "CAPABILITY_NOT_GENERIC",
+        "live_detail": "capability='portfolio_summary' is specialist; it owns its own input contract and arithmetic",
+        "expected_eligible": false,
+        "expected_reason": "CAPABILITY_NOT_GENERIC",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I07",
+      "frozen_question_id": "Q19A",
+      "question": "How did the Direct book change last month?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_5681bb585344ef43",
+      "expected_frozen_plan_id": "plan_5681bb585344ef43",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "period_movement",
+          "operation": "movement",
+          "statistic": "sum",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [],
+          "population_base": "funded",
+          "population_lens": "direct",
+          "period_form": "relative_pair",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "CAPABILITY_NOT_GENERIC",
+        "live_detail": "capability='period_movement' is specialist; it owns its own input contract and arithmetic",
+        "expected_eligible": false,
+        "expected_reason": "CAPABILITY_NOT_GENERIC",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I08",
+      "frozen_question_id": "Q23A",
+      "question": "When will we reach \u00a3100m of funded loans?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_e1c5f2da7caec181",
+      "expected_frozen_plan_id": "plan_e1c5f2da7caec181",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "forecast",
+          "operation": "forecast_milestone",
+          "statistic": "capability",
+          "measure_concept": "forecast_milestone_date",
+          "measure_field": null,
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [],
+          "population_base": "forecast",
+          "population_lens": "all",
+          "period_form": "forward_looking",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "CAPABILITY_NOT_GENERIC",
+        "live_detail": "capability='forecast' is specialist; it owns its own input contract and arithmetic",
+        "expected_eligible": false,
+        "expected_reason": "CAPABILITY_NOT_GENERIC",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I09",
+      "frozen_question_id": "SM01A",
+      "question": "How many cases moved from KFI to Application?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "PLAN",
+      "live_reason_codes": [],
+      "live_plan_id": "plan_5911aa7d3a743662",
+      "expected_frozen_plan_id": "plan_5911aa7d3a743662",
+      "interpretation": {
+        "verdict": "EXACT_PLAN_MATCH",
+        "live_semantics": {
+          "capability": "pipeline_stage_movement",
+          "operation": "transition",
+          "statistic": "capability",
+          "measure_concept": "cases_moved",
+          "measure_field": null,
+          "weight_field": null,
+          "dimensions": [],
+          "filters": [
+            [
+              null,
+              "eq",
+              "APPLICATION"
+            ],
+            [
+              null,
+              "eq",
+              "KFI"
+            ]
+          ],
+          "population_base": "pipeline",
+          "population_lens": "all",
+          "period_form": "current",
+          "comparison_kind": "none",
+          "geography_requested": false,
+          "geography_group_by": false,
+          "output_count": 1
+        },
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "CAPABILITY_NOT_GENERIC",
+        "live_detail": "capability='pipeline_stage_movement' is specialist; it owns its own input contract and arithmetic",
+        "expected_eligible": false,
+        "expected_reason": "CAPABILITY_NOT_GENERIC",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "NOT_ELIGIBLE",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": true
+      }
+    },
+    {
+      "case_id": "I10",
+      "frozen_question_id": "NL1A",
+      "question": "How has the profile of our new lending changed over the last few months?",
+      "model_id": "REPLAY-NOT-A-LIVE-CALL",
+      "usage": {},
+      "latency_ms": 1,
+      "live_outcome": "CLARIFY",
+      "live_reason_codes": [
+        "MODEL_FLAGGED_AMBIGUITY",
+        "MISSING_REQUIRED_SLOT",
+        "MISSING_REQUIRED_SLOT"
+      ],
+      "live_plan_id": "",
+      "expected_frozen_plan_id": "",
+      "interpretation": {
+        "verdict": "JUSTIFIED_CLARIFY",
+        "live_semantics": {},
+        "silent_semantic_drops": [],
+        "semantic_changes": []
+      },
+      "eligibility": {
+        "live_eligible": false,
+        "live_reason": "NOT_A_PLAN",
+        "live_detail": "no plan, or a plan with no readable body",
+        "expected_eligible": false,
+        "expected_reason": "NOT_A_PLAN",
+        "matches": true
+      },
+      "execution": {
+        "disposition": "NOT_EXECUTED_INELIGIBLE"
+      },
+      "shadow_isolation": {
+        "control_unchanged": true,
+        "exception_escaped": "",
+        "ledger_classification": "",
+        "ledger_classification_is_not_a_parity_result": true,
+        "shadow_returned_a_row": false
+      }
+    }
+  ],
+  "live": false
+}

@@ -1,0 +1,4061 @@
+{
+ "base_sha": "ea8c65b592ae5d2203d924bf66afa051618641e6",
+ "test_sha": "2b00172c0b033c97de8afe5fa5b60ba43e1443ec",
+ "geography_provenance": {
+  "asset_class": "equity_release",
+  "config_owner": "config/asset/mi_geography.yaml :: primary_basis_by_asset_class (+ config/asset/product_defaults_ERM.yaml for this class)",
+  "resolver": "mi_agent.mi_geography.default_primary_basis -> axis_fields -> field_for_basis",
+  "primary_basis": "collateral",
+  "basis_fields_in_readability_order": [
+   "collateral_geography",
+   "geographic_region_collateral"
+  ],
+  "region_field_used_by_this_bank": "collateral_geography",
+  "itl3_tier": [
+   [
+    "reporting",
+    [
+     "collateral_geography",
+     "property_region"
+    ]
+   ],
+   [
+    "code",
+    [
+     "geographic_region_collateral",
+     "geographic_region_collateral_itl3"
+    ]
+   ]
+  ]
+ },
+ "bank_size": 65,
+ "tally": {
+  "PASS": 47,
+  "FAIL": 11,
+  "OUTSIDE_CURRENT_SCOPE": 1,
+  "UNJUDGEABLE": 1,
+  "NOT_PLAN_LEVEL_REACHABLE": 5
+ },
+ "silent_semantic_errors": [
+  "B12-portfolio-lens-reaches-the-spec",
+  "B13-which-scope-fields-survive-compilation",
+  "D02-explicit-historical-period",
+  "D03-previous-reporting-period",
+  "D04-nonexistent-date",
+  "D05-materially-distant-period",
+  "D06-future-period",
+  "D07-period-reaches-the-spec",
+  "D08-two-periods-differ",
+  "E01-receipt-dataset-identity",
+  "E06-receipt-temporal-request"
+ ],
+ "cases": [
+  {
+   "case_id": "A01-count",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 400.0,
+   "actual_result": 400.0,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 400.0,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "count",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A02-sum",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 115450800.7,
+   "actual_result": 115450800.7,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A03-simple-mean",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "an unweighted mean must not silently weight",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 77.3525,
+   "actual_result": 77.3525,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 77.3525,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "avg",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "youngest_borrower_age_avg"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A04-weighted-mean-ltv",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 48.352044162773836,
+   "actual_result": 48.352044162773836,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 48.352044162773836,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "weighted_avg",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_loan_to_value_weighted_avg"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A05-weighted-mean-rate",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 5.870581550561735,
+   "actual_result": 5.870581550561735,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 5.870581550561735,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "weighted_avg",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_interest_rate_weighted_avg"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A06-weighted-differs-from-simple",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "two envelopes",
+    "field": "value",
+    "truth": "longhand \u2014 the two means must not coincide"
+   },
+   "expected_disposition": "RESULT",
+   "note": "guards against a weighted mean that silently ignores its weight",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "weighted=48.3520 simple=48.5495",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "weighted": 48.352044162773836,
+    "simple": 48.54950000000001
+   },
+   "actual_result": {
+    "weighted": 48.352044162773836,
+    "simple": 48.54950000000001
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 48.54950000000001,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "avg",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_loan_to_value_avg"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A07-median",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 277479.26,
+   "actual_result": 277479.26,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 277479.26,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "median",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_median"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A08-min",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 49214.98,
+   "actual_result": 49214.98,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 49214.98,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "min",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_min"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A09-max",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 519909.08,
+   "actual_result": 519909.08,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 519909.08,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "max",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_max"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A10-grouped-sum",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "<measure>_sum per group",
+    "truth": "portfolio_truth_oracle.grouped"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "Drawdown": 57510952.09,
+    "Lump Sum": 57939848.61
+   },
+   "actual_result": {
+    "Lump Sum": 57939848.61,
+    "Drawdown": 57510952.09
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "erm_product_type"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 2,
+      "columns": [
+       "erm_product_type",
+       "current_outstanding_balance_sum",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A11-grouped-count",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "loan_count per group",
+    "truth": "portfolio_truth_oracle.grouped(how=count)"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "Alpha": 141.0,
+    "Beta": 138.0,
+    "Gamma": 121.0
+   },
+   "actual_result": {
+    "Alpha": 141.0,
+    "Beta": 138.0,
+    "Gamma": 121.0
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "broker_channel"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "count",
+      "rows": 3,
+      "columns": [
+       "broker_channel",
+       "count",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A12-grouped-weighted-mean",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "<measure>_weighted_avg per group",
+    "truth": "portfolio_truth_oracle.grouped(how=weighted_avg)"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "Drawdown": 45.637028189042454,
+    "Lump Sum": 51.046962381146606
+   },
+   "actual_result": {
+    "Lump Sum": 51.046962381146606,
+    "Drawdown": 45.637028189042454
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "erm_product_type"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "weighted_avg",
+      "rows": 2,
+      "columns": [
+       "erm_product_type",
+       "current_loan_to_value_weighted_avg",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A13-two-dimension-grid",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "cells of a 2-D grid",
+    "truth": "portfolio_truth_oracle.grouped on two axes"
+   },
+   "expected_disposition": "RESULT",
+   "note": "a grid whose totals agree can still have the mass in the wrong cells",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "Drawdown | London": 14781722.19,
+    "Drawdown | North West": 14416471.4,
+    "Drawdown | Scotland": 12975211.4,
+    "Drawdown | Wales": 15337547.100000001,
+    "Lump Sum | London": 13883345.740000002,
+    "Lump Sum | North West": 13683988.600000001,
+    "Lump Sum | Scotland": 12430442.829999998,
+    "Lump Sum | Wales": 17942071.439999998
+   },
+   "actual_result": {
+    "Lump Sum | Wales": 17942071.439999998,
+    "Drawdown | Wales": 15337547.100000001,
+    "Drawdown | London": 14781722.19,
+    "Drawdown | North West": 14416471.4,
+    "Lump Sum | London": 13883345.740000002,
+    "Lump Sum | North West": 13683988.600000001,
+    "Drawdown | Scotland": 12975211.4,
+    "Lump Sum | Scotland": 12430442.829999998
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "erm_product_type",
+       "collateral_geography"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 8,
+      "columns": [
+       "erm_product_type",
+       "collateral_geography",
+       "current_outstanding_balance_sum",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A14-grid-reconciles-to-total",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "sum of all cells",
+    "truth": "portfolio_truth_oracle.total"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 115450800.7,
+   "actual_result": 115450800.7,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "erm_product_type",
+       "collateral_geography"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 8,
+      "columns": [
+       "erm_product_type",
+       "collateral_geography",
+       "current_outstanding_balance_sum",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A15-share-column-sums-to-100",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "concentration_pct",
+    "truth": "longhand \u2014 shares of one population sum to 100"
+   },
+   "expected_disposition": "RESULT",
+   "note": "the executor volunteers a share column; it must be a real share",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 100.0,
+   "actual_result": 100.0,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "erm_product_type"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 2,
+      "columns": [
+       "erm_product_type",
+       "current_outstanding_balance_sum",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A16-share-matches-longhand",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "concentration_pct",
+    "truth": "longhand group total / population total * 100"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "Drawdown": 49.81425138786413,
+    "Lump Sum": 50.185748612135875
+   },
+   "actual_result": {
+    "Lump Sum": 50.185748612135875,
+    "Drawdown": 49.81425138786413
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "erm_product_type"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 2,
+      "columns": [
+       "erm_product_type",
+       "current_outstanding_balance_sum",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A17-null-measure-excluded-from-mean",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "longhand pandas mean skipping nulls on NULLBOOK"
+   },
+   "expected_disposition": "RESULT",
+   "note": "40 of 400 LTVs are null; a mean must not treat them as zero",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 48.08166666666667,
+   "actual_result": 48.08166666666667,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 48.08166666666667,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.32); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "avg",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_loan_to_value_avg"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A18-null-measure-excluded-from-sum",
+   "surface": "AGGREGATION_STATISTIC",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "longhand pandas sum skipping nulls on NULLBOOK"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 17309.4,
+   "actual_result": 17309.4,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 17309.4,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.32); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_loan_to_value_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B01-one-filter",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 57744445.760000005,
+   "actual_result": 57744445.760000005,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 57744445.760000005,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 194,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B02-two-filters-conjunctive",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "two filters must narrow together, not replace one another",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 12931879.91,
+   "actual_result": 12931879.91,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 12931879.91,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "filter collateral_geography='Scotland' kept 42/194 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       },
+       {
+        "field": "collateral_geography",
+        "canonical_field": "collateral_geography",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Scotland"
+        ],
+        "rows_before": 194,
+        "rows_after": 42
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 42,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B03-three-filters",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 6551890.5,
+   "actual_result": 6551890.5,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 6551890.5,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "filter collateral_geography='Scotland' kept 42/194 rows",
+       "filter erm_product_type='Lump Sum' kept 23/42 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       },
+       {
+        "field": "collateral_geography",
+        "canonical_field": "collateral_geography",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Scotland"
+        ],
+        "rows_before": 194,
+        "rows_after": 42
+       },
+       {
+        "field": "erm_product_type",
+        "canonical_field": "erm_product_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Lump Sum"
+        ],
+        "rows_before": 42,
+        "rows_after": 23
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 23,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B04-filter-strictly-narrows",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "two envelopes",
+    "field": "value",
+    "truth": "longhand \u2014 a filtered total must be < the unfiltered one"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "57744446 < 115450801",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "filtered < unfiltered",
+   "actual_result": {
+    "filtered": 57744445.760000005,
+    "unfiltered": 115450800.7
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 57744445.760000005,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 194,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B05-filter-true-for-every-row",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "applied AND disclosed: a no-op predicate is still a predicate",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 115450800.7,
+   "actual_result": 115450800.7,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "filter current_loan_to_value gt 0.0 kept 400/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "current_loan_to_value",
+        "canonical_field": "current_loan_to_value",
+        "op": "gt",
+        "kind": "numeric",
+        "values": [
+         "0.0"
+        ],
+        "rows_before": 400,
+        "rows_after": 400
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B06-filter-matching-one-row",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 1.0,
+   "actual_result": 1.0,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 1.0,
+      "error": "",
+      "warnings": [
+       "filter current_outstanding_balance ge 519909.08 kept 1/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "current_outstanding_balance",
+        "canonical_field": "current_outstanding_balance",
+        "op": "ge",
+        "kind": "numeric",
+        "values": [
+         "519909.08"
+        ],
+        "rows_before": 400,
+        "rows_after": 1
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 1,
+      "aggregation": "count",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B07-filter-matching-zero-rows",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "value / warnings / rows_out",
+    "truth": "longhand \u2014 the population is empty by construction"
+   },
+   "expected_disposition": "GOVERNED_UNAVAILABLE",
+   "note": "zero matching population is NOT an economically observed zero",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "value=0.0 warnings=['filter current_loan_to_value gt 1000.0 kept 0/400 rows']",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "executed": true,
+    "value": 0.0,
+    "error": "",
+    "warnings": [
+     "filter current_loan_to_value gt 1000.0 kept 0/400 rows",
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "group_keys": [],
+    "predicates_field": "applied_predicates",
+    "predicates": [
+     {
+      "field": "current_loan_to_value",
+      "canonical_field": "current_loan_to_value",
+      "op": "gt",
+      "kind": "numeric",
+      "values": [
+       "1000.0"
+      ],
+      "rows_before": 400,
+      "rows_after": 0
+     }
+    ],
+    "period_field": "<ABSENT>",
+    "period": null,
+    "dataset": null,
+    "rows_in": 400,
+    "rows_out": 0,
+    "aggregation": "sum",
+    "rows": 1,
+    "columns": [
+     "loan_count",
+     "current_outstanding_balance_sum"
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 0.0,
+      "error": "",
+      "warnings": [
+       "filter current_loan_to_value gt 1000.0 kept 0/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "current_loan_to_value",
+        "canonical_field": "current_loan_to_value",
+        "op": "gt",
+        "kind": "numeric",
+        "values": [
+         "1000.0"
+        ],
+        "rows_before": 400,
+        "rows_after": 0
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 0,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B08-zero-population-count",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "value / warnings",
+    "truth": "longhand \u2014 an empty COUNT is genuinely 0"
+   },
+   "expected_disposition": "RESULT",
+   "note": "the one case where 0 IS the answer; it must still say the population was empty",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 0.0,
+   "actual_result": 0.0,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 0.0,
+      "error": "",
+      "warnings": [
+       "filter current_loan_to_value gt 1000.0 kept 0/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "current_loan_to_value",
+        "canonical_field": "current_loan_to_value",
+        "op": "gt",
+        "kind": "numeric",
+        "values": [
+         "1000.0"
+        ],
+        "rows_before": 400,
+        "rows_after": 0
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 0,
+      "aggregation": "count",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B09-filtered-population-with-null-measure",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "longhand mean over the filtered NULLBOOK rows"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 48.01277777777777,
+   "actual_result": 48.01277777777777,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 48.01277777777777,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.32); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 194,
+      "aggregation": "avg",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_loan_to_value_avg"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B10-population-preserved-in-receipt",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "predicates / rows_in / rows_out",
+    "truth": "longhand row counts from the oracle"
+   },
+   "expected_disposition": "RECEIPT_EVIDENCES_POPULATION",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "rows 400 -> 42",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "executed": true,
+    "value": 12931879.91,
+    "error": "",
+    "warnings": [
+     "filter borrower_type='Joint' kept 194/400 rows",
+     "filter collateral_geography='Scotland' kept 42/194 rows",
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "group_keys": [],
+    "predicates_field": "applied_predicates",
+    "predicates": [
+     {
+      "field": "borrower_type",
+      "canonical_field": "borrower_type",
+      "op": "eq",
+      "kind": "categorical",
+      "values": [
+       "Joint"
+      ],
+      "rows_before": 400,
+      "rows_after": 194
+     },
+     {
+      "field": "collateral_geography",
+      "canonical_field": "collateral_geography",
+      "op": "eq",
+      "kind": "categorical",
+      "values": [
+       "Scotland"
+      ],
+      "rows_before": 194,
+      "rows_after": 42
+     }
+    ],
+    "period_field": "<ABSENT>",
+    "period": null,
+    "dataset": null,
+    "rows_in": 400,
+    "rows_out": 42,
+    "aggregation": "sum",
+    "rows": 1,
+    "columns": [
+     "loan_count",
+     "current_outstanding_balance_sum"
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 12931879.91,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "filter collateral_geography='Scotland' kept 42/194 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       },
+       {
+        "field": "collateral_geography",
+        "canonical_field": "collateral_geography",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Scotland"
+        ],
+        "rows_before": 194,
+        "rows_after": 42
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 42,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B11-filter-on-absent-column",
+   "surface": "POPULATION_FILTER",
+   "assertion": {
+    "object": "receipt",
+    "field": "raised / error",
+    "truth": "longhand \u2014 the column does not exist"
+   },
+   "expected_disposition": "GOVERNED_REFUSAL",
+   "note": "a predicate on a column the book lacks must refuse, never be dropped",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "refused: MIQueryExecutionError Canonical column 'borrower_type' (for semantic field 'borrower_type') is not present in th",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": null,
+   "actual_result": {
+    "executed": false,
+    "value": null,
+    "error": "Canonical column 'borrower_type' (for semantic field 'borrower_type') is not present in the data",
+    "warnings": [],
+    "group_keys": [],
+    "predicates_field": "<ABSENT>",
+    "predicates": null,
+    "period_field": "<ABSENT>",
+    "period": null,
+    "dataset": null,
+    "rows_in": null,
+    "rows_out": null,
+    "aggregation": null,
+    "rows": 0,
+    "columns": []
+   },
+   "receipt": {
+    "raised": "MIQueryExecutionError",
+    "reason": "Canonical column 'borrower_type' (for semantic field 'borrower_type') is not present in the data",
+    "complete": false,
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "executed": false,
+      "value": null,
+      "error": "Canonical column 'borrower_type' (for semantic field 'borrower_type') is not present in the data",
+      "warnings": [],
+      "group_keys": [],
+      "predicates_field": "<ABSENT>",
+      "predicates": null,
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": null,
+      "rows_out": null,
+      "aggregation": null,
+      "rows": 0,
+      "columns": []
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B12-portfolio-lens-reaches-the-spec",
+   "surface": "PLAN_BINDING",
+   "assertion": {
+    "object": "compile_query_plan(plan)[0].spec",
+    "field": "portfolio_lens",
+    "truth": "the plan states a lens; the spec must carry it"
+   },
+   "expected_disposition": "PLAN_BINDING_CARRIES_SCOPE",
+   "note": "the third scope field, after period and dataset",
+   "verdict": "FAIL",
+   "primary_owner": "PLAN_BINDING",
+   "detail": "the plan stated portfolio_lens='direct' and the compiled spec carries None",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": "direct",
+   "actual_result": {
+    "spec_portfolio_lens": null
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "B13-which-scope-fields-survive-compilation",
+   "surface": "PLAN_BINDING",
+   "assertion": {
+    "object": "AnalyticalScope vs compiled MIQuerySpec",
+    "field": "dataset / portfolio_lens / period / filters",
+    "truth": "a governed plan's population must survive into the spec"
+   },
+   "expected_disposition": "PLAN_BINDING_CARRIES_SCOPE",
+   "note": "the consolidated root-cause probe for the whole scope contract",
+   "verdict": "FAIL",
+   "primary_owner": "PLAN_BINDING",
+   "detail": "of the four AnalyticalScope population facts, only ['filters'] survive compilation; LOST ['dataset', 'period', 'portfolio_lens'] (plan asked {'dataset': 'funded', 'portfolio_lens': 'direct', 'period': '2026-03-31', 'filters': 1})",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "filters": true,
+    "dataset": true,
+    "portfolio_lens": true,
+    "period": true
+   },
+   "actual_result": {
+    "filters": true,
+    "dataset": false,
+    "portfolio_lens": false,
+    "period": false
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "C01-region-grouping-configured-field",
+   "surface": "CORE_GEOGRAPHY",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "groups of the configured region field",
+    "truth": "portfolio_truth_oracle.grouped on that same field"
+   },
+   "expected_disposition": "RESULT",
+   "note": "the field comes from the asset config, not from a guess",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "London": 28665067.93,
+    "North West": 28100460.0,
+    "Scotland": 25405654.230000004,
+    "Wales": 33279618.54
+   },
+   "actual_result": {
+    "Wales": 33279618.54,
+    "London": 28665067.93,
+    "North West": 28100460.0,
+    "Scotland": 25405654.230000004
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "collateral_geography"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 4,
+      "columns": [
+       "collateral_geography",
+       "current_outstanding_balance_sum",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C02-region-filter",
+   "surface": "CORE_GEOGRAPHY",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 25405654.230000004,
+   "actual_result": 25405654.230000004,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 25405654.230000004,
+      "error": "",
+      "warnings": [
+       "filter collateral_geography='Scotland' kept 90/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "collateral_geography",
+        "canonical_field": "collateral_geography",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Scotland"
+        ],
+        "rows_before": 400,
+        "rows_after": 90
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 90,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C03-region-cells-reconcile",
+   "surface": "CORE_GEOGRAPHY",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "sum of region cells",
+    "truth": "portfolio_truth_oracle.total"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 115450800.7,
+   "actual_result": 115450800.7,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "collateral_geography"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 4,
+      "columns": [
+       "collateral_geography",
+       "current_outstanding_balance_sum",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C04-region-count-by-region",
+   "surface": "CORE_GEOGRAPHY",
+   "assertion": {
+    "object": "MIQueryResult.data",
+    "field": "loan_count per region",
+    "truth": "portfolio_truth_oracle.grouped(how=count)"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "London": 96.0,
+    "North West": 98.0,
+    "Scotland": 90.0,
+    "Wales": 116.0
+   },
+   "actual_result": {
+    "Wales": 116.0,
+    "North West": 98.0,
+    "London": 96.0,
+    "Scotland": 90.0
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "collateral_geography"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "count",
+      "rows": 4,
+      "columns": [
+       "collateral_geography",
+       "count",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C05-null-region-not-silently-dropped",
+   "surface": "CORE_GEOGRAPHY",
+   "assertion": {
+    "object": "MIQueryResult.data + receipt",
+    "field": "region cells vs population total",
+    "truth": "longhand \u2014 30 of 400 rows carry no region"
+   },
+   "expected_disposition": "RESULT",
+   "note": "rows with no region must be disclosed, not quietly excluded",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "30 unresolved rows worth 9079110.05 excluded AND disclosed: excluded 30 row(s) with missing/blank grouping value(s) in ['collateral_geography'] (missing data excluded as requested)",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "population_total": 115450800.7,
+    "null_rows": 30,
+    "null_balance": 9079110.049999999
+   },
+   "actual_result": {
+    "cells_total": 106371690.65,
+    "labels": [
+     "London",
+     "North West",
+     "Scotland",
+     "Wales"
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.32); the executor does NOT rescale percentages",
+       "excluded 30 row(s) with missing/blank grouping value(s) in ['collateral_geography'] (missing data excluded as requested)"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "collateral_geography"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 4,
+      "columns": [
+       "collateral_geography",
+       "current_outstanding_balance_sum",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C06-receipt-names-the-geography-binding",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "group_keys",
+    "truth": "the configured field name from the asset config"
+   },
+   "expected_disposition": "RECEIPT_EVIDENCES_GEOGRAPHY",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "['collateral_geography']",
+   "silent": false,
+   "actual_runtime_type": "list",
+   "expected_result": [
+    "collateral_geography"
+   ],
+   "actual_result": [
+    "collateral_geography"
+   ],
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "collateral_geography"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 4,
+      "columns": [
+       "collateral_geography",
+       "current_outstanding_balance_sum",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C07-itl3-is-a-secondary-lens",
+   "surface": "CORE_GEOGRAPHY",
+   "assertion": {
+    "object": "mi_geography tiers",
+    "field": "tiers_for_basis",
+    "truth": "config/asset/mi_geography.yaml + region_basis levels"
+   },
+   "expected_disposition": "OUTSIDE_CURRENT_SCOPE",
+   "note": "recorded, not scored: ITL3 is a Funded/React postcode lens, not the MI route",
+   "verdict": "OUTSIDE_CURRENT_SCOPE",
+   "primary_owner": null,
+   "detail": "ITL3 fields ['geographic_region_collateral_itl3'] sit in the code tier only; MI uses 'collateral_geography'",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "ITL3 present only in the non-reporting tier; MI uses the reporting tier",
+   "actual_result": {
+    "tiers": {
+     "reporting": [
+      "collateral_geography",
+      "property_region"
+     ],
+     "code": [
+      "geographic_region_collateral",
+      "geographic_region_collateral_itl3"
+     ]
+    },
+    "itl3_fields": [
+     "geographic_region_collateral_itl3"
+    ],
+    "region_field_chosen_for_mi": "collateral_geography"
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "D01-current-period",
+   "surface": "TEMPORAL_RESOLUTION",
+   "assertion": {
+    "object": "MultiResultEnvelope.outputs[0].value",
+    "field": "value",
+    "truth": "portfolio_truth_oracle"
+   },
+   "expected_disposition": "RESULT",
+   "note": "the flat book is the current period; this must be right",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "",
+   "silent": false,
+   "actual_runtime_type": "float",
+   "expected_result": 115450800.7,
+   "actual_result": 115450800.7,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "D02-explicit-historical-period",
+   "surface": "TEMPORAL_RESOLUTION",
+   "assertion": {
+    "object": "receipt + compiled MIQuerySpec",
+    "field": "spec temporal fields / receipt period",
+    "truth": "longhand \u2014 the book carries no period column"
+   },
+   "expected_disposition": "GOVERNED_REFUSAL_OR_DISCLOSED",
+   "note": "a valid-looking prior reporting period",
+   "verdict": "FAIL",
+   "primary_owner": "TEMPORAL_RESOLUTION",
+   "detail": "period 2026-03-31 was ignored: the whole-book current figure 115450800.70 was returned with no period in the receipt and no warning",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "executed": true,
+    "value": 115450800.7,
+    "error": "",
+    "warnings": [
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "group_keys": [],
+    "predicates_field": "applied_predicates",
+    "predicates": [],
+    "period_field": "<ABSENT>",
+    "period": null,
+    "dataset": null,
+    "rows_in": 400,
+    "rows_out": 400,
+    "aggregation": "sum",
+    "rows": 1,
+    "columns": [
+     "loan_count",
+     "current_outstanding_balance_sum"
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "D03-previous-reporting-period",
+   "surface": "TEMPORAL_RESOLUTION",
+   "assertion": {
+    "object": "receipt + compiled MIQuerySpec",
+    "field": "spec temporal fields / receipt period",
+    "truth": "longhand \u2014 the book carries no period column"
+   },
+   "expected_disposition": "GOVERNED_REFUSAL_OR_DISCLOSED",
+   "note": "the immediately preceding period",
+   "verdict": "FAIL",
+   "primary_owner": "TEMPORAL_RESOLUTION",
+   "detail": "period 2026-05-31 was ignored: the whole-book current figure 115450800.70 was returned with no period in the receipt and no warning",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "executed": true,
+    "value": 115450800.7,
+    "error": "",
+    "warnings": [
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "group_keys": [],
+    "predicates_field": "applied_predicates",
+    "predicates": [],
+    "period_field": "<ABSENT>",
+    "period": null,
+    "dataset": null,
+    "rows_in": 400,
+    "rows_out": 400,
+    "aggregation": "sum",
+    "rows": 1,
+    "columns": [
+     "loan_count",
+     "current_outstanding_balance_sum"
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "D04-nonexistent-date",
+   "surface": "TEMPORAL_RESOLUTION",
+   "assertion": {
+    "object": "receipt + compiled MIQuerySpec",
+    "field": "spec temporal fields / receipt period",
+    "truth": "longhand \u2014 the book carries no period column"
+   },
+   "expected_disposition": "GOVERNED_REFUSAL_OR_DISCLOSED",
+   "note": "a date that does not exist in any calendar",
+   "verdict": "FAIL",
+   "primary_owner": "TEMPORAL_RESOLUTION",
+   "detail": "period 2026-02-30 was ignored: the whole-book current figure 115450800.70 was returned with no period in the receipt and no warning",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "executed": true,
+    "value": 115450800.7,
+    "error": "",
+    "warnings": [
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "group_keys": [],
+    "predicates_field": "applied_predicates",
+    "predicates": [],
+    "period_field": "<ABSENT>",
+    "period": null,
+    "dataset": null,
+    "rows_in": 400,
+    "rows_out": 400,
+    "aggregation": "sum",
+    "rows": 1,
+    "columns": [
+     "loan_count",
+     "current_outstanding_balance_sum"
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "D05-materially-distant-period",
+   "surface": "TEMPORAL_RESOLUTION",
+   "assertion": {
+    "object": "receipt + compiled MIQuerySpec",
+    "field": "spec temporal fields / receipt period",
+    "truth": "longhand \u2014 the book carries no period column"
+   },
+   "expected_disposition": "GOVERNED_REFUSAL_OR_DISCLOSED",
+   "note": "an observation no book of this kind could carry",
+   "verdict": "FAIL",
+   "primary_owner": "TEMPORAL_RESOLUTION",
+   "detail": "period 1999-12-31 was ignored: the whole-book current figure 115450800.70 was returned with no period in the receipt and no warning",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "executed": true,
+    "value": 115450800.7,
+    "error": "",
+    "warnings": [
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "group_keys": [],
+    "predicates_field": "applied_predicates",
+    "predicates": [],
+    "period_field": "<ABSENT>",
+    "period": null,
+    "dataset": null,
+    "rows_in": 400,
+    "rows_out": 400,
+    "aggregation": "sum",
+    "rows": 1,
+    "columns": [
+     "loan_count",
+     "current_outstanding_balance_sum"
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "D06-future-period",
+   "surface": "TEMPORAL_RESOLUTION",
+   "assertion": {
+    "object": "receipt + compiled MIQuerySpec",
+    "field": "spec temporal fields / receipt period",
+    "truth": "longhand \u2014 the book carries no period column"
+   },
+   "expected_disposition": "GOVERNED_REFUSAL_OR_DISCLOSED",
+   "note": "a period after every observation",
+   "verdict": "FAIL",
+   "primary_owner": "TEMPORAL_RESOLUTION",
+   "detail": "period 2099-12-31 was ignored: the whole-book current figure 115450800.70 was returned with no period in the receipt and no warning",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "executed": true,
+    "value": 115450800.7,
+    "error": "",
+    "warnings": [
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "group_keys": [],
+    "predicates_field": "applied_predicates",
+    "predicates": [],
+    "period_field": "<ABSENT>",
+    "period": null,
+    "dataset": null,
+    "rows_in": 400,
+    "rows_out": 400,
+    "aggregation": "sum",
+    "rows": 1,
+    "columns": [
+     "loan_count",
+     "current_outstanding_balance_sum"
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "D07-period-reaches-the-spec",
+   "surface": "PLAN_BINDING",
+   "assertion": {
+    "object": "compile_query_plan(plan)[0].spec",
+    "field": "reporting_date / as_of_date / temporal_mode",
+    "truth": "the plan states a period; the spec must carry it"
+   },
+   "expected_disposition": "PLAN_BINDING_CARRIES_PERIOD",
+   "note": "the root-cause probe: does the plan->spec compiler bind the period at all?",
+   "verdict": "FAIL",
+   "primary_owner": "PLAN_BINDING",
+   "detail": "the plan stated period '2026-03-31' and the compiled spec carries no temporal value at all: {'reporting_date': None, 'as_of_date': None, 'temporal_mode': None, 'execution_mode': None, 'compare_periods': []}",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": "2026-03-31 in some field",
+   "actual_result": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "compare_periods": []
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "D08-two-periods-differ",
+   "surface": "TEMPORAL_RESOLUTION",
+   "assertion": {
+    "object": "two envelopes",
+    "field": "value",
+    "truth": "longhand \u2014 different periods must not be identical by default"
+   },
+   "expected_disposition": "RESULT",
+   "note": "if two different stated periods give the same figure, neither was honoured",
+   "verdict": "FAIL",
+   "primary_owner": "TEMPORAL_RESOLUTION",
+   "detail": "two different stated periods returned the identical figure 115450800.7 \u2014 neither was honoured",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": "a stated period is honoured or refused, not ignored",
+   "actual_result": {
+    "current": 115450800.7,
+    "ancient": 115450800.7
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "E01-receipt-dataset-identity",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "dataset",
+    "truth": "the plan states dataset='funded'"
+   },
+   "expected_disposition": "RECEIPT_FIELD_PRESENT",
+   "note": "",
+   "verdict": "FAIL",
+   "primary_owner": "RECEIPT_GOVERNANCE",
+   "detail": "field absent from the receipt",
+   "silent": true,
+   "actual_runtime_type": "NoneType",
+   "expected_result": "funded",
+   "actual_result": null,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "E02-receipt-aggregation",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "aggregation",
+    "truth": "the plan states operation=sum"
+   },
+   "expected_disposition": "RECEIPT_FIELD_PRESENT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "'sum'",
+   "silent": false,
+   "actual_runtime_type": "str",
+   "expected_result": "sum",
+   "actual_result": "sum",
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "E03-receipt-row-counts",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "rows_in / rows_out",
+    "truth": "oracle row counts before and after the filter"
+   },
+   "expected_disposition": "RECEIPT_FIELD_PRESENT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "{'rows_in': 400, 'rows_out': 194}",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "rows_in": 400,
+    "rows_out": 194
+   },
+   "actual_result": {
+    "rows_in": 400,
+    "rows_out": 194
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 57744445.760000005,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 194,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "E04-receipt-predicates",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "predicates",
+    "truth": "the plan states two predicates"
+   },
+   "expected_disposition": "RECEIPT_FIELD_PRESENT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "applied_predicates carries 2",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "two predicates named",
+   "actual_result": {
+    "field": "applied_predicates",
+    "value": [
+     {
+      "field": "borrower_type",
+      "canonical_field": "borrower_type",
+      "op": "eq",
+      "kind": "categorical",
+      "values": [
+       "Joint"
+      ],
+      "rows_before": 400,
+      "rows_after": 194
+     },
+     {
+      "field": "collateral_geography",
+      "canonical_field": "collateral_geography",
+      "op": "eq",
+      "kind": "categorical",
+      "values": [
+       "Scotland"
+      ],
+      "rows_before": 194,
+      "rows_after": 42
+     }
+    ]
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 12931879.91,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "filter collateral_geography='Scotland' kept 42/194 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       },
+       {
+        "field": "collateral_geography",
+        "canonical_field": "collateral_geography",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Scotland"
+        ],
+        "rows_before": 194,
+        "rows_after": 42
+       }
+      ],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 42,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "E05-receipt-grouping",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "group_keys",
+    "truth": "the plan states two dimensions"
+   },
+   "expected_disposition": "RECEIPT_FIELD_PRESENT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "['erm_product_type', 'collateral_geography']",
+   "silent": false,
+   "actual_runtime_type": "list",
+   "expected_result": [
+    "erm_product_type",
+    "collateral_geography"
+   ],
+   "actual_result": [
+    "erm_product_type",
+    "collateral_geography"
+   ],
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "erm_product_type",
+       "collateral_geography"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 8,
+      "columns": [
+       "erm_product_type",
+       "collateral_geography",
+       "current_outstanding_balance_sum",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "E06-receipt-temporal-request",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "receipt.outputs[0]",
+    "field": "period (any spelling)",
+    "truth": "the plan states a period; the receipt must evidence it"
+   },
+   "expected_disposition": "RECEIPT_FIELD_PRESENT",
+   "note": "pick() records ABSENT rather than defaulting, so a missing field shows",
+   "verdict": "FAIL",
+   "primary_owner": "RECEIPT_GOVERNANCE",
+   "detail": "the receipt carries no temporal field under any spelling",
+   "silent": true,
+   "actual_runtime_type": "dict",
+   "expected_result": "2026-06-30 under some key",
+   "actual_result": {
+    "field": "<ABSENT>",
+    "value": null
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": 115450800.7,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "group_keys": [],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 1,
+      "columns": [
+       "loan_count",
+       "current_outstanding_balance_sum"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "E07-receipt-measure",
+   "surface": "RECEIPT_GOVERNANCE",
+   "assertion": {
+    "object": "MIQueryResult.data columns",
+    "field": "measure column",
+    "truth": "the plan states the balance measure"
+   },
+   "expected_disposition": "RECEIPT_FIELD_PRESENT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "['current_outstanding_balance_sum']",
+   "silent": false,
+   "actual_runtime_type": "list",
+   "expected_result": "a column naming current_outstanding_balance",
+   "actual_result": [
+    "erm_product_type",
+    "current_outstanding_balance_sum",
+    "loan_count",
+    "concentration_pct"
+   ],
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "spec_error": "",
+    "spec_period_fields": {
+     "reporting_date": null,
+     "as_of_date": null,
+     "temporal_mode": null,
+     "execution_mode": null,
+     "compare_periods": []
+    },
+    "outputs": [
+     {
+      "output_id": "a",
+      "executed": true,
+      "value": null,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "group_keys": [
+       "erm_product_type"
+      ],
+      "predicates_field": "applied_predicates",
+      "predicates": [],
+      "period_field": "<ABSENT>",
+      "period": null,
+      "dataset": null,
+      "rows_in": 400,
+      "rows_out": 400,
+      "aggregation": "sum",
+      "rows": 2,
+      "columns": [
+       "erm_product_type",
+       "current_outstanding_balance_sum",
+       "loan_count",
+       "concentration_pct"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "F01-bridge-mixed-churn",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "BalanceBridge",
+    "field": "continuing_movement / new_loan_balance / exited_loan_balance / opening / closing",
+    "truth": "longhand set decomposition of two loan-level maps"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "opening=600.0 closing=740.0 continuing=40.0 new=400.0 exited=300.0 residual=0.0",
+   "silent": false,
+   "actual_runtime_type": "BalanceBridge",
+   "expected_result": {
+    "continuing": 40.0,
+    "new": 400.0,
+    "redeemed": -300.0,
+    "net": 140.0
+   },
+   "actual_result": {
+    "status": "available",
+    "balance_field": "current_outstanding_balance",
+    "identifier_field": "loan_identifier",
+    "identifier_fields": [
+     "loan_identifier"
+    ],
+    "opening_balance": 600.0,
+    "closing_balance": 740.0,
+    "new_loan_balance": 400.0,
+    "exited_loan_balance": 300.0,
+    "continuing_movement": 40.0,
+    "new_loan_count": 1,
+    "exited_loan_count": 1,
+    "continuing_loan_count": 2,
+    "reconciles": true,
+    "residual": 0.0,
+    "tolerance": 0.01,
+    "limitation": null,
+    "evidence": [
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s0",
+      "reporting_date": "2026-05-31",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "opening",
+      "loan_count": 3
+     },
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s1",
+      "reporting_date": "2026-06-30",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "closing",
+      "loan_count": 3
+     }
+    ]
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F02-bridge-full-redemption",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "BalanceBridge",
+    "field": "continuing_movement / new_loan_balance / exited_loan_balance / opening / closing",
+    "truth": "longhand set decomposition of two loan-level maps"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "opening=150.0 closing=10.0 continuing=0.0 new=10.0 exited=150.0 residual=0.0",
+   "silent": false,
+   "actual_runtime_type": "BalanceBridge",
+   "expected_result": {
+    "continuing": 0,
+    "new": 10.0,
+    "redeemed": -150.0,
+    "net": -140.0
+   },
+   "actual_result": {
+    "status": "available",
+    "balance_field": "current_outstanding_balance",
+    "identifier_field": "loan_identifier",
+    "identifier_fields": [
+     "loan_identifier"
+    ],
+    "opening_balance": 150.0,
+    "closing_balance": 10.0,
+    "new_loan_balance": 10.0,
+    "exited_loan_balance": 150.0,
+    "continuing_movement": 0.0,
+    "new_loan_count": 1,
+    "exited_loan_count": 2,
+    "continuing_loan_count": 0,
+    "reconciles": true,
+    "residual": 0.0,
+    "tolerance": 0.01,
+    "limitation": null,
+    "evidence": [
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s0",
+      "reporting_date": "2026-05-31",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "opening",
+      "loan_count": 2
+     },
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s1",
+      "reporting_date": "2026-06-30",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "closing",
+      "loan_count": 1
+     }
+    ]
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F03-bridge-no-change",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "BalanceBridge",
+    "field": "continuing_movement / new_loan_balance / exited_loan_balance / opening / closing",
+    "truth": "longhand set decomposition of two loan-level maps"
+   },
+   "expected_disposition": "RESULT",
+   "note": "identical snapshots: zero must read as zero, not as a movement",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "opening=150.0 closing=150.0 continuing=0.0 new=0.0 exited=0.0 residual=0.0",
+   "silent": false,
+   "actual_runtime_type": "BalanceBridge",
+   "expected_result": {
+    "continuing": 0.0,
+    "new": 0,
+    "redeemed": 0,
+    "net": 0.0
+   },
+   "actual_result": {
+    "status": "available",
+    "balance_field": "current_outstanding_balance",
+    "identifier_field": "loan_identifier",
+    "identifier_fields": [
+     "loan_identifier"
+    ],
+    "opening_balance": 150.0,
+    "closing_balance": 150.0,
+    "new_loan_balance": 0.0,
+    "exited_loan_balance": 0.0,
+    "continuing_movement": 0.0,
+    "new_loan_count": 0,
+    "exited_loan_count": 0,
+    "continuing_loan_count": 2,
+    "reconciles": true,
+    "residual": 0.0,
+    "tolerance": 0.01,
+    "limitation": null,
+    "evidence": [
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s0",
+      "reporting_date": "2026-05-31",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "opening",
+      "loan_count": 2
+     },
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s1",
+      "reporting_date": "2026-06-30",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "closing",
+      "loan_count": 2
+     }
+    ]
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F04-bridge-all-new",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "BalanceBridge",
+    "field": "continuing_movement / new_loan_balance / exited_loan_balance / opening / closing",
+    "truth": "longhand set decomposition of two loan-level maps"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "opening=0.0 closing=30.0 continuing=0.0 new=30.0 exited=0.0 residual=0.0",
+   "silent": false,
+   "actual_runtime_type": "BalanceBridge",
+   "expected_result": {
+    "continuing": 0,
+    "new": 30.0,
+    "redeemed": 0,
+    "net": 30.0
+   },
+   "actual_result": {
+    "status": "available",
+    "balance_field": "current_outstanding_balance",
+    "identifier_field": "loan_identifier",
+    "identifier_fields": [
+     "loan_identifier"
+    ],
+    "opening_balance": 0.0,
+    "closing_balance": 30.0,
+    "new_loan_balance": 30.0,
+    "exited_loan_balance": 0.0,
+    "continuing_movement": 0.0,
+    "new_loan_count": 2,
+    "exited_loan_count": 0,
+    "continuing_loan_count": 0,
+    "reconciles": true,
+    "residual": 0.0,
+    "tolerance": 0.01,
+    "limitation": null,
+    "evidence": [
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s0",
+      "reporting_date": "2026-05-31",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "opening",
+      "loan_count": 0
+     },
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s1",
+      "reporting_date": "2026-06-30",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "closing",
+      "loan_count": 2
+     }
+    ]
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F05-bridge-reconciles",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "BalanceBridge",
+    "field": "reconciles / residual",
+    "truth": "the capability's own invariant, checked independently"
+   },
+   "expected_disposition": "RESULT",
+   "note": "",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "residual=0.0",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "net": 1752.0,
+    "closing": 4752.0
+   },
+   "actual_result": {
+    "reconciles": true,
+    "residual": 0.0,
+    "recomposed_closing": 4752.0,
+    "closing": 4752.0
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F06-borrowing-base-no-facility",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "borrowing_base.calculate",
+    "field": "raised / result",
+    "truth": "no facility is configured, so no headroom exists"
+   },
+   "expected_disposition": "GOVERNED_REFUSAL",
+   "note": "must never invent a facility or a zero headroom",
+   "verdict": "PASS",
+   "primary_owner": null,
+   "detail": "refused: AttributeError: 'NoneType' object has no attribute 'facility_id'",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "a refusal",
+   "actual_result": {
+    "raised": "AttributeError",
+    "message": "'NoneType' object has no attribute 'facility_id'"
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F07-borrowing-base-configured",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "BorrowingBaseResult",
+    "field": "eligible / advance / headroom",
+    "truth": "longhand: min(commitment, eligible x advance_rate) - drawn"
+   },
+   "expected_disposition": "RESULT",
+   "note": "a governed facility constructed from the dataclass contract",
+   "verdict": "UNJUDGEABLE",
+   "primary_owner": "DATA_CONFIG",
+   "detail": "result produced but no independent facility fixture exists to verify eligibility against: ['facility_id', 'currency', 'eligibility', 'concentration_limit_denominator', 'concentration_limit_denominator_floor', 'concentration_denominator_floor_binding', 'advance_rate', 'gross_borrowing_base']",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": {
+    "whole_book_balance": 115450800.7,
+    "advance_on_whole_book": 92360640.56,
+    "commitment": 50000000.0,
+    "drawn": 10000000.0
+   },
+   "actual_result": {
+    "type": "BorrowingBaseResult",
+    "fields": {
+     "facility_id": "F1",
+     "currency": "GBP",
+     "eligibility": "EligibilitySummary(financing_portfolio_loan_count=0, financi",
+     "concentration_limit_denominator": "NOT_CALCULABLE",
+     "concentration_limit_denominator_floor": "None",
+     "concentration_denominator_floor_binding": "None",
+     "advance_rate": 0.8,
+     "gross_borrowing_base": 0.0,
+     "facility_commitment": 50000000.0,
+     "available_borrowing_base": 0.0,
+     "facility_cap_binding": "False",
+     "current_drawn_amount": 10000000.0,
+     "borrowing_base_headroom": -10000000.0,
+     "borrowing_base_deficiency": 10000000.0,
+     "borrowing_base_utilisation_pct": "NOT_CALCULABLE",
+     "facility_utilisation_pct": 20.0,
+     "concentration_adjustment": "{'treatment': 'monitor_only', 'amount': 0.0, 'breachedTestCo",
+     "nearest": "{'nearest_concentration_limit': 'NOT_CALCULABLE', 'nearest_c",
+     "missing_inputs": "['concentration_denominator_floor']",
+     "prototype_assumptions_used": "[]",
+     "notes": "['No Concentration Limit Denominator floor is configured, so"
+    }
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F08-ranking-reachable",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "QueryPlan / PlannedOutput",
+    "field": "operation vocabulary",
+    "truth": "inspection of the governed-plan contract"
+   },
+   "expected_disposition": "REACHABILITY_PROBE",
+   "note": "is ranking expressible in a QueryPlan at all?",
+   "verdict": "NOT_PLAN_LEVEL_REACHABLE",
+   "primary_owner": null,
+   "detail": "ranking is not an operation of the governed plan contract; plan operations are ['avg', 'count', 'max', 'median', 'min', 'sum', 'weighted_avg']",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "reachable or not",
+   "actual_result": {
+    "plan_operations": [
+     "avg",
+     "count",
+     "max",
+     "median",
+     "min",
+     "sum",
+     "weighted_avg"
+    ],
+    "rank_in_vocabulary": false
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F09-distribution-reachable",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "QueryPlan / PlannedOutput",
+    "field": "operation vocabulary",
+    "truth": "inspection of the governed-plan contract"
+   },
+   "expected_disposition": "REACHABILITY_PROBE",
+   "note": "is distribution expressible in a QueryPlan at all?",
+   "verdict": "NOT_PLAN_LEVEL_REACHABLE",
+   "primary_owner": null,
+   "detail": "distribution is not an operation of the governed plan contract; plan operations are ['avg', 'count', 'max', 'median', 'min', 'sum', 'weighted_avg']",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "reachable or not",
+   "actual_result": {
+    "plan_operations": [
+     "avg",
+     "count",
+     "max",
+     "median",
+     "min",
+     "sum",
+     "weighted_avg"
+    ],
+    "distribution_in_vocabulary": false
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F10-portfolio-summary-reachable",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "QueryPlan / PlannedOutput",
+    "field": "operation vocabulary",
+    "truth": "inspection of the governed-plan contract"
+   },
+   "expected_disposition": "REACHABILITY_PROBE",
+   "note": "is portfolio_summary expressible in a QueryPlan at all?",
+   "verdict": "NOT_PLAN_LEVEL_REACHABLE",
+   "primary_owner": null,
+   "detail": "portfolio_summary is not an operation of the governed plan contract; plan operations are ['avg', 'count', 'max', 'median', 'min', 'sum', 'weighted_avg']",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "reachable or not",
+   "actual_result": {
+    "plan_operations": [
+     "avg",
+     "count",
+     "max",
+     "median",
+     "min",
+     "sum",
+     "weighted_avg"
+    ],
+    "summary_in_vocabulary": false
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F11-movement-reachable-from-plan",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "QueryPlan / PlannedOutput",
+    "field": "operation vocabulary",
+    "truth": "inspection of the governed-plan contract"
+   },
+   "expected_disposition": "REACHABILITY_PROBE",
+   "note": "is funded movement / bridge expressible in a QueryPlan at all?",
+   "verdict": "NOT_PLAN_LEVEL_REACHABLE",
+   "primary_owner": null,
+   "detail": "funded movement / bridge is not an operation of the governed plan contract; plan operations are ['avg', 'count', 'max', 'median', 'min', 'sum', 'weighted_avg']",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "reachable or not",
+   "actual_result": {
+    "plan_operations": [
+     "avg",
+     "count",
+     "max",
+     "median",
+     "min",
+     "sum",
+     "weighted_avg"
+    ],
+    "movement_in_vocabulary": false,
+    "bridge_entry_point": "mi_agent.period_change.bridge.balance_bridge (direct capability call, not a QueryPlan operation)"
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F12-concentration-reachable",
+   "surface": "SPECIALIST_CAPABILITY",
+   "assertion": {
+    "object": "QueryPlan / PlannedOutput",
+    "field": "operation vocabulary",
+    "truth": "inspection of the governed-plan contract"
+   },
+   "expected_disposition": "REACHABILITY_PROBE",
+   "note": "is concentration expressible in a QueryPlan at all?",
+   "verdict": "NOT_PLAN_LEVEL_REACHABLE",
+   "primary_owner": null,
+   "detail": "concentration is not an operation of the governed plan contract; plan operations are ['avg', 'count', 'max', 'median', 'min', 'sum', 'weighted_avg']",
+   "silent": false,
+   "actual_runtime_type": "dict",
+   "expected_result": "reachable or not",
+   "actual_result": {
+    "plan_operations": [
+     "avg",
+     "count",
+     "max",
+     "median",
+     "min",
+     "sum",
+     "weighted_avg"
+    ],
+    "concentration_in_vocabulary": false,
+    "share_column_emitted_by_grouped_execution": "concentration_pct"
+   },
+   "receipt": null
+  }
+ ]
+}

@@ -1,0 +1,105 @@
+name: Canary post-mortem — read the four existing sink records
+
+# READ ONLY. It asks no question, calls no model, touches no MI endpoint, changes
+# no configuration and writes nothing to the service. It opens the evidence sink
+# `plan_serving_canary` already wrote during run 34752378644 and projects the four
+# records for S03, S07, S08 and S09 so they can be classified.
+#
+#     LIVE_MODEL_CALLS = 0    LIVE_MI_QUERY_CALLS = 0    DEPLOYMENTS = 0
+#
+# THE SPENT BANK IS NOT TOUCHED. `serving-canary-run.yml` is not modified and not
+# triggered; the manifest is read for question identity only, and its hash is
+# asserted so this post-mortem cannot be pointed at a different question set.
+# No expectation is read and nothing is re-scored here.
+#
+# WHY THE SINK AND NOT THE RUN'S ARTEFACT. The artefact holds the SCORER's
+# projection, and the questions this post-mortem must answer are exactly the ones
+# that projection omits — what the CandidateIntent said about time, what the
+# compiler bound, which runtime executed, and what the returned groups were. The
+# sink holds the whole record.
+#
+# THE PROJECTION IS REDACTED. Row-bearing keys are dropped wholesale and long
+# lists are presumed to be rows, so governed group keys, period keys and
+# aggregates survive and loan-level detail cannot. Both credentials are scrubbed
+# and the output is rescanned for them before it is written.
+
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths: [ '.github/workflows/canary-postmortem.yml' ]
+  workflow_dispatch:
+    inputs:
+      evidence_path:
+        default: /home/LogFiles/mi-plan-shadow/evidence.jsonl
+        required: true
+      client_id:
+        default: ERE
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canary-postmortem
+  cancel-in-progress: false
+
+env:
+  BANK_SHA256: 27b7d825a1b3f88e631c5931826fa0b0fdab331205ca7b4ea7d318c43aa627b1
+  CANARY_DIR: due_diligence/evidence/change_intelligence_serving_canary
+
+jobs:
+  postmortem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: The bank must be the spent one, unedited
+        run: |
+          set -euo pipefail
+          RECOMPUTED="$(sha256sum "${CANARY_DIR}/serving_canary_bank_manifest.json" | cut -d' ' -f1)"
+          echo "bank recomputed = ${RECOMPUTED}"
+          if [ "${RECOMPUTED}" != "${BANK_SHA256}" ]; then
+            echo "::error::bank mismatch: expected ${BANK_SHA256}"; exit 1
+          fi
+          echo "bank ${BANK_SHA256} unchanged: ok"
+
+      - name: Refuse to run without the publish profile
+        env:
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AZURE_MI_API_PUBLISH_PROFILE:-}" ]; then
+            echo "::error::AZURE_MI_API_PUBLISH_PROFILE is not set"; exit 1
+          fi
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      - name: Project the four records
+        env:
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          python "${CANARY_DIR}/postmortem_read.py" \
+            --evidence-path "${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}" \
+            --client-id "${{ inputs.client_id || 'ERE' }}" \
+            --out postmortem_projection.json
+
+      - name: The four records, gzip+base64
+        run: |
+          set -euo pipefail
+          echo "----BEGIN postmortem_projection.json.gz.b64----"
+          gzip -9 -c postmortem_projection.json | base64 -w 200
+          echo "----END postmortem_projection.json.gz.b64----"
+
+      - name: Publish the projection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-postmortem
+          path: postmortem_projection.json
+          if-no-files-found: warn

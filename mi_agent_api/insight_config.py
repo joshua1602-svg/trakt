@@ -69,13 +69,64 @@ DEFAULTS: Dict[str, Any] = {
         "max_duplicate_id_share_pct": 1.0,
         "emit_when_clean": False,
     },
+    # ---- Funded material change ------------------------------------------ #
+    # The funded sections below are the ONLY materiality rule the funded
+    # composition has. ``period_change`` states plainly that it has none of its
+    # own ("No governed materiality threshold is configured for this
+    # portfolio ... No movement is described as material"); these keys are the
+    # configured rule that sentence says is absent, supplied where every other
+    # threshold in the product already lives.
+    #
+    # Every one of them is relative, for the same reason as the sections above.
+    # There is no absolute currency floor here, and adding one would break the
+    # rule this file exists to state.
+    "funded_metric_movement": {
+        # Applied to currency, count and ratio measures, against
+        # ``MetricChange.relative_change``.
+        "min_relative_change_pct": 2.0,
+        # Applied to percentage-point measures, against
+        # ``MetricChange.movement_value``. A weighted-average LTV that moves 2%
+        # of its own value has barely moved; one that moves 2 points has.
+        "min_change_pp": 1.0,
+        # Above these, a movement the governed directionality calls a
+        # deterioration is raised from "attention" to "concern".
+        "concern_relative_change_pct": 10.0,
+        "concern_change_pp": 5.0,
+    },
+    "funded_composition": {
+        "min_share_change_pp": 5.0,
+        # Per dimension, not in total: the selector's per-type cap decides how
+        # many dimensions reach the reader.
+        "max_categories_reported": 2,
+    },
+    "funded_attribution": {
+        # A bridge that does not reconcile to its own closing balance is
+        # reported as a limitation, never as an explanation of the movement.
+        "require_reconciliation": True,
+    },
+    "funded_limits": {
+        # A test that improved is still a governed status change. Reported by
+        # default, at "info", so a recovery is visible and not only a breach.
+        "report_improvements": True,
+    },
+    "funded_brief": {
+        # When true, a period in which nothing crossed a threshold produces one
+        # explicit statement to that effect instead of an empty brief.
+        "emit_quiet_period": True,
+    },
 }
 
 BRIEF_DEFAULTS: Dict[str, Any] = {
     "max_insights": 8,
     "max_per_type": {
         "CONCENTRATION_PROXIMITY": 2,
+        "LIMIT_STATUS_TRANSITION": 3,
         "DATA_QUALITY": 1,
+        "FUNDED_BALANCE_MOVEMENT": 1,
+        "FUNDED_BALANCE_ATTRIBUTION": 1,
+        "FUNDED_METRIC_MOVEMENT": 3,
+        "FUNDED_COMPOSITION_SHIFT": 2,
+        "FUNDED_QUIET_PERIOD": 1,
         "TICKET_SIZE": 1,
         "WEIGHTED_LTV": 1,
         "TICKET_MIX_SHIFT": 1,
