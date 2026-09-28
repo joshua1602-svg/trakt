@@ -19,8 +19,15 @@
         `pipeline_stage_movement` owns the CALCULATION; `forecast` CONSUMES it as a
         declared input and never recomputes it. Awaiting confirmation.
 
-    D2b SCENARIO OPERATION MAPPING                                 OPEN — see §6
-        Still the only thing blocking plan_forecast_runtime.
+    D2b SCENARIO OPERATION MAPPING                       SETTLED 2026-09-28, §6.2
+        Its own operation, because it takes an assumption. Owner decision.
+        Consequence: a new typed `assumption` intent slot — see §6.2 for why it
+        cannot share `target`.
+
+    D5  ASSUMPTION ON THE ANSWER                          PROPOSED, see §6.2
+        A scenario states its assumption in the sentence, alongside the measure
+        and as-at that D4 already makes mandatory. Proposed as an extension of D4;
+        awaiting confirmation.
 
     D4  ANSWER PROVENANCE POLICY                         SETTLED 2026-09-28, see §13
         Measure name and as-at ALWAYS on the answer itself. Everything else
@@ -248,13 +255,99 @@ So `POPULATION_INPUTS` for forecast gains a third entry, and a forecast answer c
 a conversion rate attributes it to the stage-movement owner in the receipt rather
 than claiming it.
 
-**One mapping question this design raises and does not decide.** `scenario`
-("what happens if run rate falls 25%") and `cohort_conversion` (9.4% cumulative
-conversion) both answered well on legacy, and neither is obviously a `forecast`
-operation — conversion looks like `pipeline_stage_movement`, and scenario may warrant
-its own operation rather than being folded into `forecast_projection`. Settle the
-mapping before writing the module; guessing it here would be the operation-vocabulary
-mistake this programme has already made once.
+### 6.2 Scenario — D2b
+
+The owner's decision is that scenario is its own operation because it takes an
+assumption. That is correct, and it has one structural consequence the rest of this
+section establishes: **the intent needs somewhere to put the assumption.**
+
+**What exists today.**
+
+    OPERATIONS                           no `scenario`
+    CAPABILITY_OPERATIONS["forecast"]    forecast_milestone, forecast_projection,
+                                         point_in_time, series
+    intent slots                         no slot can carry an assumption
+
+**Why it cannot share `target`.** `target` is the nearest slot, and its own schema
+description rules it out: *"A threshold the question names as a GOAL … It is NOT a
+filter — it does not narrow the population."* An assumption is neither a goal nor a
+filter; it perturbs a driver. More decisively, the deterministic engine that owns the
+arithmetic already treats them as two independent inputs:
+
+    mi_agent_api/scenario.py:41
+      apply_scenario(*, current_balance, base_monthly_run_rate, reporting_period,
+                     run_rate_multiplier=1.0, target_value=None, …)
+
+and the legacy router calls it with both at once — *"perturb the completion run-rate
+… and re-solve the milestone date to a target."* A single question can carry both:
+*"if run rate falls 25%, when do we reach £100m?"* One slot cannot hold two inputs the
+engine keeps separate.
+
+**What the legacy path does instead — and why the governed path must not.** The
+assumption is extracted by regex over the raw question, after the routing decision:
+
+    mi_agent_api/chat_routing.py:2263  _scenario_multiplier(question)
+        re.search(r"(\d+(?:\.\d+)?)\s*(?:%|percent|…)", q)
+        down = any(w in q for w in ("decreas", "fall", "fell", "drop", …))
+
+That is exactly the post-compilation wording read §8.4 forbids. Note what it is NOT:
+the engine is not the problem. `scenario.py` describes itself as *"PURE and
+side-effect free … no NL parsing … takes a small set of typed overrides."* It was
+built to be called with a typed assumption and has been fed by a regex. **The
+governed path replaces the extraction, not the engine.**
+
+**The slot.**
+
+    assumption: {
+      lever:   a governed driver concept          e.g. completion_run_rate
+      change:  "relative_pct" | "multiplier"
+      value:   signed number                      e.g. -25   or   0.5
+    }
+
+Direction lives in the **sign of one number**, not in a word. Legacy holds direction
+in one place (the verb list), magnitude in another (the regex) and narrates it from a
+third — a hardcoded template at `chat_routing.py:2370` that says *"lifts"* whatever the
+sign. That is the production answer [120]: *"A -25% completion run-rate LIFTS the
+monthly run-rate from £1.2m to £925k."* The arithmetic was right. The verb came from
+a place that did not know the direction. One signed value leaves nowhere for that to
+recur, and D4's composer narrates from it.
+
+**The lever set is what the engine owns, and nothing else.** Today that is one lever:
+the completion run-rate, with conversion as the engine's own declared proxy (*"a
+conversion change maps proportionally to the completion run-rate"*). So:
+
+    lever = completion_run_rate    ANSWER
+    lever = conversion             ANSWER, via the engine's stated proxy, and the
+                                   proxy assumption is stated on the answer
+    any other lever                REFUSE — the engine does not own it
+
+Legacy's guard is lexical — `_SCENARIO_LEVERS = ("conversion", "convert", "run rate",
+"run-rate", "completion")` matched as substrings of the whole question. So *"what if
+completion TIMES fall 10%"* matches `completion` + `fall` + `10%` and would be applied
+to run-rate VOLUME, a different quantity. A governed lever concept closes that.
+
+**A scoped assumption refuses.** *"If Direct-book conversion falls 5%"* names a
+population the engine cannot honour — it perturbs the whole run-rate. Applying it
+book-wide is the silent widening §8.6 forbids, so it refuses and says why.
+
+**D5, proposed.** A scenario answer states its assumption in the sentence, with the
+measure and as-at that D4 already requires: *"Funded balance reaches £100m around
+2028-03 under a −25% completion run-rate, as at 31 Aug 2026."* The reasoning: a
+scenario answer without its assumption is unfalsifiable — "£100m by 2028-03" is a
+different claim from the base forecast and reads identically without it. Proposed as
+an extension of D4 rather than assumed, because D4 is the owner's decision.
+
+**Scope of change for D2b:** `scenario` added to `OPERATIONS` and to
+`CAPABILITY_OPERATIONS["forecast"]`; the `assumption` slot added to the intent schema
+and parser with a bounded lever vocabulary; `plan_forecast_runtime` maps
+`operation = scenario` to `scenario.apply_scenario` unchanged. No arithmetic moves.
+
+**Both mapping questions are now resolved.** This paragraph originally left
+`scenario` and `cohort_conversion` open, warning that guessing them would repeat the
+operation-vocabulary mistake this programme has already made once. Neither was
+guessed: cohort conversion is D2a (§6.1, proposed) and scenario is D2b (§6.2,
+settled). Once D2a is confirmed, nothing in this section blocks writing
+`plan_forecast_runtime`.
 
 ## 7. Change 3 — widen the temporal runtime to the pipeline population
 
