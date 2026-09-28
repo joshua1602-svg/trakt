@@ -181,3 +181,56 @@ def test_thin_history_falls_back_to_the_configured_windows():
         assert model["stages"][st]["windowBasis"] == "fallback"
         assert model["stages"][st]["windowDays"] == days
     assert model["available"] is False
+
+
+def test_the_forecast_view_lists_only_forecast_months(year):
+    """The Forecast tab's completion-month chart, like the Pipeline page's,
+    reports only the cases carrying forecast weight — no £0 past months."""
+    from mi_agent_api.workspace import forecast_breakdowns
+    _root, _model, latest, df, _report = year
+    months = forecast_breakdowns(None, df)["byCompletionMonth"]
+    assert months
+    as_of_month = latest["pipeline_extract_date"][:7]
+    assert all(m["month"] >= as_of_month for m in months)
+    assert all(m["weightedExpectedFundedAmount"] > 0 for m in months)
+
+
+def test_the_blended_conversion_is_over_the_forecast_population(year):
+    """KFIs and lapsed cases carry no weight, so they are outside the
+    population the blended conversion and the forward case count describe."""
+    *_, df, report = year
+    s = report["completion_probability_summary"]
+    live = df[df["completion_probability_source"].isin(
+        ["historical_runoff", "historical_stage_rate", "configured_stage_rate",
+         "row_level"])]
+    assert s["excluded_count"] == len(df) - len(live)
+    assert s["active_gross_amount"] == pytest.approx(
+        float(live["current_outstanding_balance"].sum()), abs=1)
+    # Weighted over live Applications and Offers: a pull-through-sized rate,
+    # not one diluted by thousands of unweighted KFIs.
+    assert 0.2 < s["blended_weighted_conversion"] < 0.8
+
+
+def test_the_forward_loan_count_counts_only_weighted_cases(year):
+    from mi_agent_api.forecast_bridge import compute_forecast_bridge
+    _root, _model, latest, df, report = year
+    snap = pc.compute_pipeline_snapshot(df, report, {}, client_id="ERE", run_id="x")
+    funded = pd.DataFrame({"current_outstanding_balance": [100.0, 200.0]})
+    out = compute_forecast_bridge(
+        client_id="ERE", run_id="x", funded_reporting_date="2026-08-31",
+        funded_df=funded, pipeline_df=df, pipeline_report=report,
+        pipeline_snapshot=snap,
+        pipeline_source={"pipeline_as_of_date": latest["pipeline_extract_date"]})
+    bridge = out["forecastBridge"]
+    weighted_cases = int(df["completion_probability_source"].isin(
+        ["historical_runoff", "historical_stage_rate", "configured_stage_rate",
+         "row_level"]).sum())
+    assert bridge["eligibleCaseCount"] == weighted_cases
+    assert bridge["forecastLoanCount"] == bridge["fundedLoanCount"] + weighted_cases
+
+
+def test_the_methodology_version_moved_with_the_forecast():
+    """Cached responses built by the old forecast must not be served (a
+    browser holding an old ETag would otherwise get a 304)."""
+    from mi_agent_api import serving_cache
+    assert serving_cache.METHODOLOGY_VERSION != "1"

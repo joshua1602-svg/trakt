@@ -897,7 +897,12 @@ def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
     # Any governed exclusion, whichever stage produced it, plus the two
     # no-probability outcomes. Matching on the prefix keeps this in step with
     # the config: adding a stage to exclude_stages needs no change here.
+    # Not-forecast (KFI) and lapsed cases carry no weight either, so they are
+    # outside the forecast population too: counted here, the blended
+    # conversion would be diluted by them and the forward case count inflated.
     excluded_mask = (src.str.startswith("excluded_")
+                     | src.str.startswith("not_forecast_")
+                     | src.str.startswith("expired_")
                      | src.isin({"missing_stage", "unavailable"}))
     gross = float(amount.sum())
     excluded_amount = float(amount[excluded_mask].sum())
