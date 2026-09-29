@@ -44,7 +44,7 @@ everyone else is served exactly as before.
 `mi_agent_api/run_production_bank.sh` asks the same 135 questions as
 `qb_full.txt` (the six categories that select exactly `qb_questions.json`; the
 runner's default adds the limits categories, 160 questions). It refuses, before
-asking anything, when the deployed vocabulary is older than 2.6.0, when the canary is
+asking anything, when the deployed vocabulary is older than 2.7.0, when the canary is
 not on for that principal, or when the evidence sink is unset. The run is under
 `nohup`: Ctrl-C or closing the tab stops the watching, not the run. The log,
 `/home/qb_plan_rerun_<stamp>.log`, starts with the START TIME (UTC) and is what
@@ -58,6 +58,17 @@ new pipeline concepts are for — 16 model interpretations, not 135:
 Each answer should be a figure the Pipeline tab shows for the same extract
 (weighted pipeline, expected completion month, overdue / next month, broker,
 product, LTV band, reporting region).
+
+**Spot check for catalogue batch 2 (the forecast semantic model, vocabulary
+2.7.0).** The forecast questions the model named missing concepts for:
+
+    bash mi_agent_api/run_production_bank.sh <your Entra object id> forecast_002,forecast_004,forecast_005,forecast_006,forecast_008,forecast_010,forecast_011,forecast_012,forecast_013,forecast_018,forecast_019,forecast_020,forecast_scale_007,forecast_scale_008,forecast_scale_009,forecast_scale_010,forecast_scale_011,forecast_scale_012,forecast_scale_017,forecast_scale_021,forecast_runoff_002
+
+Each answer should be a figure the Forecast tab shows for the same book (its
+parts, loan count, exclusions by reason, by region / LTV band, the curve and
+its bands, the annualised run-rate, the milestone table). The readings of
+forecast_003, forecast_014, forecast_scale_006/_007/_008/_011 decide whether
+the D6 holds can be released.
 
 **5. Switch the canary off.** `MI_AGENT_PLAN_SERVE` = `off`.
 
@@ -95,3 +106,6 @@ intents added beside the baseline's.
     2026-09-29  09:47 UTC d74ae632 deployed (live pipeline D8, weighted-average
                 valuation D10); MI_AGENT_PLAN_SERVE set to off — operator
                 confirmed, build.commit d74ae632 confirmed by the operator
+    2026-09-29  12:28 UTC 14effc33 deployed (run 36567963153): monthly series
+                D7, scale D9 (production stage not set), catalogue batch 1,
+                pipeline region D12

@@ -974,14 +974,14 @@ def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
     D4: the MEASURE and its AS-AT are in the sentence itself, every time. D1:
     when the figure composes two datasets, both vintages are. Everything else
     the owner said — the completion signal it used, its scenario basis, its
-    caveats — is published in `sourceNotes` and `warnings`, not dropped.
+    caveats, the path of the figure in its output — is published in
+    `sourceNotes` and `warnings`, not dropped.
 
-    THE WORDS COME FROM THE RECEIPT. The milestone state is the owner's
-    `milestone_answer`; the dates, the run-rate and the balance are the owner's
-    own figures; the completion signal is the owner's own description. Nothing
-    is re-derived here, including the verb: "already reached", "around
-    <date>" and "beyond the projection horizon" map one-to-one onto the owner's
-    states (its two beyond-horizon states share the last).
+    THE WORDS COME FROM THE RECEIPT. A milestone's state is the owner's
+    `milestone_answer`; every other figure's label, unit and companion figures
+    are the semantic model's, and its value the owner's. Nothing is re-derived
+    here, including the verb: "already reached", "around <date>" and "beyond
+    the projection horizon" map one-to-one onto the owner's states.
     """
     import uuid
     from datetime import datetime, timezone
@@ -992,81 +992,39 @@ def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
     inputs = dict(receipt.get("inputs") or {})
     as_at = _as_at_clause(inputs)
     signal = (receipt.get("completion_signal") or {}).get("description") or ""
-    base_rate = receipt.get("base_monthly_run_rate")
-    annual = receipt.get("annualised_run_rate")
     spec_dict = {"capability": receipt.get("capability"),
                  "population": receipt.get("population_base"),
-                 "measure": measure, "operation": receipt.get("operation")}
+                 "measure": measure, "operation": receipt.get("operation"),
+                 "dimensions": receipt.get("group_field_keys") or []}
 
-    if kind == forecast_rt.KIND_MILESTONE:
-        target = receipt.get("target") or {}
-        scale = receipt.get("scale") or None
-        threshold = _money(receipt.get("threshold_applied", target.get("value")))
-        state = str(receipt.get("milestone_state") or "")
-        row = receipt.get("milestone") or {}
-        label = f"Forecast milestone date (funded balance reaching {threshold})"
-        # D9: a question about SCALE is answered against the portfolio's own
-        # threshold, and the answer says which rule set it and what it is
-        # measured on — the reader never has to know the number to ask.
-        if scale:
-            label = (f"Scale ({scale.get('decision')}): for a "
-                     f"{scale.get('stage_label')}, scale is {threshold}, measured "
-                     f"on {scale.get('measured_on')}")
-        from mi_agent_api import forecast_extrapolation as fx_mod
-        if state == fx_mod.MILESTONE_ALREADY_REACHED:
-            answer = (f"{label}: already reached — the funded balance is "
-                      f"{_money(receipt.get('current_funded_balance'))}"
-                      + (", so the portfolio is at scale" if scale else "")
-                      + f". {as_at}")
-            kpi_value = "at scale" if scale else "reached"
-        elif state == fx_mod.MILESTONE_PROJECTED:
-            to_go = (f", {_money(receipt.get('gap_to_threshold'))} to go"
-                     if receipt.get("gap_to_threshold") else "")
-            answer = (f"{label}: around {row.get('baseDate')} at the base "
-                      f"completion run-rate of {_money(base_rate)}/month "
-                      f"(downside {row.get('downsideDate')}, upside "
-                      f"{row.get('upsideDate')}), from a funded balance of "
-                      f"{_money(receipt.get('current_funded_balance'))}{to_go}. "
-                      f"{as_at}")
-            kpi_value = str(row.get("baseDate"))
-        else:
-            answer = (f"{label}: beyond the projection horizon, so no date is "
-                      f"given. The funded balance is "
-                      f"{_money(receipt.get('current_funded_balance'))}. {as_at}")
-            kpi_value = "beyond horizon"
-        kpis = [{"field": measure, "label": label, "value": kpi_value,
-                 "rawValue": outcome.value}]
-        title = "Forecast milestone"
-    elif kind == forecast_rt.KIND_BALANCE:
-        label = "Forecast funded balance"
-        answer = (f"{label}: {_money(receipt.get('forecast_funded_balance'))} — "
-                  f"the funded balance of "
-                  f"{_money(receipt.get('current_funded_balance'))} plus "
-                  f"{_money(receipt.get('weighted_expected_funded_amount'))} of "
-                  f"expected completions from the open pipeline. {as_at}")
-        kpis = [{"field": measure, "label": label,
-                 "value": _money(receipt.get("forecast_funded_balance")),
-                 "rawValue": outcome.value}]
-        title = "Forecast funded balance"
-    else:
-        label = "Completion run-rate"
-        answer = (f"{label}: {_money(base_rate)}/month ({_money(annual)}/year). "
-                  f"{as_at}")
-        kpis = [{"field": measure, "label": label,
-                 "value": f"{_money(base_rate)}/month",
-                 "rawValue": outcome.value}]
-        title = "Completion run-rate"
-
-    artefact = {"id": f"art_{uuid.uuid4().hex[:8]}", "type": "kpi", "title": title,
-                "kpis": kpis, "description": "Governed forecast.",
+    def _artefact(kind_: str, title: str, **rest: Any) -> Dict[str, Any]:
+        return {"id": f"art_{uuid.uuid4().hex[:8]}", "type": kind_,
+                "title": title,
                 "source": {"engine": "mi_agent.governed_plan",
-                           "label": "MI Agent · kpi", "spec": spec_dict,
+                           "label": f"MI Agent · {kind_}", "spec": spec_dict,
                            "asOf": as_of, "portfolio": portfolio_id},
                 "createdAt": datetime.now(timezone.utc).isoformat(),
-                "mock": False}
-    notes = [{"field": "completion_signal", "note": signal}] if signal else []
-    if receipt.get("formula"):
-        notes.append({"field": "formula", "note": str(receipt.get("formula"))})
+                "mock": False, **rest}
+
+    warnings = [str(c) for c in (receipt.get("caveats") or ())]
+    notes: List[Dict[str, str]] = []
+    if kind == forecast_rt.KIND_MILESTONE:
+        answer, kpis, title = _milestone_sentence(receipt, outcome, as_at)
+        artefacts = [_artefact("kpi", title, kpis=kpis,
+                               description="Governed forecast.")]
+        if kpis[0]["rawValue"] is not None:
+            # Only a PROJECTED date has bands to qualify; "already reached" and
+            # "beyond the horizon" state no banded figure.
+            warnings.append(_BANDS_WARNING)
+    else:
+        answer, artefacts, banded = _catalogue_answer(receipt, outcome, as_at,
+                                                      _artefact)
+        if banded:
+            warnings.append(_BANDS_WARNING)
+        notes.extend(_catalogue_notes(receipt))
+
+    if signal:
+        notes.insert(0, {"field": "completion_signal", "note": signal})
     if receipt.get("scenario_basis"):
         notes.append({"field": "scenario_basis",
                       "note": str(receipt.get("scenario_basis"))})
@@ -1078,22 +1036,17 @@ def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
                       "note": (f"{receipt['input_vintage_skew_days']} days between "
                                f"inputs; ceiling "
                                f"{receipt.get('input_vintage_ceiling_days')} days")})
-    warnings = [str(c) for c in (receipt.get("caveats") or ())]
-    if kpis[0]["rawValue"] is not None and kind == forecast_rt.KIND_MILESTONE:
-        # Only a PROJECTED date has bands to qualify; "already reached" and
-        # "beyond the horizon" state no banded figure.
-        warnings.append("Downside/base/upside are indicative scenario bands, not "
-                        "statistically validated confidence intervals.")
 
     reconciliation = {"dataset": "forecast",
                       "inputs": sorted(inputs), "coverage_by_balance_pct": 100.0}
-    artefact["reconciliation"] = reconciliation
+    for artefact in artefacts:
+        artefact["reconciliation"] = reconciliation
     payload: Dict[str, Any] = {
         "ok": True, "error": None, "question": question, "answer": answer,
         "interpreted": "", "spec": spec_dict,
         "validation": {"ok": True, "errors": [], "warnings": [],
                        "resolved_fields": {}},
-        "artifacts": [artefact], "reconciliation": reconciliation,
+        "artifacts": artefacts, "reconciliation": reconciliation,
         "sourceNotes": notes, "warnings": warnings, "diagnostics": [],
         "assumptions": [],
         "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
@@ -1104,6 +1057,190 @@ def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
                          "executed": receipt}},
     }
     return payload
+
+
+_BANDS_WARNING = ("Downside/base/upside are indicative scenario bands, not "
+                  "statistically validated confidence intervals.")
+
+
+def _milestone_sentence(receipt: Mapping[str, Any], outcome: Any, as_at: str
+                        ) -> Tuple[str, List[Dict[str, Any]], str]:
+    """A milestone for a stated threshold, in the owner's own state."""
+    from mi_agent_api import forecast_extrapolation as fx_mod
+
+    measure = str(receipt.get("measure_concept") or "")
+    base_rate = receipt.get("base_monthly_run_rate")
+    target = receipt.get("target") or {}
+    scale = receipt.get("scale") or None
+    threshold = _money(receipt.get("threshold_applied", target.get("value")))
+    state = str(receipt.get("milestone_state") or "")
+    row = receipt.get("milestone") or {}
+    label = f"Forecast milestone date (funded balance reaching {threshold})"
+    # D9: a question about SCALE is answered against the portfolio's own
+    # threshold, and the answer says which rule set it and what it is
+    # measured on — the reader never has to know the number to ask.
+    if scale:
+        label = (f"Scale ({scale.get('decision')}): for a "
+                 f"{scale.get('stage_label')}, scale is {threshold}, measured "
+                 f"on {scale.get('measured_on')}")
+    if state == fx_mod.MILESTONE_ALREADY_REACHED:
+        answer = (f"{label}: already reached — the funded balance is "
+                  f"{_money(receipt.get('current_funded_balance'))}"
+                  + (", so the portfolio is at scale" if scale else "")
+                  + f". {as_at}")
+        kpi_value = "at scale" if scale else "reached"
+    elif state == fx_mod.MILESTONE_PROJECTED:
+        to_go = (f", {_money(receipt.get('gap_to_threshold'))} to go"
+                 if receipt.get("gap_to_threshold") else "")
+        answer = (f"{label}: around {row.get('baseDate')} at the base "
+                  f"completion run-rate of {_money(base_rate)}/month "
+                  f"(downside {row.get('downsideDate')}, upside "
+                  f"{row.get('upsideDate')}), from a funded balance of "
+                  f"{_money(receipt.get('current_funded_balance'))}{to_go}. "
+                  f"{as_at}")
+        kpi_value = str(row.get("baseDate"))
+    else:
+        answer = (f"{label}: beyond the projection horizon, so no date is "
+                  f"given. The funded balance is "
+                  f"{_money(receipt.get('current_funded_balance'))}. {as_at}")
+        kpi_value = "beyond horizon"
+    kpis = [{"field": measure, "label": label, "value": kpi_value,
+             "rawValue": outcome.value}]
+    return answer, kpis, "Forecast milestone"
+
+
+#: Reader-facing names for the axes a forecast figure is broken down by.
+#: Presentation only.
+_FORECAST_AXES = {
+    "forecast_component": "component", "forecast_scenario": "scenario",
+    "funding_threshold": "funding threshold",
+    "weighting_exclusion_reason": "reason",
+    "canonical_region_reporting": "region", "ltv_bucket": "LTV band",
+}
+
+
+def _shown_in(unit: str, value: Any) -> str:
+    """A figure in its semantic-model unit. Presentation only."""
+    if value is None:
+        return "no date" if unit == "month" else "n/a"
+    if unit == "gbp":
+        return _money(value)
+    if unit == "gbp_per_month":
+        return f"{_money(value)}/month"
+    if unit == "gbp_per_year":
+        return f"{_money(value)}/year"
+    if unit == "count":
+        return f"{float(value):,.0f}"
+    return str(value)
+
+
+def _explained(receipt: Mapping[str, Any]) -> str:
+    """The semantic model's `explain` sentence, with the owner's companion
+    figures in it — money, or a count for a `*_count` figure."""
+    import string
+
+    template = str(receipt.get("explain") or "")
+    if not template:
+        return ""
+    context = receipt.get("context") or {}
+    values = {}
+    for _, key, _, _ in string.Formatter().parse(template):
+        if key:
+            raw = context.get(key)
+            values[key] = ("n/a" if raw is None
+                           else f"{float(raw):,.0f}" if key.endswith("_count")
+                           else _money(raw))
+    return template.format(**values)
+
+
+def _words(value: Any) -> str:
+    return str(value).replace("_", " ")
+
+
+def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
+                      make: Any) -> Tuple[str, List[Dict[str, Any]], bool]:
+    """A semantic-model figure: `(sentence, artefacts, banded)`.
+
+    D4 — the measure and its as-at in the sentence. The label and unit are the
+    semantic model's; the numbers the owner's; the order of a breakdown the
+    owner's (a month-ordered curve, the ladder low to high)."""
+    label = str(receipt.get("measure_label") or receipt.get("measure_concept"))
+    unit = str(receipt.get("unit") or "")
+    shape = str(receipt.get("result_shape") or "")
+    member = receipt.get("member") or None
+    axis = (receipt.get("group_field_keys") or [None])[0]
+    banded = False
+
+    if shape == "series":
+        columns = list(receipt.get("series_columns") or ())
+        rows = [dict(c) for c in (outcome.cells or ())]
+        first, last = rows[0], rows[-1]
+        bands = ", ".join(f"{_words(c)} {_shown_in(unit, last.get(c))}"
+                          for c in columns)
+        horizon = receipt.get("horizon") or {}
+        span = (f"over the next {horizon.get('periods_ahead')} month(s)"
+                if horizon.get("periods_ahead") else
+                f"over the owner's {horizon.get('published_months')}-month horizon")
+        rate = receipt.get("base_monthly_run_rate")
+        answer = (f"{label} {span}, {first.get('period')} to "
+                  f"{last.get('period')}: {bands} by {last.get('period')}"
+                  + (f", at a base completion run-rate of "
+                     f"{_shown_in('gbp_per_month', rate)}" if rate is not None else "")
+                  + f". {as_at}")
+        artefacts = [make("chart", label, chartType="line", xKey="period",
+                          rows=rows,
+                          series=[{"key": c, "label": _words(c).capitalize()}
+                                  for c in columns],
+                          valueFormat="gbp")]
+        return answer, artefacts, len(columns) > 1 or bool(member)
+
+    if shape == "grouped":
+        axis_label = _FORECAST_AXES.get(str(axis), _words(axis))
+        rows = [dict(c) for c in (outcome.cells or ())]
+        parts = ", ".join(f"{_words(r.get(axis))} {_shown_in(unit, r.get('value'))}"
+                          for r in rows)
+        answer = f"{label} by {axis_label}: {parts}."
+        basis = receipt.get("axis_basis") or {}
+        if basis.get("field"):
+            unplaced = basis.get("unplacedForecastAmount") or 0.0
+            answer = (f"{answer} Regions are the client's reporting regions"
+                      + (f"; {_money(unplaced)} of the forecast has no region "
+                         f"and is in none" if unplaced else "") + ".")
+        answer = f"{answer} {as_at}"
+        also = [k for k in (rows[0] if rows else {}) if k not in (axis, "value")]
+        columns = ([{"key": str(axis), "label": axis_label.capitalize()},
+                    {"key": "value", "label": label}]
+                   + [{"key": k, "label": _words(k)} for k in also])
+        artefacts = [make("table", f"{label} by {axis_label}", rows=rows,
+                          columns=columns, description=f"{len(rows)} rows.")]
+        banded = axis == "forecast_scenario" or axis == "funding_threshold"
+        return answer, artefacts, banded
+
+    value = outcome.value
+    if member:
+        answer = (f"{label} ({_FORECAST_AXES.get(member['dimension'], _words(member['dimension']))}: "
+                  f"{_words(member['value'])}): {_shown_in(unit, value)}. {as_at}")
+        banded = member.get("dimension") == "forecast_scenario"
+    else:
+        explained = _explained(receipt)
+        answer = (f"{label}: {_shown_in(unit, value)}"
+                  + (f" — {explained}" if explained else "") + f". {as_at}")
+    kpis = [{"field": str(receipt.get("measure_concept")), "label": label,
+             "value": _shown_in(unit, value), "rawValue": value}]
+    artefacts = [make("kpi", label, kpis=kpis, description="Governed forecast.")]
+    return answer, artefacts, banded
+
+
+def _catalogue_notes(receipt: Mapping[str, Any]) -> List[Dict[str, str]]:
+    """Where the figure came from: the owner, the path, the model entry."""
+    notes = [{"field": "owner",
+              "note": f"{receipt.get('execution_owner')} → {receipt.get('read_path')}"},
+             {"field": "semantic_model",
+              "note": f"{receipt.get('semantic_model')}: {receipt.get('measure_concept')}"}]
+    if receipt.get("definition_decision"):
+        notes.append({"field": "definition",
+                      "note": f"owner decision {receipt.get('definition_decision')}"})
+    return notes
 
 
 #: Reader-facing names for the governed pipeline measures. Presentation only.

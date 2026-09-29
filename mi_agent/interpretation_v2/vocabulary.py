@@ -42,6 +42,7 @@ from .metadata import (
 )
 from .metadata import _load as _load_source
 from .metadata import _slug
+from mi_agent import semantic_model as _semantic_model
 
 #: 2.1.0 added the capability-boundary block. 2.2.0 adds the portfolio-scope
 #: axes block and the seasoning concept boundary — the four scope axes stated as
@@ -70,7 +71,15 @@ from .metadata import _slug
 #: 2.6.0 adds the Pipeline tab's weighted expected funded amount and its
 #: expected-completion view (month, and overdue / this month / next month, D11)
 #: as pipeline concepts — catalogue batch 1 (§15.2).
-VOCABULARY_VERSION = "2.6.0"
+#:
+#: 2.7.0 reads the FORECAST concepts from the capability's semantic model
+#: (`config/mi/semantic_model/forecast.yaml`, P0 design §16) — catalogue batch
+#: 2: the forecast's parts, loan count, weighting exclusions, the projection
+#: curve and its scenario bands, the annualised run-rate and the milestone
+#: ladder — and lets a forecast be broken down. The three 2.3.0 definitions
+#: keep every phrase that ruled out a production misread, and now point to the
+#: concept that answers it.
+VOCABULARY_VERSION = "2.7.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -123,8 +132,11 @@ CAPABILITY_OPERATIONS: Mapping[str, FrozenSet[str]] = {
     "pipeline_stage_movement": frozenset({
         "transition", "arrivals", "departures", "stayers", "reconciliation",
         "movement", "breakdown"}),
+    # `breakdown` since 2.7.0: the Forecast tab publishes the forecast by
+    # component, region and LTV band, the weighting exclusion by reason, and
+    # the milestone ladder by threshold (§16.3).
     "forecast": frozenset({"forecast_milestone", "forecast_projection",
-                           "series", "point_in_time"}),
+                           "series", "point_in_time", "breakdown"}),
 }
 
 STATISTICS: FrozenSet[str] = frozenset({
@@ -517,6 +529,10 @@ CAPABILITY_BOUNDARIES: Tuple[Dict[str, Any], ...] = (
 )
 
 
+#: THE FORECAST CAPABILITY'S SEMANTIC MODEL (§16): its measures, dimensions and
+#: definitions are declared once, beside where the owner publishes each figure.
+_FORECAST_MODEL = _semantic_model.load("forecast")
+
 #: Specialist measures OWNED by a capability, not composed from fields. Opus may
 #: name them; it is never shown how they are built.
 SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
@@ -531,8 +547,9 @@ SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
     "pipeline_stage_movement": (
         "cases_moved", "amount_moved", "cases_arrived", "cases_departed",
         "cases_stayed", "stayer_amount_change", "stage_opening", "stage_closing"),
-    "forecast": ("forecast_funded_balance", "forecast_completion_rate",
-                 "forecast_milestone_date"),
+    # Read from the capability's semantic model (§16): one declaration of
+    # what each forecast figure is and where the owner publishes it.
+    "forecast": tuple(_FORECAST_MODEL.measures),
     "concentration": ("concentration_exposure", "concentration_share"),
     "limit_assessment": ("limit_headroom", "limit_utilisation",
                          "limit_breach_status"),
@@ -556,32 +573,9 @@ SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
 #: methodology the model could decompose (rule 3 still holds: the capability
 #: owns the arithmetic) and no column, dataset or date.
 SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
-    "forecast_funded_balance": (
-        "ONE figure: today's funded balance plus the probability-weighted "
-        "completions expected from the OPEN pipeline in the latest weekly "
-        "extract — the figure on the Forecast tab. It is NOT a curve or a "
-        "month-by-month projection, NOT the base, downside or upside scenario "
-        "of the scale-up forecast, NOT expected completions on their own, and "
-        "NOT one part of itself: the funded part is the funded balance, the "
-        "pipeline part is the expected completions. As the `target` of a "
-        "`forecast_milestone` it stands for the funded balance the book is "
-        "projected to reach."),
-    "forecast_completion_rate": (
-        "The completion RUN-RATE: the £ AMOUNT of loans completing per MONTH "
-        "(the annualised figure is twelve times it), from the pipeline's "
-        "observed completions. It is an amount per month, NOT a percentage: it "
-        "is NOT a conversion rate from KFI, application or offer to "
-        "completion, and NOT a description of how the forecast is calculated."),
-    "forecast_milestone_date": (
-        "The MONTH in which the funded balance is projected to reach ONE "
-        "stated amount, at the completion run-rate. Its `target` is "
-        "`forecast_funded_balance`, comparator `gte`, with the amount the "
-        "question names. When the question asks whether the portfolio is at "
-        "scale, or when it reaches scale or securitisation scale, and names no "
-        "amount, the target `value` is the word `scale`: the portfolio's own "
-        "threshold is applied after interpretation — never write a number for "
-        "it. It is NOT a balance, and NOT a table of dates for several "
-        "amounts."),
+    # The forecast definitions (2.3.0, amended 2.7.0) live in the semantic
+    # model, beside the path each figure is read from.
+    **{name: m.definition for name, m in _FORECAST_MODEL.measures.items()},
     # THE PIPELINE'S WEIGHTED VALUE (catalogue batch 1, 2026-09-29). The
     # Pipeline tab has shown it for months; the model was told no such concept
     # existed and asked to clarify every question about it.
@@ -612,9 +606,12 @@ SPECIALIST_DIMENSION_DEFINITIONS: Mapping[str, str] = {
         "'how much pipeline is overdue', 'expected to complete this month' or "
         "'next month'. It is about the PIPELINE; overdue LOANS are arrears, "
         "a different question."),
+    **{name: d.definition for name, d in _FORECAST_MODEL.dimensions.items()},
 }
 SPECIALIST_DIMENSION_VALUES: Mapping[str, Tuple[str, ...]] = {
     "expected_completion_timing": ("overdue", "current_month", "next_month"),
+    **{name: d.values for name, d in _FORECAST_MODEL.dimensions.items()
+       if d.values},
 }
 
 #: THRESHOLDS A TARGET MAY NAME INSTEAD OF AN AMOUNT. The word is the model's;
@@ -631,6 +628,7 @@ SPECIALIST_DIMENSIONS: Mapping[str, Tuple[str, ...]] = {
     "concentration": ("concentration_test",),
     "funded_bridge": ("bridge_component",),
     "pipeline": ("expected_completion_month", "expected_completion_timing"),
+    "forecast": tuple(_FORECAST_MODEL.dimensions),
 }
 
 #: The row itself. "How many loans?" counts rows and needs no field; without a

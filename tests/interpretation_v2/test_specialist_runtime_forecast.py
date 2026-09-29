@@ -136,7 +136,9 @@ def test_the_shapes_production_used_for_several_questions_are_held():
     for plan in (_plan(**_RUN_RATE), _plan(**_PROJECTION)):
         ok, why, detail = forecast_rt.check_eligibility(plan)
         assert (ok, why) == (False, forecast_rt.AMBIGUOUS_READING)
-        assert "vocabulary defines the measure" in detail
+        # 2.7.0 gave each misread question its own concept; the hold lifts
+        # only on a live run's evidence, and says so.
+        assert "held until a live run shows the readings" in detail
 
 
 def test_a_grain_asks_for_a_series_and_is_refused():
@@ -470,7 +472,11 @@ def test_the_governed_balance_is_the_forecast_tabs_figure(funded_root, estate):
         assert receipt["current_funded_balance"] == tab["fundedBalance"]
         assert receipt["weighted_expected_funded_amount"] == \
             tab["weightedExpectedFundedAmount"]
-        assert receipt["execution_owner"] == forecast_rt.OWNER_COMPOSER
+        # ONE ENGINE (§16.2): the Forecast tab's own view function, read at
+        # the path the semantic model declares.
+        assert receipt["execution_owner"] == forecast_rt.OWNER_VIEW
+        assert receipt["execution_owner"].endswith("compose_forecast_view")
+        assert receipt["read_path"] == "forecastBridge.forecastFundedBalance"
         assert receipt["definition_decision"] == "D6"
 
 
@@ -494,7 +500,7 @@ def test_the_balance_is_not_the_month_joined_series(funded_root, estate):
         funded_frame_resolver=estate, semantics=_semantics())
     series = _owner(funded_root, _NEAR)["currentWeightedPipelineForecast"]
     assert outcome.receipt["execution_owner"] != forecast_rt.OWNER_EXTRAPOLATION
-    assert outcome.receipt["calculation_owner"].endswith("compute_forecast_bridge")
+    assert outcome.receipt["read_path"].startswith("forecastBridge.")
     # On this fixture the funded month has no same-month extract, so the
     # month-joined figure has no weighted pipeline at all while the composer's
     # does: two definitions, visibly different.

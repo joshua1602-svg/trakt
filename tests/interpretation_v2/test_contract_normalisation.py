@@ -644,7 +644,12 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: named measure is a metric delta, so the composition could never be
     #: entered. Nothing else about what the model is shown may move — a second
     #: added operation, a removed one, or any other reworded key still fails.
-    AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"}}
+    #: Catalogue batch 2 (vocabulary 2.7.0, P0 design §16): the Forecast tab
+    #: publishes the forecast by component, region and LTV band, the weighting
+    #: exclusion by reason and the milestone ladder by threshold, so a forecast
+    #: may be broken down.
+    AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"},
+                                      "forecast": {"breakdown"}}
 
     #: THE CATALOGUE, WIDENED BY NAME. Catalogue batch 1 (vocabulary 2.6.0,
     #: owner direction 2026-09-29: "narrow the gap") gave the Pipeline tab's
@@ -653,7 +658,17 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: exactly these three; any other added or removed concept still fails.
     AUTHORISED_CONCEPT_ADDITIONS = {"weighted_expected_funded_amount",
                                     "expected_completion_month",
-                                    "expected_completion_timing"}
+                                    "expected_completion_timing",
+                                    # Catalogue batch 2 (2.7.0): the forecast
+                                    # semantic model's new figures and axes.
+                                    "forecast_loan_count",
+                                    "weighting_excluded_amount",
+                                    "weighting_excluded_case_count",
+                                    "projected_funded_balance",
+                                    "annualised_completion_run_rate",
+                                    "forecast_component", "forecast_scenario",
+                                    "funding_threshold",
+                                    "weighting_exclusion_reason"}
 
     for key in sorted(set(was) & set(now)):
         if key == "vocabulary_version":

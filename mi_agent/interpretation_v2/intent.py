@@ -319,6 +319,11 @@ class SemanticTime:
     labels: Tuple[str, ...] = ()
     grain: Optional[str] = None
     periods_back: Optional[int] = None
+    #: THE FORWARD HORIZON, the mirror of `periods_back`: how many periods AHEAD
+    #: a forward-looking question covers ("the next twelve months" = 12 with a
+    #: monthly grain). Without it a horizon could only be stated in words, and
+    #: a projection answered for a different horizon reads like the right one.
+    periods_ahead: Optional[int] = None
     #: WHETHER THE READING ACTUALLY STATED A TEMPORAL FORM. Provenance, not
     #: semantics — deliberately absent from `key()`, so it cannot change a plan's
     #: identity or make two readings of one question look divergent.
@@ -335,7 +340,12 @@ class SemanticTime:
     stated: bool = False
 
     def key(self) -> Tuple[Any, ...]:
-        return (self.form, tuple(self.labels), self.grain, self.periods_back)
+        base = (self.form, tuple(self.labels), self.grain, self.periods_back)
+        # Appended only when stated, so every key recorded before the horizon
+        # existed is unchanged.
+        if self.periods_ahead is None:
+            return base
+        return base + (("periods_ahead", self.periods_ahead),)
 
 
 @dataclass(frozen=True)
@@ -516,7 +526,7 @@ _TARGET_KEYS = ("concept", "value", "comparator")
 _MEASURE_KEYS = ("concept", "statistic", "weight")
 _FILTER_KEYS = ("concept", "comparator", "value")
 _GEO_KEYS = ("requested", "basis", "level", "group_by", "values")
-_TIME_KEYS = ("form", "labels", "grain", "periods_back")
+_TIME_KEYS = ("form", "labels", "grain", "periods_back", "periods_ahead")
 _POP_KEYS = ("base", "lens", "seasoning", "source_reference")
 _CMP_KEYS = ("kind", "left", "right")
 _OUTPUT_KEYS = ("id", "measures", "dimensions", "filters", "geography")
@@ -628,12 +638,19 @@ def _parse_time(raw: Any, *, slot: str) -> SemanticTime:
                 or not 0 <= periods_back <= 120:
             raise IntentParseError("INTENT_SCHEMA_INVALID", f"{slot}.periods_back",
                                    "expected an integer between 0 and 120")
+    periods_ahead = raw.get("periods_ahead")
+    if periods_ahead is not None:
+        if not isinstance(periods_ahead, int) or isinstance(periods_ahead, bool) \
+                or not 1 <= periods_ahead <= 120:
+            raise IntentParseError("INTENT_SCHEMA_INVALID", f"{slot}.periods_ahead",
+                                   "expected an integer between 1 and 120")
     return SemanticTime(
         form=_enum(raw.get("form", "current"), TIME_FORMS, slot=f"{slot}.form"),
         labels=tuple(labels),
         grain=_enum(raw.get("grain"), TIME_GRAINS, slot=f"{slot}.grain",
                     optional=True),
         periods_back=periods_back,
+        periods_ahead=periods_ahead,
         # A `time` block that states a grain or a label but no FORM has not stated
         # the temporal semantic either, so presence turns on the form key alone.
         stated="form" in raw,
@@ -959,6 +976,13 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                                        "or a snapshot id."}},
                     "grain": {"type": "string", "enum": sorted(TIME_GRAINS)},
                     "periods_back": {"type": "integer", "minimum": 0, "maximum": 120},
+                    "periods_ahead": {
+                        "type": "integer", "minimum": 1, "maximum": 120,
+                        "description": "For a forward_looking question, how "
+                                       "many periods AHEAD it covers: 'the "
+                                       "next twelve months' is 12 with grain "
+                                       "'monthly'. Omit when no horizon is "
+                                       "stated."},
                 },
             },
             "comparison": {

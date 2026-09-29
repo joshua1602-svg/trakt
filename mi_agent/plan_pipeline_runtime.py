@@ -67,6 +67,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
+from mi_agent import plan_reading as _plan_reading
+
 CAPABILITY = "pipeline"
 
 #: WHICH POPULATION THIS RUNTIME EXECUTES. Its own declaration, deliberately not
@@ -140,7 +142,7 @@ HISTORY_DIMENSIONS: FrozenSet[str] = frozenset({"pipeline_stage"})
 #: pipeline with the funded book's own engine, and the tab's region chart
 #: groups by it (owner, 2026-09-29). The extract's raw region is never served
 #: in its place: without the reporting column the question is refused.
-REGION_FIELD = "canonical_region_reporting"
+REGION_FIELD = _plan_reading.REPORTING_REGION
 TAB_COLUMN: Mapping[str, str] = {
     "pipeline_stage": "pipeline_stage",
     "broker_channel": "broker_channel",
@@ -259,28 +261,10 @@ def requested_dimensions(plan: Any) -> List[str]:
             for d in (output.get("dimensions") or ())]
 
 
-def region_axis(plan: Any) -> Optional[str]:
-    """The reporting-region field a plan groups by, or None.
-
-    A plan asks for geography on its own slot, not as a dimension. Only a
-    grouping at the reporting level is the tab's region chart; a region FILTER
-    ("pipeline in London") or another level is not something the tab publishes.
-    """
-    body = _as_mapping(plan)
-    output = _single_output(body) or {}
-    geography = output.get("geography") or body.get("geography") or {}
-    if not isinstance(geography, Mapping) or not geography.get("group_by"):
-        return None
-    if geography.get("values"):
-        return None
-    field = str(geography.get("canonical_field") or "")
-    return field if field == REGION_FIELD else None
-
-
-def grouping_axes(plan: Any) -> List[str]:
-    """Every field the plan groups by: its dimensions, then a region grouping."""
-    region = region_axis(plan)
-    return requested_dimensions(plan) + ([region] if region else [])
+# The plan's reporting-region grouping, read the way every specialist runtime
+# reads it (`mi_agent.plan_reading`).
+region_axis = _plan_reading.region_axis
+grouping_axes = _plan_reading.grouping_axes
 
 
 def timing_of(plan: Any) -> Optional[str]:

@@ -708,6 +708,11 @@ class DeterministicCompiler:
             reasons.append(CompileReason(
                 AMBIGUOUS_PERIOD, "time",
                 f"a {time.form} with no span, grain or period count"))
+        if time.periods_ahead is not None and time.form != "forward_looking":
+            reasons.append(CompileReason(
+                UNSUPPORTED_COMPOSITION, "time.periods_ahead",
+                f"a horizon ahead belongs to a forward_looking question, not "
+                f"a {time.form} one"))
         if time.form == "forward_looking" and intent.capability not in _FORWARD_CAPABILITIES:
             reasons.append(CompileReason(
                 UNSUPPORTED_COMPOSITION, "time.form",
@@ -738,7 +743,8 @@ class DeterministicCompiler:
         # no provenance-notes list, and widening its signature to reach one would
         # add a second place the same thing is written.
         return (PeriodBinding(form=time.form, labels=time.labels, grain=time.grain,
-                              periods_back=time.periods_back, contract=contract,
+                              periods_back=time.periods_back,
+                              periods_ahead=time.periods_ahead, contract=contract,
                               resolved=settled, owned_by_capability=owned,
                               stated=time.stated,
                               defaulted=bool(default_method),

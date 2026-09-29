@@ -355,12 +355,48 @@ def forecast_dimension_breakdown(funded_df: Optional[pd.DataFrame],
     return rows
 
 
+#: The governed region both books are harmonised to, and the raw column the
+#: forecast view used before either book carried it.
+_REPORTING_REGION = "canonical_region_reporting"
+_RAW_REGION = "geographic_region_obligor"
+
+
+def forecast_region_field(funded_df: Optional[pd.DataFrame],
+                          pipeline_df: Optional[pd.DataFrame]) -> str:
+    """The region the forecast-by-region breakdown adds the two books up in.
+
+    The client's REPORTING taxonomy (D12), because it is the only vocabulary in
+    which separately-sourced books can be added together honestly — the same
+    rule the funded book's grouped geography follows. It is used only when
+    EVERY book present carries it; otherwise both use the raw column, as
+    before, rather than adding one book's harmonised regions to the other's
+    raw spelling.
+    """
+    frames = [f for f in (funded_df, pipeline_df) if f is not None]
+    if frames and all(_REPORTING_REGION in f.columns
+                      and f[_REPORTING_REGION].notna().any() for f in frames):
+        return _REPORTING_REGION
+    return _RAW_REGION
+
+
+def _unplaced(df: Optional[pd.DataFrame], field: str, col: str) -> float:
+    """The amount of a book the region breakdown cannot place (no region)."""
+    if df is None or col not in df.columns:
+        return 0.0
+    if field not in df.columns:
+        return round(float(coerce_numeric(df[col]).sum()), 2)
+    missing = df[field].isna() | df[field].astype(str).str.strip().isin(
+        ("", "nan", "NaT", "None"))
+    return round(float(coerce_numeric(df.loc[missing, col]).sum()), 2)
+
+
 def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
                         pipeline_df: Optional[pd.DataFrame]) -> Dict[str, Any]:
     """Forecast-by-dimension breakdowns for the Forecast view (region / LTV /
     completion month), capped where long."""
     from .pipeline_contract import cap_breakdown
-    region = forecast_dimension_breakdown(funded_df, pipeline_df, "geographic_region_obligor")
+    region_field = forecast_region_field(funded_df, pipeline_df)
+    region = forecast_dimension_breakdown(funded_df, pipeline_df, region_field)
     ltv = forecast_dimension_breakdown(funded_df, pipeline_df, "ltv_bucket")
     # Completion-month: pipeline contributes weighted by month; funded is "now".
     # Only cases carrying forecast weight have an expected completion month —
@@ -376,8 +412,20 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
             [{"key": r["key"], "caseCount": 0, "pipelineAmount": r["forecastAmount"],
               "weightedExpectedFundedAmount": r["weightedPipelineAmount"]} for r in rows], 10)
         return capped
+    unplaced_funded = _unplaced(funded_df, region_field,
+                                "current_outstanding_balance")
+    unplaced_pipeline = _unplaced(pipeline_df, region_field,
+                                  "weighted_expected_funded_amount")
     return {
         "byRegion": region,
+        # Which region the breakdown adds up in, and what it cannot place —
+        # composed here, so the view reads one figure and adds nothing.
+        "regionBasis": {
+            "field": region_field,
+            "unplacedFundedAmount": unplaced_funded,
+            "unplacedWeightedPipelineAmount": unplaced_pipeline,
+            "unplacedForecastAmount": round(unplaced_funded + unplaced_pipeline, 2),
+        },
         "byLtvBucket": ltv,
         "byCompletionMonth": by_month,
         "byRegionCapped": _cap(region),

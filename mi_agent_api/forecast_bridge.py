@@ -440,6 +440,9 @@ def compute_forecast_bridge(
         "grossPipelineAmount": round(pipeline_amount, 2),
         "excludedFromWeightingAmount": prob_summary.get("excluded_amount", 0.0),
         "excludedCaseCount": prob_summary.get("excluded_count", 0),
+        # The same exclusion by governed reason (completed, withdrawn, not
+        # forecast, lapsed, missing stage, missing probability).
+        "excludedByReason": prob_summary.get("excluded_by_reason", {}),
         "activeGrossPipelineAmount": prob_summary.get("active_gross_amount"),
         "amountWeightedHistorical": prob_summary.get("amount_weighted_historical"),
         "amountWeightedConfig": prob_summary.get("amount_weighted_config"),

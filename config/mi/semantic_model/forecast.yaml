@@ -1,0 +1,302 @@
+# =========================================================================
+# The FORECAST capability's semantic model (P0 design §16).
+# =========================================================================
+#
+# ONE FILE says what each forecast figure IS — the definition the model reads
+# through `search_concepts` / `get_concept_metadata` — and WHERE it is read
+# from: the published output of the owner the Forecast tab renders. The same
+# entry drives both, so what the model is told and what executes cannot drift.
+# This is the shape of a Cortex semantic model (a description and an
+# expression per measure and dimension), with the expression being a path into
+# the owner's own output rather than SQL: the owner computes, the agent reads.
+#
+# Rules this file is held to (`tests/interpretation_v2/test_forecast_semantic_model.py`):
+#   - every measure names a declared view, and every path it reads resolves in
+#     that view's real output for the fixture book;
+#   - every figure it serves equals the Forecast tab's own figure;
+#   - a definition says what the figure is and what it is NOT, and states no
+#     method the model could decompose — no column, no formula;
+#   - nothing here is arithmetic: a path, a member, a row key, a column.
+#
+# Shapes the one generic reader serves, per measure:
+#   value                       ONE figure (a path)
+#   by.<dim>.members            one figure per governed value (a path each)
+#   by.<dim>.rows|map           the owner's own per-value rows
+#   series                      the owner's own curve, one row per month,
+#                               selected to a stated horizon, never re-projected
+#   inputs                      which of the view's dated inputs the figure used
+#                               (P0 D1: only a composed figure has a skew)
+# =========================================================================
+
+version: 1
+capability: forecast
+
+views:
+  forecast_view:
+    label: the Forecast tab
+    owner: mi_agent_api.forecast_view.compose_forecast_view
+    # The dated inputs this view composes, and where each date is published.
+    inputs:
+      funded: {as_of: forecastBridge.fundedReportingDate, label: funded book}
+      pipeline: {as_of: forecastBridge.pipelineAsOfDate, label: pipeline extract}
+    # A figure that uses the pipeline needs one: without it there is no
+    # forecast, only the funded balance (P0 §9).
+    available_when: {pipeline: forecastBridge.pipelineAvailable}
+  scale_up:
+    label: the Forecast tab's scale-up forecast
+    owner: mi_agent_api.forecast_extrapolation.build_extrapolation
+    # `signal` is the completion run-rate's own input: the pipeline's observed
+    # completion flow, or funded balance growth where there is none. The
+    # adapter names which, from the owner's `completionSignalKind`.
+    inputs:
+      funded: {as_of: fundedReportingDate, label: funded book}
+      signal: {as_of: completionFlowExtractDate, label: pipeline completion flow}
+    available_when: {signal: completionRunRateForecast.available}
+
+dimensions:
+  forecast_component:
+    definition: >-
+      The two parts the forecast funded balance is made of: `funded_book`
+      (today's funded balance) and `weighted_pipeline` (the probability-weighted
+      completions expected from the open pipeline). Filter on ONE value for
+      'how much of the forecast comes from the funded book' or 'from the
+      pipeline'; break the forecast funded balance down by it for 'the forecast
+      bridge' or 'funded vs pipeline contribution'.
+    values: [funded_book, weighted_pipeline]
+  forecast_scenario:
+    definition: >-
+      The scale-up forecast's scenario band: `downside`, `base` or `upside` —
+      the lines the Forecast tab draws around its projection. Filter on ONE
+      value for 'the downside / base / upside forecast'; break down by it for
+      all three. It is the owner's published band, NOT a 'what if' change the
+      question assumes.
+    values: [downside, base, upside]
+  funding_threshold:
+    definition: >-
+      The governed ladder of funding thresholds the scale-up forecast projects
+      a milestone date for. Break `forecast_milestone_date` down by it, with no
+      target, for 'milestone dates to funding thresholds'. For ONE amount the
+      question names, use the milestone's `target` instead.
+    values: []
+  weighting_exclusion_reason:
+    definition: >-
+      Why a pipeline case carries no forecast weight: `completed` or
+      `withdrawn` (the extract already shows it closed), `not_forecast` (an
+      open stage the forecast does not weight, such as KFI), `lapsed` (past its
+      stage's validity window), `missing_stage` or `missing_probability`.
+      Filter on ONE value for 'excluded because of …'; break down by it for why
+      pipeline is excluded from weighting.
+    values: [completed, withdrawn, not_forecast, lapsed, missing_stage, missing_probability]
+
+measures:
+
+  forecast_funded_balance:
+    label: Forecast funded balance
+    unit: gbp
+    view: forecast_view
+    decision: D6
+    operations: [point_in_time, forecast_projection, breakdown]
+    periods: [current, forward_looking]
+    value: forecastBridge.forecastFundedBalance
+    inputs: [funded, pipeline]
+    context:
+      current_funded_balance: forecastBridge.fundedBalance
+      weighted_expected_funded_amount: forecastBridge.weightedExpectedFundedAmount
+      forecast_loan_count: forecastBridge.forecastLoanCount
+      excluded_amount: forecastBridge.excludedFromWeightingAmount
+      probability_basis: forecastBridge.completionProbabilityBasis
+    explain: >-
+      the funded balance of {current_funded_balance} plus
+      {weighted_expected_funded_amount} of expected completions from the open
+      pipeline
+    by:
+      forecast_component:
+        members:
+          funded_book: {value: forecastBridge.fundedBalance, inputs: [funded]}
+          weighted_pipeline: {value: forecastBridge.weightedExpectedFundedAmount,
+                              inputs: [pipeline]}
+      canonical_region_reporting:
+        rows: forecastBreakdowns.byRegion
+        key: key
+        value: forecastAmount
+        # Served only in the reporting taxonomy on BOTH books (D12); a view
+        # that fell back to raw spellings is refused, never substituted.
+        requires: {forecastBreakdowns.regionBasis.field: canonical_region_reporting}
+        basis: forecastBreakdowns.regionBasis
+      ltv_bucket:
+        rows: forecastBreakdowns.byLtvBucket
+        key: key
+        value: forecastAmount
+    definition: >-
+      ONE figure: today's funded balance plus the probability-weighted
+      completions expected from the OPEN pipeline in the latest weekly extract —
+      the figure on the Forecast tab. It is NOT a curve or a month-by-month
+      projection (that is `projected_funded_balance`), NOT the base, downside
+      or upside scenario of the scale-up forecast, and NOT expected completions
+      on their own. It is NOT one part of itself: for its funded part or its
+      pipeline part, filter or break it down by `forecast_component`. It can
+      also be broken down by region or LTV band. As the `target` of a
+      `forecast_milestone` it stands for the funded balance the book is
+      projected to reach.
+
+  forecast_loan_count:
+    label: Forecast loan count
+    unit: count
+    view: forecast_view
+    operations: [point_in_time]
+    periods: [current, forward_looking]
+    value: forecastBridge.forecastLoanCount
+    inputs: [funded, pipeline]
+    context:
+      funded_loan_count: forecastBridge.fundedLoanCount
+      eligible_case_count: forecastBridge.eligibleCaseCount
+    explain: >-
+      {funded_loan_count} funded loans plus {eligible_case_count} open pipeline
+      cases carrying forecast weight
+    definition: >-
+      The number of loans the forecast funded balance covers: the funded
+      book's loans plus the open pipeline cases that carry forecast weight —
+      the Forecast tab's forecast loan count. It is NOT the number of pipeline
+      cases, and NOT the funded loan count alone.
+
+  weighting_excluded_amount:
+    label: Pipeline excluded from forecast weighting
+    unit: gbp
+    view: forecast_view
+    operations: [point_in_time, breakdown]
+    periods: [current]
+    value: forecastBridge.excludedFromWeightingAmount
+    inputs: [pipeline]
+    by:
+      weighting_exclusion_reason:
+        map: forecastBridge.excludedByReason
+        value: amount
+    definition: >-
+      The pipeline amount the forecast gives NO completion weight — the
+      Forecast tab's 'excluded from weighting': cases the extract shows as
+      completed or withdrawn, open stages the forecast does not weight, cases
+      that have lapsed past their stage's window, and cases missing a stage or
+      a probability. Filter or break it down by `weighting_exclusion_reason`
+      for why. It is NOT the pipeline amount, and NOT the weighted pipeline.
+
+  weighting_excluded_case_count:
+    label: Pipeline cases excluded from forecast weighting
+    unit: count
+    view: forecast_view
+    operations: [point_in_time, breakdown]
+    periods: [current]
+    value: forecastBridge.excludedCaseCount
+    inputs: [pipeline]
+    by:
+      weighting_exclusion_reason:
+        map: forecastBridge.excludedByReason
+        value: count
+    definition: >-
+      The NUMBER of pipeline cases the forecast gives no completion weight,
+      for the same reasons as `weighting_excluded_amount`. Filter or break it
+      down by `weighting_exclusion_reason`. It is NOT the pipeline case count.
+
+  projected_funded_balance:
+    label: Projected funded balance
+    unit: gbp
+    view: scale_up
+    operations: [forecast_projection, series, point_in_time]
+    periods: [forward_looking]
+    grains: [monthly]
+    inputs: [funded, signal]
+    series:
+      rows: completionRunRateForecast.projectedBalances
+      period: month
+      step: offset
+      horizon: completionRunRateForecast.assumptions.horizonMonths
+    context:
+      base_monthly_run_rate: completionRunRateForecast.baseMonthlyRunRate
+      scenario_basis: completionRunRateForecast.scenarioBasis
+      completion_signal: completionRunRateForecast.assumptions.completionSignal
+    by:
+      forecast_scenario:
+        columns: [downside, base, upside]
+    definition: >-
+      The scale-up forecast's month-by-month CURVE: the funded balance
+      projected for each month ahead at the completion run-rate, with a
+      downside, base and upside line — the Forecast tab's extrapolation chart.
+      Use it for 'the extrapolation curve', 'the scale-up forecast', and
+      'project the funded balance over the next N months' (state the horizon
+      as `periods_ahead`); filter by `forecast_scenario` for 'the downside /
+      base / upside forecast'. It is NOT the forecast funded balance (ONE
+      figure from today's pipeline).
+
+  forecast_completion_rate:
+    label: Completion run-rate
+    unit: gbp_per_month
+    view: scale_up
+    operations: [point_in_time]
+    periods: [current]
+    value: completionRunRateForecast.baseMonthlyRunRate
+    inputs: [signal]
+    context:
+      annualised_run_rate: completionRunRateForecast.annualisedRunRate
+      scenario_basis: completionRunRateForecast.scenarioBasis
+      completion_signal: completionRunRateForecast.assumptions.completionSignal
+    explain: "{annualised_run_rate}/year"
+    by:
+      forecast_scenario:
+        members:
+          downside: {value: completionRunRateForecast.scenarioMonthlyRunRate.downside}
+          base: {value: completionRunRateForecast.scenarioMonthlyRunRate.base}
+          upside: {value: completionRunRateForecast.scenarioMonthlyRunRate.upside}
+    definition: >-
+      The completion RUN-RATE: the £ AMOUNT of loans completing per MONTH, from
+      the pipeline's observed completions. It is an amount per month, NOT a
+      percentage: it is NOT a conversion rate from KFI, application or offer
+      to completion, and NOT a description of how the forecast is calculated.
+      Filter by `forecast_scenario` for the downside or upside run-rate; the
+      yearly figure is `annualised_completion_run_rate`.
+
+  annualised_completion_run_rate:
+    label: Annualised completion run-rate
+    unit: gbp_per_year
+    view: scale_up
+    operations: [point_in_time]
+    periods: [current]
+    value: completionRunRateForecast.annualisedRunRate
+    inputs: [signal]
+    context:
+      base_monthly_run_rate: completionRunRateForecast.baseMonthlyRunRate
+      completion_signal: completionRunRateForecast.assumptions.completionSignal
+    explain: "{base_monthly_run_rate}/month"
+    definition: >-
+      The completion run-rate per YEAR — the Forecast tab's annualised
+      run-rate. It is NOT the monthly run-rate (`forecast_completion_rate`) and
+      NOT a percentage.
+
+  forecast_milestone_date:
+    label: Forecast milestone date
+    unit: month
+    view: scale_up
+    # The milestone for ONE target is the owner's milestone rule
+    # (`forecast_extrapolation.milestone_answer`), served by its own path. The
+    # ladder is a read of the owner's milestone table.
+    operations: [breakdown]
+    periods: [forward_looking, current]
+    inputs: [funded, signal]
+    by:
+      funding_threshold:
+        rows: completionRunRateForecast.milestones
+        key: thresholdLabel
+        value: baseDate
+        also: [reached, downsideDate, upsideDate]
+    context:
+      base_monthly_run_rate: completionRunRateForecast.baseMonthlyRunRate
+      scenario_basis: completionRunRateForecast.scenarioBasis
+    definition: >-
+      The MONTH in which the funded balance is projected to reach ONE stated
+      amount, at the completion run-rate. Its `target` is
+      `forecast_funded_balance`, comparator `gte`, with the amount the question
+      names. When the question asks whether the portfolio is at scale, or when
+      it reaches scale or securitisation scale, and names no amount, the target
+      `value` is the word `scale`: the portfolio's own threshold is applied
+      after interpretation — never write a number for it. It is NOT a balance,
+      and with a target it is NOT a table of dates for several amounts: for the
+      governed ladder of thresholds, break it down by `funding_threshold`
+      instead, with no target.

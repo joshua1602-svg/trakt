@@ -4,6 +4,7 @@ import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
 import { LineagePanel } from "@/components/LineagePanel";
 import { BarList, type BarDatum } from "@/components/pipeline/bits";
+import { formatGBP } from "@/lib/utils";
 
 /**
  * Forecast view: the deterministic funded + pipeline bridge, forecast-by-dimension
@@ -41,6 +42,9 @@ export function ForecastView({
     label: r.key,
     value: r.pipelineAmount,
   }));
+  // What the region breakdown cannot place (no governed region on the row),
+  // as the backend composed it.
+  const unplaced = breakdowns?.regionBasis?.unplacedForecastAmount ?? 0;
   const byLtv: BarDatum[] = (breakdowns?.byLtvBucketCapped ?? []).map((r) => ({
     label: r.key,
     value: r.pipelineAmount,
@@ -67,6 +71,11 @@ export function ForecastView({
             {byRegion.length > 0 && (
               <Panel title="Forecast balance by region">
                 <BarList data={byRegion} format="gbp" />
+                {unplaced > 0 && (
+                  <p className="mt-2 text-xs text-ink-500">
+                    {formatGBP(unplaced)} of the forecast has no region and is not shown.
+                  </p>
+                )}
               </Panel>
             )}
             {byLtv.length > 0 && (

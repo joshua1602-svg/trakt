@@ -993,3 +993,163 @@ of which the dashboard already computes.
     of their own. Re-run evidence (2026-09-29): lifting it today admits none of
     the 135 questions and would remove the only guard on the 2.2.0 misreads,
     because a forward-looking balance is a permitted period form.
+
+## 16. Catalogue batch 2 — the forecast semantic model (owner direction 2026-09-29)
+
+"Start batch 2. Adhere to the target state, scalable architecture, Cortex-based
+design principles, and no local / tactical fixes."
+
+### 16.1 What the evidence asks for
+
+Under vocabulary 2.3.0 the model stopped MISREADING the forecast questions and
+started NAMING what the catalogue lacks. Its own blocking notes on the
+2026-09-29 run, verbatim in substance:
+
+    [114] "no governed measure for such a curve"
+    [116-118] "no scenario concept or dimension: there is no base/downside/upside"
+    [94, 95] the forecast is "NOT decomposable into a part of itself"
+    [102-104] "no concept for weighting, or an exclusion from weighting"
+    [100, 101] "'historical rates' cannot be bound to any governed concept"
+    [123] "the registry governs no default threshold list"
+    [89] "the registry carries no forecast-owned loan-count measure"
+    [127] a twelve-month horizon had nowhere to go but a label
+
+Every one of these is a figure the Forecast tab ALREADY shows. The gap is the
+catalogue, not the engine.
+
+### 16.2 The architecture — a semantic model, one engine (Cortex's shape)
+
+Cortex Analyst answers from a SEMANTIC MODEL: one YAML per subject declaring
+each measure and dimension — its description (what the model reads) and its
+expression (what executes). The model is grounded in the file; the warehouse
+computes. Trakt's equivalent, for the forecast capability:
+
+    config/mi/semantic_model/forecast.yaml     ONE file per capability
+      views       the owners whose published output answers — the Forecast
+                  tab (`forecast_view.compose_forecast_view`) and its scale-up
+                  panel (`forecast_extrapolation.build_extrapolation`)
+      measures    definition (shown to the model) + unit + view + the PATH of
+                  the figure in that view's output
+      dimensions  definition + governed values + how each measure's view
+                  publishes the figure per value (members or rows)
+
+    mi_agent/semantic_model.py                  load + validate + read a path
+    vocabulary                                  the forecast concepts, their
+                                                definitions and values come
+                                                FROM the file (no second copy)
+    plan_forecast_runtime                       one generic reader: scalar,
+                                                one governed member, a
+                                                breakdown, or a series — each a
+                                                lookup in the owner's output
+
+What this buys, and why it is the target state rather than a patch:
+
+  - ONE DEFINITION. What the model is told a measure is, and what executes for
+    it, are the same entry. They cannot drift.
+  - ONE ENGINE. Every figure is read from the payload the tab renders, built by
+    the same function for the same inputs. The runtime still computes nothing
+    (the AST rule in `test_the_runtime_computes_no_forecast_figure` holds).
+  - SCALES BY DATA. A new forecast figure is an entry in the file and a test
+    pinning it to the tab — not a new branch in the runtime.
+  - THE FORECAST TAB'S SNAPSHOT BECOMES A FUNCTION. It was assembled inline in
+    the `/mi/forecast/snapshot` route, so nothing else could call it. It moves
+    to `mi_agent_api/forecast_view.py`; the route and the agent both call it.
+
+The pipeline runtime's batch-1 maps (`TAB_COLUMN`, `_TAB_TIMING_KEY`) are the
+same idea written in code; they move to `semantic_model/pipeline.yaml` as a
+follow-up, so both specialist capabilities have one form.
+
+### 16.3 The concepts (vocabulary 2.7.0)
+
+    measure                          the tab's figure (view: path)
+    -------------------------------  --------------------------------------------
+    forecast_funded_balance          forecast_view: forecastBridge.forecastFundedBalance
+      by forecast_component            funded_book = fundedBalance,
+                                       weighted_pipeline = weightedExpectedFundedAmount
+      by canonical_region_reporting    forecastBreakdowns.byRegion  (D12 on both books)
+      by ltv_bucket                    forecastBreakdowns.byLtvBucket
+    forecast_loan_count              forecast_view: forecastBridge.forecastLoanCount
+    weighting_excluded_amount        forecast_view: forecastBridge.excludedFromWeightingAmount
+      by weighting_exclusion_reason    forecastBridge.excludedByReason (owner-classified)
+    projected_funded_balance         scale_up: completionRunRateForecast.projectedBalances
+      (a monthly series)               one column per forecast_scenario
+    forecast_completion_rate         scale_up: completionRunRateForecast.baseMonthlyRunRate
+      by forecast_scenario             scenarioMonthlyRunRate.{downside,base,upside}
+    annualised_completion_run_rate   scale_up: completionRunRateForecast.annualisedRunRate
+    forecast_milestone_date          scale_up: milestones (existing target path unchanged)
+      by funding_threshold             the governed ladder, one row per threshold
+
+    dimension                        values
+    -------------------------------  --------------------------------------------
+    forecast_component               funded_book, weighted_pipeline
+    forecast_scenario                downside, base, upside
+    funding_threshold                the owner's ladder (£25m ... £150m)
+    weighting_exclusion_reason       completed, withdrawn, not_forecast, lapsed,
+                                     missing_probability
+
+Two intent/compiler changes, both market-standard and both general:
+
+  - `time.periods_ahead` — the forward horizon ("next twelve months" = 12),
+    the mirror of `periods_back`. The curve is SELECTED to it, never
+    re-projected; a horizon beyond the owner's published one refuses.
+  - A milestone grouped by `funding_threshold` needs no single target: it asks
+    for the ladder, which the owner publishes.
+
+### 16.4 What stays refused, and why
+
+    forecast by broker / stage        the tab publishes no such breakdown
+    "if the run-rate falls 25%"       D2b: its own `scenario` operation with a
+                                      typed `assumption` slot (§6.2) — batch 2c
+    stage probabilities, basis         batch 2b: the owner publishes stage lists,
+                                      not per-stage probabilities (run-off makes
+                                      them per case); owner disclosure first
+    the 8-/12-week run-rate           not published (the proxy's lookbacks are
+                                      monthly windows)
+    KFI-to-completion conversion      D2a: stage movement owns it; the Model B
+                                      projection is withdrawn by its owner
+    the D6 holds (§14.6)              kept until a live run shows the readings
+                                      separate onto the new concepts
+
+### 16.5 As built (2026-09-29)
+
+    config/mi/semantic_model/forecast.yaml   8 measures, 4 dimensions, 2 views
+    mi_agent/semantic_model.py               load + validate + read a path; no
+                                             arithmetic (AST-pinned)
+    mi_agent_api/forecast_view.py            the Forecast tab's snapshot as one
+                                             function; the route, the analytical
+                                             composer and the runtime all call it
+    mi_agent/plan_reading.py                 the plan-reading helpers both
+                                             specialist runtimes share
+    mi_agent/plan_forecast_runtime.py        two paths: the semantic model's
+                                             generic reader, and the milestone
+                                             for a stated threshold (its rule)
+    time.periods_ahead                       intent + plan + compiler; absent,
+                                             it is left out of plan identity, so
+                                             every recorded plan_id still replays
+
+Owner changes this needed, each one a disclosure the tab now shows too:
+
+  - the weighting exclusion BY REASON (`pipeline_prep.EXCLUSION_REASONS`,
+    `forecastBridge.excludedByReason`), every governed reason published, with
+    zeros, and summing to the excluded total;
+  - the forecast by region in the REPORTING taxonomy when both books carry it
+    (D12 extended to the Forecast tab), with `regionBasis` and the amount it
+    cannot place. Before, the tab added the funded book's raw region spelling
+    to the pipeline's, so "YORKSHIRE" and "Yorkshire" were two bars. Where a
+    book carries no harmonised region (the legacy central-tape path) the tab
+    falls back as before, and the agent refuses rather than answer from it.
+
+The balance and the run-rate moved onto the generic reader: one path for every
+lookup. The balance's receipt now names the Forecast tab's own view function
+and the path of the figure (`forecastBridge.forecastFundedBalance`), D6 kept.
+
+Pinned by `tests/interpretation_v2/test_forecast_semantic_model.py`: every
+declared path resolves in the owners' real output, every figure equals the
+tab's or the scale-up owner's for the same book and run, the curve is selected
+and never extended, and the answer's coverage accounts for the member, axis and
+region asked for.
+
+The D6 holds stay: `point_in_time/forecast_completion_rate` and
+`forecast_projection/forecast_funded_balance` are released only when the spot
+check shows the 2.7.0 readings have moved onto the new concepts. The scenario
+run-rates are declared and read the owner's figure, and wait on that release.

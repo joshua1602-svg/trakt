@@ -146,6 +146,9 @@ class PeriodBinding:
     labels: Tuple[str, ...] = ()
     grain: Optional[str] = None
     periods_back: Optional[int] = None
+    #: The forward horizon a forward-looking question stated, in periods of
+    #: `grain` (`SemanticTime.periods_ahead`). None when none was stated.
+    periods_ahead: Optional[int] = None
     #: WHETHER THE READING STATED A TEMPORAL FORM AT ALL. Carried from
     #: `SemanticTime.stated`, so an ABSENT slot and an EXPLICIT `current` stay
     #: distinguishable at the governed boundary even though `form` reads the same.
@@ -320,6 +323,11 @@ class GovernedQueryPlan:
         if "form" in period:
             period["labels"] = list(identity_labels(
                 str(period.get("form") or ""), period.get("labels") or ()))
+        # A horizon is authorised content when stated. When it is not, it is
+        # left out, which keeps every plan_id recorded before the horizon
+        # existed exactly as it was — the sign-off corpus still replays.
+        if period.get("periods_ahead") is None:
+            period.pop("periods_ahead", None)
         return body
 
     @classmethod

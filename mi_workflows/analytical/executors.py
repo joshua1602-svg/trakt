@@ -870,21 +870,30 @@ def _settled_stage_component(frame) -> float:
                      not in prep_mod.ACTIVE_STAGES), 2)
 
 
-def funded_balance_forecast(ctx: AnalyticalContext) -> List[Finding]:
-    """Current funded balance plus expected completions, from the governed bridge."""
-    from mi_agent_api import forecast_bridge as bridge_mod
+def forecast_view(ctx: AnalyticalContext) -> Dict[str, Any]:
+    """The Forecast tab's envelope for this request's governed inputs.
+
+    The funded book the context resolved, the latest governed weekly extract
+    and its snapshot, handed to the ONE function the `/mi/forecast/snapshot`
+    route also calls (`forecast_view.compose_forecast_view`) — so the composed
+    answer, the governed forecast runtime and the tab read one composition.
+    """
+    from mi_agent_api import forecast_view as view_mod
 
     frame, report, meta = ctx.pipeline()
-    funded = ctx.base_frame()
-    snapshot = ctx.pipeline_snapshot()
-    bridge = bridge_mod.compute_forecast_bridge(
+    return view_mod.compose_forecast_view(
         client_id=ctx.client_id, run_id=str(ctx.run_id or ""),
         funded_reporting_date=_period_ref(ctx).end,
-        funded_df=funded, pipeline_df=frame, pipeline_report=report,
-        pipeline_snapshot=snapshot,
+        funded_df=ctx.base_frame(), pipeline_df=frame, pipeline_report=report,
+        pipeline_snapshot=ctx.pipeline_snapshot(),
         pipeline_source=(meta.get("source")
-                         if isinstance(meta.get("source"), dict) else None),
-    ).get("forecastBridge") or {}
+                         if isinstance(meta.get("source"), dict) else None))
+
+
+def funded_balance_forecast(ctx: AnalyticalContext) -> List[Finding]:
+    """Current funded balance plus expected completions, from the governed bridge."""
+    frame, _report, _meta = ctx.pipeline()
+    bridge = forecast_view(ctx).get("forecastBridge") or {}
 
     period = _period_ref(ctx)
     total = PopulationRef(key="total", label="the whole funded book",

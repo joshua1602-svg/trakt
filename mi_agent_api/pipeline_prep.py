@@ -941,6 +941,33 @@ def forecast_readiness(out: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
     return fr
 
 
+#: WHY A CASE CARRIES NO FORECAST WEIGHT, in the governed words a reader asks
+#: in. One reason per weighting outcome that excludes a case; the stage a
+#: governed exclusion names is its own reason (``exclude_stages``: completed,
+#: withdrawn). Read by the Forecast tab's disclosure and by the agent alike.
+EXCLUSION_REASONS: Tuple[str, ...] = (
+    "completed", "withdrawn", "not_forecast", "lapsed", "missing_stage",
+    "missing_probability")
+
+
+def exclusion_reason(source: Any) -> Optional[str]:
+    """The governed reason a ``completion_probability_source`` carries no
+    weight, or None for a weighted case. The same prefixes the summary's
+    exclusion mask matches, so the two cannot disagree."""
+    text = str(source)
+    if text.startswith("excluded_"):
+        return text[len("excluded_"):]
+    if text.startswith("not_forecast_"):
+        return "not_forecast"
+    if text.startswith("expired_"):
+        return "lapsed"
+    if text == "missing_stage":
+        return "missing_stage"
+    if text == "unavailable":
+        return "missing_probability"
+    return None
+
+
 def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
     """Per-source counts + amounts for ``completion_probability_source``, plus the
     gross / excluded / weighted totals used by the forecast disclosure."""
@@ -968,6 +995,18 @@ def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
                      | src.str.startswith("not_forecast_")
                      | src.str.startswith("expired_")
                      | src.isin({"missing_stage", "unavailable"}))
+    # The same exclusion, by the reason a reader asks about ("excluded because
+    # withdrawn / lapsed / missing a probability").
+    reason = src.map(exclusion_reason)
+    excluded_by_reason: Dict[str, Any] = {}
+    # Every governed reason is published, with zeros where no case has it, so
+    # "how much is excluded because withdrawn" has the owner's own answer
+    # even when it is none; a configured exclusion of another stage appears too.
+    for r in list(EXCLUSION_REASONS) + sorted(
+            {x for x in reason[excluded_mask] if x} - set(EXCLUSION_REASONS)):
+        mask = excluded_mask & (reason == r)
+        excluded_by_reason[r] = {"count": int(mask.sum()),
+                                 "amount": round(float(amount[mask].sum()), 2)}
     gross = float(amount.sum())
     excluded_amount = float(amount[excluded_mask].sum())
     active_gross = gross - excluded_amount
@@ -992,6 +1031,7 @@ def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
         "blended_weighted_conversion": (round(weighted_total / active_gross, 4)
                                         if active_gross > 0 else None),
         "excluded_count": int(excluded_mask.sum()),
+        "excluded_by_reason": excluded_by_reason,
     }
 
 

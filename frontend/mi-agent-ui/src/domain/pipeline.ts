@@ -245,6 +245,9 @@ export interface ForecastBridge {
   grossPipelineAmount?: number;
   excludedFromWeightingAmount?: number;
   excludedCaseCount?: number;
+  /** The same exclusion by governed reason (completed, withdrawn,
+   *  not_forecast, lapsed, missing_stage, missing_probability). Additive. */
+  excludedByReason?: Record<string, { count: number; amount: number }>;
   activeGrossPipelineAmount?: number | null;
   amountWeightedHistorical?: number | null;
   amountWeightedConfig?: number | null;
@@ -279,8 +282,20 @@ export interface ForecastDimensionRow {
 }
 
 /** Forecast-by-dimension breakdowns (derived: funded + weighted pipeline). */
+/** Which region the forecast-by-region breakdown adds the two books up in
+ *  (the reporting taxonomy when both books carry it), and what it cannot
+ *  place. Additive. */
+export interface ForecastRegionBasis {
+  field: string;
+  unplacedFundedAmount: number;
+  unplacedWeightedPipelineAmount: number;
+  /** The two above together — the forecast the chart cannot place. */
+  unplacedForecastAmount: number;
+}
+
 export interface ForecastBreakdowns {
   byRegion: ForecastDimensionRow[];
+  regionBasis?: ForecastRegionBasis;
   byLtvBucket: ForecastDimensionRow[];
   byCompletionMonth: { month: string; weightedExpectedFundedAmount: number }[];
   byRegionCapped?: DimensionBucket[];

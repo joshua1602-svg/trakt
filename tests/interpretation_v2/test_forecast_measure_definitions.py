@@ -13,13 +13,19 @@ from __future__ import annotations
 
 import pytest
 
+from mi_agent import semantic_model
 from mi_agent.interpretation_v2 import metadata as metadata_mod
 from mi_agent.interpretation_v2.vocabulary import (
     SPECIALIST_MEASURE_DEFINITIONS, SPECIALIST_MEASURES, VOCABULARY_VERSION,
     load_governed_vocabulary)
 
-FORECAST = ("forecast_funded_balance", "forecast_completion_rate",
-            "forecast_milestone_date")
+#: The three 2.3.0 defined; the ones whose readings the production run
+#: measured, pinned by RULES_OUT below.
+FORECAST_2_3 = ("forecast_funded_balance", "forecast_completion_rate",
+                "forecast_milestone_date")
+#: Since 2.7.0 every forecast measure is declared, with its definition, in the
+#: capability's semantic model (P0 design §16).
+FORECAST = tuple(semantic_model.load("forecast").measures)
 #: Defined since 2.6.0 (catalogue batch 1): the Pipeline tab's weighted figure,
 #: which the model otherwise confused with the pipeline amount.
 PIPELINE = ("weighted_expected_funded_amount",)
@@ -48,6 +54,10 @@ def tools(vocabulary):
     return metadata_mod.GovernedMetadataService(vocabulary)
 
 
+def test_the_2_3_measures_are_still_in_the_model():
+    assert set(FORECAST_2_3) <= set(FORECAST)
+
+
 def test_the_version_records_what_the_model_is_shown():
     # 2.3.0 introduced these definitions; later versions keep them.
     major, minor, _ = (int(x) for x in VOCABULARY_VERSION.split("."))
@@ -69,7 +79,7 @@ def test_the_definition_reaches_the_model_through_both_lookups(concept, tools):
     assert row["definition"] == SPECIALIST_MEASURE_DEFINITIONS[concept]
 
 
-@pytest.mark.parametrize("concept", FORECAST)
+@pytest.mark.parametrize("concept", FORECAST_2_3)
 def test_each_definition_rules_out_the_production_misreads(concept):
     definition = SPECIALIST_MEASURE_DEFINITIONS[concept]
     for phrase in RULES_OUT[concept]:

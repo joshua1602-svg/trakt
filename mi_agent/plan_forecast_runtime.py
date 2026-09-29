@@ -13,20 +13,26 @@ never the gap; the arrow to it was. This is that arrow (P0 design §6).
 
 WHAT THIS IS, AND WHAT IT IS NOT. A TRANSLATOR, exactly as the pipeline runtime
 is. It turns an already-compiled plan into the arguments the existing forecast
-owner already takes, calls it, and writes down what ran:
+owner already takes, calls it, and writes down what ran. Two paths:
 
-    milestone date     forecast_extrapolation.build_extrapolation, with the
-                         reader's threshold added to the ladder, then
-                       forecast_extrapolation.milestone_answer — the ONE rule
+    every figure the     READ from its owner's published output at the path
+    semantic model       `config/mi/semantic_model/forecast.yaml` declares (P0
+    declares            design §16) — one figure, one governed member, the
+                         owner's own breakdown, or its own curve selected to a
+                         stated horizon. The owners are the ones the Forecast
+                         tab renders:
+                           forecast_view.compose_forecast_view   the tab's bridge,
+                             breakdowns and weighting disclosure (D6: the
+                             forecast funded balance is its point figure)
+                           forecast_extrapolation.build_extrapolation   the
+                             scale-up forecast: run-rate, scenario bands, curve
+                             and milestone ladder
+    milestone date       the same scale-up owner with the reader's threshold
+    for a stated          added to its ladder, then
+    threshold            forecast_extrapolation.milestone_answer — the ONE rule
                          deciding which of four answers a milestone question
                          has, lifted out of the legacy router so this module
                          reads the rule instead of copying it
-    completion
-    run-rate           the same owner's Model A `baseMonthlyRunRate`
-    forecast funded    the analytical composer's `funded_balance_forecast` —
-    balance              `forecast_bridge.compute_forecast_bridge` over the
-                         LATEST weekly extract, the figure the React Forecast
-                         tab shows (D6, settled by the owner)
 
 It computes no figure. There is no projection, no division by a run-rate and no
 milestone date worked out here — every number in the receipt is read out of
@@ -55,18 +61,21 @@ says which inputs each answer used rather than claiming both every time.
 
 WHAT IS REFUSED, AND WHY, rather than approximated:
 
-    a forecast funded        D6 made the composer's point figure the definition.
-    balance SERIES           The only forecast series in the estate pairs each
-                             funded month with that month's last extract — a
-                             different definition (£96.2m against £94.1m on the
-                             production book) — so a series is refused rather
-                             than answered from it.
-    scenario                 D2b — its own operation with a typed `assumption`
-                             slot, built separately (Change 2b).
+    a forecast funded        D6 made the tab's point figure the definition. The
+    balance SERIES           only forecast-balance series pairs each funded
+                             month with that month's last extract — a different
+                             definition — so a series of it is refused; the
+                             month-by-month curve is projected_funded_balance.
+    a "what if"              D2b — its own operation with a typed `assumption`
+                             slot (§6.2). The scenario BANDS the owner publishes
+                             are served; an assumed change is not.
     a scoped forecast        the run-rate is book-wide; applying it to one book
                              or one role is the silent widening §8.6 forbids.
-    filters, axes,           no forecast owner narrows or groups these figures.
-    geography, comparison
+    a breakdown, filter or   anything the semantic model does not declare the
+    geography the owner      owner publishing: refused, never recomputed here.
+    does not publish
+    a horizon beyond the     the curve is selected, never extended.
+    owner's
 
 IT NEVER READS THE QUESTION. No parse, no recogniser, no router, and nothing
 from `chat_routing` — whose milestone closure is the reason the milestone rule
@@ -75,8 +84,10 @@ had to move to the owner before this module could exist.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
+from mi_agent import plan_reading as _plan
+from mi_agent import semantic_model as _semantic_model
 from mi_agent.interpretation_v2.vocabulary import NAMED_THRESHOLDS
 
 CAPABILITY = "forecast"
@@ -146,6 +157,9 @@ AMBIGUOUS_READING = "AMBIGUOUS_READING"
 INPUTS_UNAVAILABLE = "INPUTS_UNAVAILABLE"
 FORECAST_UNAVAILABLE = "FORECAST_UNAVAILABLE"
 EXECUTION_FAILED = "EXECUTION_FAILED"
+#: The owner's output carries no figure for what the plan asked (a member it
+#: did not publish, a breakdown on another basis). Refused, never substituted.
+FIELD_UNAVAILABLE = "FIELD_UNAVAILABLE"
 #: P0 §9 — the two reasons a derived population adds.
 POPULATION_INPUT_UNRESOLVED = "POPULATION_INPUT_UNRESOLVED"
 POPULATION_VINTAGE_SKEW = "POPULATION_VINTAGE_SKEW"
@@ -153,29 +167,24 @@ POPULATION_VINTAGE_SKEW = "POPULATION_VINTAGE_SKEW"
 #: there is no threshold to reach, and none is guessed.
 SCALE_NOT_CONFIGURED = "SCALE_NOT_CONFIGURED"
 
-#: WHAT THIS RUNTIME SERVES, as (operation, measure) -> the figure it reads.
-KIND_MILESTONE = "milestone"
-KIND_RUN_RATE = "completion_run_rate"
-KIND_BALANCE = "forecast_funded_balance"
-SERVED: Mapping[Tuple[str, str], str] = {
-    ("forecast_milestone", "forecast_milestone_date"): KIND_MILESTONE,
-    ("point_in_time", "forecast_completion_rate"): KIND_RUN_RATE,
-    # D6: "what is the forecast funded balance" and "what will the book grow to
-    # on the current pipeline" are one figure, the composer's.
-    ("point_in_time", "forecast_funded_balance"): KIND_BALANCE,
-    ("forecast_projection", "forecast_funded_balance"): KIND_BALANCE,
-}
+#: THE CAPABILITY'S SEMANTIC MODEL (P0 design §16). Every forecast figure but
+#: one is declared there — what it is, which owner publishes it, and the path of
+#: the figure in that owner's output — and served by ONE generic reader below.
+#: A new forecast figure is an entry in that file and a test pinning it to the
+#: tab, not a branch in this module.
+MODEL = _semantic_model.load(CAPABILITY)
+SEMANTIC_MODEL_FILE = "config/mi/semantic_model/forecast.yaml"
 
-#: The period form each served figure is stated in. A milestone looks forward;
-#: a run-rate is the current one. Anything else — "the 8-week run-rate", a
-#: weekly series — has no owner here and is refused rather than re-windowed.
-PERIOD_FORMS: Mapping[str, FrozenSet[str]] = {
-    KIND_MILESTONE: frozenset({"forward_looking"}),
-    KIND_RUN_RATE: frozenset({"current"}),
-    # "What is the forecast funded balance?" arrives as current, "what will the
-    # book grow to?" as forward-looking; both ask for the one composer figure.
-    KIND_BALANCE: frozenset({"current", "forward_looking"}),
-}
+#: THE ONE FIGURE THAT IS NOT A LOOKUP: the milestone for a threshold the
+#: question names. The owner answers it only when asked about that amount (the
+#: reader's target is added to its ladder), and its rule
+#: (`milestone_answer`) decides which of four answers it has. The LADDER — the
+#: dates the owner projects for its governed thresholds — is a lookup, and is
+#: in the semantic model.
+MILESTONE = ("forecast_milestone", "forecast_milestone_date")
+KIND_MILESTONE = "milestone"
+KIND_CATALOGUE = "semantic_model"
+MILESTONE_PERIOD_FORMS: FrozenSet[str] = frozenset({"forward_looking"})
 
 #: The owner decision that defines the forecast funded balance, named on every
 #: refusal and receipt that depends on it.
@@ -186,13 +195,11 @@ BALANCE_DECISION = "D6"
 #: Measured, not supposed: the plans the canary recorded for the owner's
 #: production bank (2026-09-28, read back by `qb_plan_readback`) put several
 #: different questions into each of these shapes, and the runtime can only
-#: answer the shape. The vocabulary gives the model a name and no definition for
-#: these measures — "Owned by the forecast capability" — so it has nothing to
-#: separate them by. Serving the shape would answer some of those questions with
-#: a different figure than they asked for, which the design's hard gate (WRONG
-#: answers must stay at zero) forbids. They are held until the vocabulary
-#: defines the measures (P2) and a live run shows the readings separate; legacy
-#: serves them meanwhile, as it did.
+#: answer the shape. Serving it would answer some of those questions with a
+#: different figure than they asked for, which the design's hard gate (WRONG
+#: answers must stay at zero) forbids. Vocabulary 2.7.0 gives each of those
+#: questions a concept of its own (§16.3); the hold is released only when a
+#: live run shows the readings have moved there. Legacy serves them meanwhile.
 HELD_READINGS: Mapping[Tuple[str, str], str] = {
     ("forecast_projection", "forecast_funded_balance"): (
         "this shape arrived for the expected funded balance [87], but also for "
@@ -214,7 +221,7 @@ TARGET_COMPARATORS: FrozenSet[str] = frozenset({"gte"})
 #: WHICH OWNER PRODUCED THE FIGURES, named on the receipt.
 OWNER_EXTRAPOLATION = "forecast_extrapolation.build_extrapolation"
 OWNER_MILESTONE_RULE = "forecast_extrapolation.milestone_answer"
-OWNER_COMPOSER = "mi_workflows.analytical.executors.funded_balance_forecast"
+OWNER_VIEW = MODEL.views["forecast_view"].owner
 OWNER_BRIDGE = "forecast_bridge.compute_forecast_bridge"
 
 
@@ -223,10 +230,7 @@ OWNER_BRIDGE = "forecast_bridge.compute_forecast_bridge"
 # --------------------------------------------------------------------------- #
 
 def _as_mapping(plan: Any) -> Mapping[str, Any]:
-    if isinstance(plan, Mapping):
-        return plan
-    to_dict = getattr(plan, "to_dict", None)
-    return to_dict() if callable(to_dict) else {}
+    return _plan.as_mapping(plan)
 
 
 def claims(plan: Any) -> bool:
@@ -235,8 +239,7 @@ def claims(plan: Any) -> bool:
 
 
 def _single_output(plan: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
-    outputs = plan.get("outputs") or ()
-    return outputs[0] if len(outputs) == 1 else None
+    return _plan.single_output(plan)
 
 
 def _measure(plan: Mapping[str, Any]) -> str:
@@ -246,14 +249,23 @@ def _measure(plan: Mapping[str, Any]) -> str:
 
 
 def kind_of(plan: Any) -> str:
-    """Which served figure an ELIGIBLE plan asks for. Empty for anything else."""
+    """Which path an ELIGIBLE plan takes. Empty for anything else."""
     body = _as_mapping(plan)
-    return SERVED.get((str(body.get("operation") or ""), _measure(body)), "")
+    if (str(body.get("operation") or ""), _measure(body)) == MILESTONE:
+        return KIND_MILESTONE
+    return KIND_CATALOGUE if MODEL.measure(_measure(body)) else ""
 
 
 def target_of(plan: Any) -> Optional[Mapping[str, Any]]:
     target = _as_mapping(plan).get("target")
     return target if isinstance(target, Mapping) else None
+
+
+def _member(plan: Any) -> Optional[Tuple[str, str]]:
+    """The one governed member a plan filters on, e.g. `(forecast_component,
+    funded_book)`; None when it filters on nothing."""
+    filters = _plan.plan_filters(plan)
+    return _plan.member_filter(filters[0]) if len(filters) == 1 else None
 
 
 # --------------------------------------------------------------------------- #
@@ -292,76 +304,146 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     if output is None:
         return (False, NOT_SINGLE_OUTPUT,
                 "the forecast runtime serves exactly one output")
-    if body.get("filters") or output.get("filters"):
-        return (False, FILTERS_NOT_SUPPORTED,
-                "no forecast owner narrows its figures by a predicate")
-    if output.get("dimensions"):
-        return (False, DIMENSION_NOT_SUPPORTED,
-                "no forecast owner groups its figures by an axis")
-    if output.get("geography") or (body.get("geography") or {}).get("requested"):
-        return (False, GEOGRAPHY_NOT_SUPPORTED,
-                "no forecast owner breaks its figures down by geography")
     if str(body.get("comparison_kind") or "none") != "none":
         return (False, COMPARISON_NOT_SUPPORTED,
                 "the forecast runtime serves no population comparison")
-
     measures = [str(m.get("concept") or "") for m in (output.get("measures") or ())]
     if len(measures) != 1:
         return (False, MEASURE_NOT_SUPPORTED,
                 f"exactly one measure is served; this plan names {measures}")
     operation = str(body.get("operation") or "")
-    kind = SERVED.get((operation, measures[0]))
-    if not kind and measures[0] == KIND_BALANCE:
-        return (False, OPERATION_NOT_SUPPORTED,
-                f"the forecast funded balance is the composer's point figure "
-                f"over the latest extract ({BALANCE_DECISION}); "
-                f"operation={operation!r} would need a series of it, and the "
-                f"only forecast series pairs each funded month with that "
-                f"month's last extract — a different definition")
-    if not kind:
-        served = sorted(f"{op}/{m}" for op, m in SERVED)
-        return (False, OPERATION_NOT_SUPPORTED,
-                f"operation={operation!r} with measure {measures[0]!r} has no "
-                f"forecast owner here (served: {served})")
+    if (operation, measures[0]) == MILESTONE:
+        return _check_milestone(body, output)
+    return _check_catalogue(body, measures[0], operation)
 
-    # THE GRAIN FIRST: it is the durable refusal. "By month" asks for a figure
-    # per period whatever the measure turns out to mean, so it must still
-    # refuse after the hold below is lifted.
+
+def _check_milestone(body: Mapping[str, Any],
+                     output: Mapping[str, Any]) -> Tuple[bool, str, str]:
+    """The milestone for ONE stated threshold: the owner's rule answers it."""
+    if _plan.plan_filters(body):
+        return (False, FILTERS_NOT_SUPPORTED,
+                "no forecast owner narrows a milestone by a predicate")
+    if output.get("dimensions"):
+        return (False, DIMENSION_NOT_SUPPORTED,
+                "a milestone for a stated threshold is one date; for the "
+                "governed ladder, break forecast_milestone_date down by "
+                "funding_threshold with no target")
+    if _plan.asks_geography(body):
+        return (False, GEOGRAPHY_NOT_SUPPORTED,
+                "no forecast owner projects a milestone by geography")
     period = body.get("period") or {}
     if period.get("grain"):
         return (False, PERIOD_NOT_SUPPORTED,
                 f"a {period.get('grain')} grain asks for a figure per period; "
-                f"the {kind} figure is a single point")
-    held = HELD_READINGS.get((operation, measures[0]))
+                f"a milestone is a single date")
+    form = str(period.get("form") or "")
+    if form not in MILESTONE_PERIOD_FORMS:
+        return (False, PERIOD_NOT_SUPPORTED,
+                f"period.form={form!r} is not how a milestone is stated "
+                f"({sorted(MILESTONE_PERIOD_FORMS)})")
+    target = target_of(body)
+    value = (target or {}).get("value")
+    # A positive amount, or a governed NAMED threshold ("scale", D9) whose
+    # figure the portfolio supplies at execution.
+    named = isinstance(value, str) and value in NAMED_THRESHOLDS
+    if (not target or str(target.get("concept") or "") != TARGET_CONCEPT
+            or str(target.get("comparator") or "") not in TARGET_COMPARATORS
+            or (not named and (isinstance(value, bool)
+                               or not isinstance(value, (int, float))
+                               or value <= 0))):
+        return (False, TARGET_NOT_SUPPORTED,
+                f"a milestone is served for a positive {TARGET_CONCEPT} "
+                f"threshold compared {sorted(TARGET_COMPARATORS)}; this plan "
+                f"states {target!r}")
+    return True, "", ""
+
+
+def _check_catalogue(body: Mapping[str, Any], measure: str,
+                     operation: str) -> Tuple[bool, str, str]:
+    """A figure the semantic model declares: can its owner's output answer
+    THIS plan by lookup — one figure, one governed member, one breakdown the
+    owner publishes, or the owner's own curve?"""
+    m = MODEL.measure(measure)
+    if m is None:
+        return (False, MEASURE_NOT_SUPPORTED,
+                f"measure {measure!r} is not in the forecast semantic model "
+                f"(served: {sorted(MODEL.measures)})")
+    if operation not in m.operations:
+        if measure == "forecast_funded_balance" and operation == "series":
+            return (False, OPERATION_NOT_SUPPORTED,
+                    f"the forecast funded balance is the tab's point figure "
+                    f"over the latest extract ({BALANCE_DECISION}); a series "
+                    f"of it would pair each funded month with that month's last "
+                    f"extract — a different definition. The month-by-month "
+                    f"curve is projected_funded_balance")
+        return (False, OPERATION_NOT_SUPPORTED,
+                f"operation={operation!r} is not how {measure} is served "
+                f"({sorted(m.operations)})")
+    period = body.get("period") or {}
+    # THE GRAIN FIRST: it is the durable refusal. "By month" asks for a figure
+    # per period whatever the measure turns out to mean, so a point figure
+    # refuses it before the hold below is even consulted.
+    grain = period.get("grain")
+    if grain and grain not in m.grains:
+        return (False, PERIOD_NOT_SUPPORTED,
+                f"a {grain} grain asks for a figure per period; {measure} is "
+                f"not published per {grain}")
+    held = HELD_READINGS.get((operation, measure))
     if held:
         return (False, AMBIGUOUS_READING,
-                f"{operation}/{measures[0]} is held until the vocabulary defines "
-                f"the measure: {held}")
-    form = str(period.get("form") or "")
-    if form not in PERIOD_FORMS[kind]:
-        return (False, PERIOD_NOT_SUPPORTED,
-                f"period.form={form!r} is not how the {kind} figure is stated "
-                f"({sorted(PERIOD_FORMS[kind])})")
-
-    target = target_of(body)
-    if kind == KIND_MILESTONE:
-        value = (target or {}).get("value")
-        # A positive amount, or a governed NAMED threshold ("scale", D9) whose
-        # figure the portfolio supplies at execution.
-        named = isinstance(value, str) and value in NAMED_THRESHOLDS
-        if (not target or str(target.get("concept") or "") != TARGET_CONCEPT
-                or str(target.get("comparator") or "") not in TARGET_COMPARATORS
-                or (not named and (isinstance(value, bool)
-                                   or not isinstance(value, (int, float))
-                                   or value <= 0))):
-            return (False, TARGET_NOT_SUPPORTED,
-                    f"a milestone is served for a positive "
-                    f"{TARGET_CONCEPT} threshold compared "
-                    f"{sorted(TARGET_COMPARATORS)}; this plan states {target!r}")
-    elif target:
+                f"{operation}/{measure} is held until a live run shows the "
+                f"readings have moved to their own concepts: {held}")
+    if target_of(body):
         return (False, TARGET_NOT_SUPPORTED,
-                f"the {kind} figure takes no threshold; this plan states "
-                f"{target!r}")
+                f"{measure} takes no threshold; a milestone for one amount is "
+                f"forecast_milestone_date with a target")
+    if _plan.asks_geography(body) and _plan.region_axis(body) is None:
+        return (False, GEOGRAPHY_NOT_SUPPORTED,
+                "the Forecast tab publishes the forecast by the client's "
+                "reporting region only; a region filter or another level is "
+                "not a figure it publishes")
+    axes = _plan.grouping_axes(body)
+    if len(axes) > 1:
+        return (False, DIMENSION_NOT_SUPPORTED,
+                f"the owner publishes one breakdown at a time; this plan "
+                f"groups by {axes}")
+    if axes and axes[0] not in m.by:
+        return (False, DIMENSION_NOT_SUPPORTED,
+                f"the owner publishes {measure} by {sorted(m.by) or 'nothing'}, "
+                f"not by {axes[0]!r}")
+    filters = _plan.plan_filters(body)
+    member = _member(body)
+    if filters:
+        if member is None or axes:
+            return (False, FILTERS_NOT_SUPPORTED,
+                    "one equality on one governed value is served, and not "
+                    "together with a breakdown")
+        dim, value = member
+        if dim not in m.by:
+            return (False, FILTERS_NOT_SUPPORTED,
+                    f"the owner publishes {measure} per {sorted(m.by) or 'nothing'}, "
+                    f"not per {dim!r}")
+        governed = MODEL.dimensions[dim].values if dim in MODEL.dimensions else ()
+        if governed and value not in governed:
+            return (False, FILTERS_NOT_SUPPORTED,
+                    f"{dim}={value!r} is not a governed value "
+                    f"({', '.join(governed)})")
+    if not (axes or filters or m.value or m.series):
+        return (False, DIMENSION_NOT_SUPPORTED,
+                f"{measure} is published per {sorted(m.by)}; break it down")
+    form = str(period.get("form") or "")
+    if form not in m.periods:
+        return (False, PERIOD_NOT_SUPPORTED,
+                f"period.form={form!r} is not how {measure} is stated "
+                f"({sorted(m.periods)})")
+    ahead = period.get("periods_ahead")
+    if ahead is not None and not m.series:
+        return (False, PERIOD_NOT_SUPPORTED,
+                f"{measure} is one figure, not a projection over a horizon")
+    if m.series and period.get("labels") and ahead is None:
+        return (False, PERIOD_NOT_SUPPORTED,
+                "the horizon was stated only in words; a curve is selected "
+                "to a stated number of periods ahead, never to a label")
     return True, "", ""
 
 
@@ -372,16 +454,26 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
 class ForecastOutcome:
     """What ran, what it produced, and the evidence that proves both."""
 
-    __slots__ = ("ok", "reason", "detail", "value", "receipt")
+    __slots__ = ("ok", "reason", "detail", "value", "cells", "receipt")
 
     def __init__(self, *, ok: bool, reason: str = "", detail: str = "",
-                 value: Any = None,
+                 value: Any = None, cells: Optional[List[Dict[str, Any]]] = None,
                  receipt: Optional[Dict[str, Any]] = None) -> None:
         self.ok = ok
         self.reason = reason
         self.detail = detail
         self.value = value
+        self.cells = cells
         self.receipt = receipt or {}
+
+
+class _Refusal(Exception):
+    """An owner, or the plan against the owner's output, cannot answer."""
+
+    def __init__(self, reason: str, detail: str) -> None:
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
 
 
 def _refuse(reason: str, detail: str) -> ForecastOutcome:
@@ -439,6 +531,8 @@ def _ceiling(policy: Any) -> Optional[int]:
     return policy.max_snapshot_gap_days(WHOLE_BOOK_CONTEXT_ID)
 
 
+
+
 def execute(plan: Any, *, output_root: Any, pipeline_root: Any, client_id: str,
             run_id: Optional[str] = None,
             history_model: Optional[Mapping[str, Any]] = None,
@@ -449,10 +543,10 @@ def execute(plan: Any, *, output_root: Any, pipeline_root: Any, client_id: str,
 
     `output_root`, `pipeline_root`, `client_id` and `history_model` are the
     inputs the production request already resolved — the same ones the legacy
-    forecast route hands this same owner. `funded_frame_resolver` and
-    `semantics` are what the legacy analytical route hands the composer. This
-    module discovers none of them. `policy` is injectable for tests;
-    production reads the governed file.
+    forecast route hands the scale-up owner. `funded_frame_resolver` and
+    `semantics` are what the governed analytical context reads the funded book
+    and the latest weekly extract through. This module discovers none of them.
+    `policy` is injectable for tests; production reads the governed file.
     """
     body = _as_mapping(plan)
     kind = kind_of(body)
@@ -464,239 +558,397 @@ def execute(plan: Any, *, output_root: Any, pipeline_root: Any, client_id: str,
         return _refuse(INPUTS_UNAVAILABLE,
                        "no governed funded source root or client was supplied "
                        "for this request")
-    if kind == KIND_BALANCE:
-        return _execute_balance(
-            body, output_root=output_root, pipeline_root=pipeline_root,
-            client_id=client_id, run_id=run_id,
-            funded_frame_resolver=funded_frame_resolver, semantics=semantics,
-            policy=policy)
-    return _execute_run_rate(body, kind=kind, output_root=output_root,
-                             pipeline_root=pipeline_root, client_id=client_id,
-                             run_id=run_id, history_model=history_model,
-                             policy=policy)
+    request = {"output_root": output_root, "pipeline_root": pipeline_root,
+               "client_id": client_id, "run_id": run_id,
+               "history_model": history_model,
+               "funded_frame_resolver": funded_frame_resolver,
+               "semantics": semantics}
+    try:
+        if kind == KIND_MILESTONE:
+            return _execute_milestone(body, request=request, policy=policy)
+        return _execute_catalogue(body, request=request, policy=policy)
+    except _Refusal as refusal:
+        return _refuse(refusal.reason, refusal.detail)
 
 
-def _execute_balance(body: Mapping[str, Any], *, output_root: Any,
-                     pipeline_root: Any, client_id: str, run_id: Optional[str],
-                     funded_frame_resolver: Any,
-                     semantics: Optional[Mapping[str, Any]],
-                     policy: Any) -> ForecastOutcome:
-    """The forecast funded balance, from the composer the Forecast tab agrees with.
+# --------------------------------------------------------------------------- #
+# the views: each owner, opened with the inputs the request resolved
+# --------------------------------------------------------------------------- #
 
-    THE OWNER IS `funded_balance_forecast`, called with the context the legacy
-    analytical route builds — the governed funded frame from the resolver
-    `mi_service` supplies, the latest governed weekly extract the context
-    resolves itself, no lens (a scoped forecast never reaches here) — and it
-    delegates to `forecast_bridge.compute_forecast_bridge`, the function
-    `/mi/forecast/snapshot` calls for the React Forecast tab. So the governed
-    figure, the legacy composed answer and the tab are one definition (D6).
-
-    `question` is empty on purpose: the executor does not read it, and this
-    module never has one to give.
-    """
-    from mi_workflows.analytical import contract as contract_mod
-    from mi_workflows.analytical import executors as composer
+def _analytical_context(request: Mapping[str, Any]) -> Any:
+    """The governed context that resolves the funded book and the latest weekly
+    extract — the one the composed answer uses. `question` is empty on purpose:
+    nothing downstream reads it, and this module never has one to give."""
     from mi_workflows.analytical.context import AnalyticalContext
 
-    if funded_frame_resolver is None:
-        return _refuse(INPUTS_UNAVAILABLE,
+    resolver = request.get("funded_frame_resolver")
+    return AnalyticalContext(
+        question="", spec=None, spec_dict={},
+        semantics=dict(request.get("semantics") or {}),
+        client_id=request["client_id"], run_id=request.get("run_id"),
+        output_root=request["output_root"],
+        pipeline_root=request.get("pipeline_root"),
+        view=EXECUTION_POPULATION, lens=None,
+        frame_resolver=resolver, base_frame_resolver=resolver)
+
+
+def _open_forecast_view(request: Mapping[str, Any], **_: Any
+                        ) -> Tuple[Mapping[str, Any], Dict[str, Tuple[str, Dict[str, Any]]],
+                                   Dict[str, Any]]:
+    """The Forecast tab's envelope (`forecast_view.compose_forecast_view`), for
+    the funded book and latest extract the governed context resolves."""
+    from mi_workflows.analytical import executors as composer
+
+    if request.get("funded_frame_resolver") is None:
+        raise _Refusal(INPUTS_UNAVAILABLE,
                        "no governed funded frame resolver was supplied, and the "
-                       "composer reads the funded book through one")
-    ctx = AnalyticalContext(
-        question="", spec=None, spec_dict={}, semantics=dict(semantics or {}),
-        client_id=client_id, run_id=run_id, output_root=output_root,
-        pipeline_root=pipeline_root, view=EXECUTION_POPULATION, lens=None,
-        frame_resolver=funded_frame_resolver,
-        base_frame_resolver=funded_frame_resolver)
+                       "Forecast tab's view reads the funded book through one")
+    ctx = _analytical_context(request)
     try:
-        findings = composer.funded_balance_forecast(ctx)
+        payload = composer.forecast_view(ctx)
     except Exception as exc:                                         # noqa: BLE001
-        return _refuse(EXECUTION_FAILED, f"{type(exc).__name__}: {exc}")
-
-    def _finding(metric: str) -> Any:
-        return next((f for f in findings if f.metric == metric
-                     and f.kind == contract_mod.KIND_FORECAST), None)
-
-    forecast = _finding("forecast_funded_balance")
-    expected = _finding("weighted_expected_funded_amount")
-    if forecast is None or not forecast.ok or forecast.value is None:
-        # The composer says no governed pipeline exists. A forecast with no
-        # pipeline is not a forecast with a footnote (P0 §9).
-        return _refuse(POPULATION_INPUT_UNRESOLVED,
-                       (getattr(forecast, "note", None)
-                        or "the composer produced no forecast funded balance"))
-    evidence = dict(forecast.evidence or {})
-    expected_evidence = dict(getattr(expected, "evidence", None) or {})
-    used = {
-        "funded": {"as_of": evidence.get("fundedReportingDate"),
-                   "label": "funded book", "owner": OWNER_BRIDGE},
-        "pipeline": {"as_of": evidence.get("pipelineAsOfDate"),
-                     "label": "pipeline extract", "owner": OWNER_BRIDGE},
-    }
-    ceiling = _ceiling(policy)
-    ok, why, detail, skew = vintage_skew(used, ceiling_days=ceiling)
-    if not ok:
-        return _refuse(why, detail)
-
-    receipt: Dict[str, Any] = {
-        "capability": CAPABILITY,
-        "population_base": EXECUTION_POPULATION,
-        "operation": str(body.get("operation") or ""),
-        "measure_concept": _measure(body),
-        "measure_kind": KIND_BALANCE,
-        "result_shape": "scalar",
-        "execution_owner": OWNER_COMPOSER,
-        "calculation_owner": evidence.get("engine") or OWNER_BRIDGE,
-        "definition_decision": BALANCE_DECISION,
-        "applied_predicates": [],
-        "group_field_keys": [],
-        "inputs": used,
-        "inputs_declared": sorted(POPULATION_INPUTS),
-        "input_vintage_skew_days": skew,
-        "input_vintage_ceiling_days": ceiling,
-        "input_vintage_ceiling_owner": CEILING_OWNER,
-        "formula": evidence.get("formula"),
-        "forecast_funded_balance": forecast.value,
-        "current_funded_balance": evidence.get("fundedBalance"),
-        "weighted_expected_funded_amount":
-            evidence.get("weightedExpectedFundedAmount"),
-        "forecast_loan_count": evidence.get("forecastLoanCount"),
-        "eligible_case_count": expected_evidence.get("eligibleCaseCount"),
-        "excluded_case_count": expected_evidence.get("excludedCaseCount"),
-        "excluded_amount": expected_evidence.get("excludedFromWeightingAmount"),
-        "probability_basis": forecast.probability_basis,
-        "caveats": [str(w) for w in ctx.warnings],
-    }
-    return ForecastOutcome(ok=True, value=forecast.value, receipt=receipt)
+        raise _Refusal(EXECUTION_FAILED, f"{type(exc).__name__}: {exc}")
+    view = MODEL.views["forecast_view"]
+    inputs = {name: (name, {"as_of": _semantic_model.read(payload, spec["as_of"]),
+                            "label": spec.get("label") or name,
+                            "owner": OWNER_BRIDGE})
+              for name, spec in view.inputs.items()}
+    return payload, inputs, {"caveats": [str(w) for w in ctx.warnings]}
 
 
-def _execute_run_rate(body: Mapping[str, Any], *, kind: str, output_root: Any,
-                      pipeline_root: Any, client_id: str, run_id: Optional[str],
-                      history_model: Optional[Mapping[str, Any]],
-                      policy: Any) -> ForecastOutcome:
-    """A milestone or the completion run-rate, from the scale-up owner."""
+def _open_scale_up(request: Mapping[str, Any], threshold: Optional[float] = None
+                   ) -> Tuple[Mapping[str, Any], Dict[str, Tuple[str, Dict[str, Any]]],
+                              Dict[str, Any]]:
+    """The scale-up owner's output (`build_extrapolation`), with the reader's
+    threshold added to its ladder when a milestone names one. The run-rate's
+    own input is the SIGNAL it used: the pipeline's observed completion flow,
+    or the funded book where it fell back to funded growth."""
     from mi_agent_api import forecast_extrapolation as fx_mod
 
-    target = target_of(body) if kind == KIND_MILESTONE else None
-    scale = None
-    if target and isinstance(target.get("value"), str):
-        # D9: "scale" is the PORTFOLIO's threshold for its recorded stage —
-        # resolved here, after interpretation, and never guessed.
-        from mi_agent_api import scale_policy
-        scale, why, detail = scale_policy.resolve(client_id)
-        if scale is None:
-            return _refuse(SCALE_NOT_CONFIGURED, detail)
-        threshold = scale.threshold
-    else:
-        threshold = float(target["value"]) if target else None
     try:
         fx = fx_mod.build_extrapolation(
-            output_root, pipeline_root, client_id, run_id,
-            history_model=history_model,
+            request["output_root"], request.get("pipeline_root"),
+            request["client_id"], request.get("run_id"),
+            history_model=request.get("history_model"),
             extra_thresholds=([threshold] if threshold is not None else ()))
     except Exception as exc:                                         # noqa: BLE001
-        return _refuse(EXECUTION_FAILED, f"{type(exc).__name__}: {exc}")
-
+        raise _Refusal(EXECUTION_FAILED, f"{type(exc).__name__}: {exc}")
     rr = fx.get("completionRunRateForecast") or {}
     if not rr.get("available"):
-        return _refuse(FORECAST_UNAVAILABLE,
+        raise _Refusal(FORECAST_UNAVAILABLE,
                        f"the forecast owner published no completion run-rate: "
                        f"{rr.get('caveat') or rr.get('status') or 'unavailable'}")
     assumptions = rr.get("assumptions") or {}
     signal_kind = assumptions.get("completionSignalKind")
-    pipeline_fed = signal_kind == fx_mod.SIGNAL_OBSERVED_COMPLETION_FLOW
     if signal_kind not in (fx_mod.SIGNAL_OBSERVED_COMPLETION_FLOW,
                            fx_mod.SIGNAL_FUNDED_GROWTH_PROXY):
-        return _refuse(POPULATION_INPUT_UNRESOLVED,
+        raise _Refusal(POPULATION_INPUT_UNRESOLVED,
                        f"the owner did not say which completion signal its "
                        f"run-rate used ({signal_kind!r}), so its inputs cannot "
                        f"be stated")
-
-    funded_input = {"as_of": fx.get("fundedReportingDate"),
-                    "reporting_period": fx.get("reportingPeriod"),
-                    "label": "funded book",
-                    "owner": POPULATION_INPUTS["funded"]["owner"]}
-    pipeline_input = {"as_of": fx.get("completionFlowExtractDate"),
-                      "label": "pipeline completion flow",
-                      "owner": POPULATION_INPUTS["pipeline"]["owner"]}
-    signal_input = pipeline_input if pipeline_fed else funded_input
-
-    current = fx.get("currentFundedBalance")
-    decided: Optional[Mapping[str, Any]] = None
-    if kind == KIND_MILESTONE:
-        decided = fx_mod.milestone_answer(rr.get("milestones") or (),
-                                          threshold, current)
-        if decided["state"] == fx_mod.MILESTONE_ALREADY_REACHED:
-            used = {"funded": funded_input}
-        else:
-            used = {"funded": funded_input,
-                    ("pipeline" if pipeline_fed else "funded"): signal_input}
-        if (decided["state"] == fx_mod.MILESTONE_PROJECTED
-                and not (decided["milestone"] or {}).get("baseDate")):
-            why_not = "; ".join(rr.get("caveats") or ()) or "no positive run-rate"
-            return _refuse(FORECAST_UNAVAILABLE,
-                           f"the owner projected no base date for this "
-                           f"threshold: {why_not}")
-    else:
-        used = {("pipeline" if pipeline_fed else "funded"): signal_input}
-
-    ceiling = _ceiling(policy)
-    ok, why, detail, skew = vintage_skew(used, ceiling_days=ceiling)
-    if not ok:
-        return _refuse(why, detail)
-
-    milestone = dict((decided or {}).get("milestone") or {})
-    receipt: Dict[str, Any] = {
-        "capability": CAPABILITY,
-        "population_base": EXECUTION_POPULATION,
-        "operation": str(body.get("operation") or ""),
-        "measure_concept": _measure(body),
-        "measure_kind": kind,
-        "result_shape": "scalar",
-        "execution_owner": OWNER_EXTRAPOLATION,
+    funded = {"as_of": fx.get("fundedReportingDate"),
+              "reporting_period": fx.get("reportingPeriod"),
+              "label": "funded book",
+              "owner": POPULATION_INPUTS["funded"]["owner"]}
+    flow = {"as_of": fx.get("completionFlowExtractDate"),
+            "label": "pipeline completion flow",
+            "owner": POPULATION_INPUTS["pipeline"]["owner"]}
+    pipeline_fed = signal_kind == fx_mod.SIGNAL_OBSERVED_COMPLETION_FLOW
+    inputs = {"funded": ("funded", funded),
+              "signal": ("pipeline", flow) if pipeline_fed else ("funded", funded)}
+    notes = {
         "model": rr.get("model"),
-        # No predicate was requested (a filtered forecast is refused) and none
-        # was applied; no axis likewise. Statements, not omissions.
-        "applied_predicates": [],
-        "group_field_keys": [],
-        # WHICH INPUTS FED THIS FIGURE, each with the date it is as at, and
-        # which ones were declared but did not.
-        "inputs": {name: dict(row) for name, row in used.items()},
-        "inputs_declared": sorted(POPULATION_INPUTS),
-        "input_vintage_skew_days": skew,
-        "input_vintage_ceiling_days": ceiling,
-        "input_vintage_ceiling_owner": CEILING_OWNER,
         "completion_signal": {"kind": signal_kind,
                               "description": assumptions.get("completionSignal")},
-        "current_funded_balance": current,
-        "base_monthly_run_rate": rr.get("baseMonthlyRunRate"),
-        "annualised_run_rate": rr.get("annualisedRunRate"),
-        "scenario_monthly_run_rate": dict(rr.get("scenarioMonthlyRunRate") or {}),
         "scenario_basis": rr.get("scenarioBasis"),
         "observed_months": rr.get("observedMonths"),
         "horizon_months": assumptions.get("horizonMonths"),
         "data_sufficiency": fx.get("dataSufficiency"),
         "caveats": [str(c) for c in (rr.get("caveats") or ())],
     }
-    if kind == KIND_MILESTONE:
-        receipt.update({
-            "decision_owner": OWNER_MILESTONE_RULE,
-            "target": {"concept": str(target.get("concept")),
-                       "comparator": str(target.get("comparator")),
-                       "value": target.get("value")},
-            # The threshold the milestone was measured against — the amount
-            # the question named, or the portfolio's scale (D9).
-            "threshold_applied": threshold,
-            "gap_to_threshold": decided.get("gap"),
-            "scale": scale.to_dict() if scale is not None else None,
-            "milestone_state": decided["state"],
-            "milestone": {k: milestone.get(k) for k in (
-                "threshold", "thresholdLabel", "reached", "baseDate",
-                "downsideDate", "upsideDate", "baseMonths", "downsideMonths",
-                "upsideMonths") if k in milestone},
-        })
-        value = milestone.get("baseDate") if decided["state"] == \
-            fx_mod.MILESTONE_PROJECTED else None
+    return fx, inputs, notes
+
+
+_OPEN_VIEW = {"forecast_view": _open_forecast_view, "scale_up": _open_scale_up}
+
+
+def _used_inputs(names: Tuple[str, ...],
+                 inputs: Mapping[str, Tuple[str, Dict[str, Any]]]
+                 ) -> Dict[str, Dict[str, Any]]:
+    """The inputs a figure USED, under the name each one actually is."""
+    return {inputs[name][0]: dict(inputs[name][1]) for name in names}
+
+
+def _vintage(used: Mapping[str, Mapping[str, Any]], policy: Any
+             ) -> Tuple[Optional[int], Optional[int]]:
+    ceiling = _ceiling(policy)
+    ok, why, detail, skew = vintage_skew(used, ceiling_days=ceiling)
+    if not ok:
+        raise _Refusal(why, detail)
+    return skew, ceiling
+
+
+# --------------------------------------------------------------------------- #
+# the semantic model's figures — every one a lookup in its owner's output
+# --------------------------------------------------------------------------- #
+
+def _execute_catalogue(body: Mapping[str, Any], *, request: Mapping[str, Any],
+                       policy: Any) -> ForecastOutcome:
+    """A figure the semantic model declares, read from its owner's output.
+
+    One figure (`value`), one governed member of a breakdown, the owner's own
+    breakdown, or the owner's own curve selected to a stated horizon. The
+    semantic model says which path; this reads it. Nothing is added, divided,
+    projected or re-grouped here.
+    """
+    m = MODEL.measure(_measure(body))
+    view = MODEL.views[m.view]
+    payload, inputs, notes = _OPEN_VIEW[m.view](request)
+
+    axes = _plan.grouping_axes(body)
+    axis = axes[0] if axes else None
+    member = _member(body)
+    binding = m.by.get(axis or (member[0] if member else ""), {})
+
+    # A breakdown served only on a governed basis (the forecast by region is
+    # the reporting taxonomy on both books) is refused, never substituted.
+    for path, expected in (binding.get("requires") or {}).items():
+        got = _semantic_model.read(payload, path)
+        if got != expected:
+            raise _Refusal(FIELD_UNAVAILABLE,
+                           f"the owner published {axis or member} on "
+                           f"{got!r}, not {expected!r}; it is not served on "
+                           f"another basis")
+
+    names = m.inputs
+    if member and "members" in binding:
+        names = tuple(binding["members"][member[1]].get("inputs") or m.inputs)
+    for name in names:
+        path = view.available_when.get(name)
+        if path and not _semantic_model.read(payload, path):
+            raise _Refusal(POPULATION_INPUT_UNRESOLVED,
+                           f"{view.label} has no governed {name} input, so "
+                           f"{m.label.lower()} cannot be stated — a forecast "
+                           f"with no pipeline is not a forecast with a footnote")
+    used = _used_inputs(names, inputs)
+    skew, ceiling = _vintage(used, policy)
+
+    shape, value, cells, paths, extra = _read_figure(
+        m, payload, axis=axis, member=member, binding=binding,
+        period=body.get("period") or {})
+
+    context = {key: _semantic_model.read(payload, path)
+               for key, path in m.context.items()}
+    receipt: Dict[str, Any] = {
+        "capability": CAPABILITY,
+        "population_base": EXECUTION_POPULATION,
+        "operation": str(body.get("operation") or ""),
+        "measure_concept": m.name,
+        "measure_kind": KIND_CATALOGUE,
+        "measure_label": m.label,
+        "unit": m.unit,
+        "result_shape": shape,
+        # WHICH OWNER, AND WHICH OF ITS FIGURES: the view's function and the
+        # path of the figure in its output, as the semantic model declares it.
+        "execution_owner": view.owner,
+        "semantic_model": SEMANTIC_MODEL_FILE,
+        "read_path": paths,
+        "definition_decision": m.decision or None,
+        "applied_predicates": ([{"field": member[0], "op": "eq",
+                                 "values": [member[1]]}] if member else []),
+        "group_field_keys": [axis] if axis else [],
+        "member": ({"dimension": member[0], "value": member[1]}
+                   if member else None),
+        "inputs": used,
+        "inputs_declared": sorted(POPULATION_INPUTS),
+        "input_vintage_skew_days": skew,
+        "input_vintage_ceiling_days": ceiling,
+        "input_vintage_ceiling_owner": CEILING_OWNER,
+        # The owner's companion figures the answer states beside this one,
+        # named as the semantic model names them.
+        "context": context,
+        "explain": m.explain if (shape == "scalar" and not member) else "",
+        **context,
+        **extra,
+        **notes,
+    }
+    return ForecastOutcome(ok=True, value=value, cells=cells, receipt=receipt)
+
+
+def _read_figure(m: Any, payload: Mapping[str, Any], *, axis: Optional[str],
+                 member: Optional[Tuple[str, str]],
+                 binding: Mapping[str, Any], period: Mapping[str, Any]
+                 ) -> Tuple[str, Any, Optional[List[Dict[str, Any]]], Any, Dict[str, Any]]:
+    """`(shape, value, cells, paths read, extra receipt facts)` — lookups only."""
+    read = _semantic_model.read
+    if m.series:
+        return _read_series(m, payload, member=member, period=period)
+    if axis:
+        cells = _read_breakdown(axis, payload, binding)
+        if not cells:
+            raise _Refusal(FIELD_UNAVAILABLE,
+                           f"the owner published no {m.name} by {axis}")
+        extra = ({"axis_basis": read(payload, binding["basis"])}
+                 if binding.get("basis") else {})
+        path = binding.get("rows") or binding.get("map") or {
+            k: spec.get("value") for k, spec in (binding.get("members") or {}).items()}
+        return "grouped", None, cells, path, extra
+    if member:
+        value, path = _read_member(member, payload, binding)
+        if value is None:
+            raise _Refusal(FIELD_UNAVAILABLE,
+                           f"the owner published no {m.name} for "
+                           f"{member[0]}={member[1]!r}")
+        return "scalar", value, None, path, {}
+    value = read(payload, m.value)
+    if value is None:
+        raise _Refusal(FORECAST_UNAVAILABLE,
+                       f"the owner published no {m.name} ({m.value})")
+    return "scalar", value, None, m.value, {}
+
+
+def _read_member(member: Tuple[str, str], payload: Mapping[str, Any],
+                 binding: Mapping[str, Any]) -> Tuple[Any, str]:
+    read = _semantic_model.read
+    value = member[1]
+    if "members" in binding:
+        path = binding["members"][value]["value"]
+        return read(payload, path), path
+    if "map" in binding:
+        row = (read(payload, binding["map"]) or {}).get(value)
+        path = f"{binding['map']}.{value}.{binding['value']}"
+        return (row or {}).get(binding["value"]), path
+    rows = read(payload, binding.get("rows", "")) or []
+    found = next((r for r in rows if str(r.get(binding["key"])) == value), None)
+    path = f"{binding.get('rows')}[{binding.get('key')}={value}].{binding.get('value')}"
+    return (found or {}).get(binding.get("value")), path
+
+
+def _read_breakdown(axis: str, payload: Mapping[str, Any],
+                    binding: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    read = _semantic_model.read
+    if "members" in binding:
+        return [{axis: key, "value": read(payload, spec["value"])}
+                for key, spec in binding["members"].items()]
+    if "map" in binding:
+        return [{axis: str(key), "value": (row or {}).get(binding["value"])}
+                for key, row in (read(payload, binding["map"]) or {}).items()]
+    also = tuple(binding.get("also") or ())
+    return [{axis: str(row.get(binding["key"])), "value": row.get(binding["value"]),
+             **{name: row.get(name) for name in also}}
+            for row in (read(payload, binding["rows"]) or [])]
+
+
+def _read_series(m: Any, payload: Mapping[str, Any], *,
+                 member: Optional[Tuple[str, str]], period: Mapping[str, Any]
+                 ) -> Tuple[str, Any, List[Dict[str, Any]], Any, Dict[str, Any]]:
+    """The owner's curve: its rows, SELECTED to the stated horizon — never
+    re-projected, extended or interpolated. A horizon beyond the owner's
+    published one is refused, because nothing here can see past it."""
+    read = _semantic_model.read
+    series = m.series
+    rows = read(payload, series["rows"]) or []
+    published = read(payload, series["horizon"])
+    ahead = period.get("periods_ahead")
+    if ahead is not None:
+        if published is None or ahead > published:
+            raise _Refusal(PERIOD_NOT_SUPPORTED,
+                           f"the owner projects {published} month(s) ahead; "
+                           f"{ahead} were asked for, and a curve is not "
+                           f"extended past its owner's horizon")
+        rows = [r for r in rows if 1 <= (r.get(series["step"]) or 0) <= ahead]
+    columns = tuple((m.by.get("forecast_scenario") or {}).get("columns") or ())
+    if member:
+        columns = (member[1],)
+    cells = [{"period": r.get(series["period"]), "offset": r.get(series["step"]),
+              **{c: r.get(c) for c in columns}} for r in rows]
+    if not cells:
+        raise _Refusal(FORECAST_UNAVAILABLE,
+                       f"the owner published no {m.name} rows")
+    extra = {"series_columns": list(columns),
+             "horizon": {"published_months": published, "periods_ahead": ahead}}
+    return "series", None, cells, series["rows"], extra
+
+
+# --------------------------------------------------------------------------- #
+# the milestone for a stated threshold — the owner's rule decides
+# --------------------------------------------------------------------------- #
+
+def _execute_milestone(body: Mapping[str, Any], *, request: Mapping[str, Any],
+                       policy: Any) -> ForecastOutcome:
+    """A milestone for the threshold the question named, from the scale-up
+    owner, decided by its own rule (`milestone_answer`)."""
+    from mi_agent_api import forecast_extrapolation as fx_mod
+
+    target = target_of(body) or {}
+    scale = None
+    if isinstance(target.get("value"), str):
+        # D9: "scale" is the PORTFOLIO's threshold for its recorded stage —
+        # resolved here, after interpretation, and never guessed.
+        from mi_agent_api import scale_policy
+        scale, why, detail = scale_policy.resolve(request["client_id"])
+        if scale is None:
+            raise _Refusal(SCALE_NOT_CONFIGURED, detail)
+        threshold = scale.threshold
     else:
-        value = rr.get("baseMonthlyRunRate")
+        threshold = float(target["value"])
+    fx, inputs, notes = _open_scale_up(request, threshold=threshold)
+    rr = fx.get("completionRunRateForecast") or {}
+
+    current = fx.get("currentFundedBalance")
+    decided = fx_mod.milestone_answer(rr.get("milestones") or (), threshold, current)
+    if decided["state"] == fx_mod.MILESTONE_ALREADY_REACHED:
+        used = _used_inputs(("funded",), inputs)
+    else:
+        used = _used_inputs(("funded", "signal"), inputs)
+    if (decided["state"] == fx_mod.MILESTONE_PROJECTED
+            and not (decided["milestone"] or {}).get("baseDate")):
+        why_not = "; ".join(rr.get("caveats") or ()) or "no positive run-rate"
+        raise _Refusal(FORECAST_UNAVAILABLE,
+                       f"the owner projected no base date for this threshold: "
+                       f"{why_not}")
+    skew, ceiling = _vintage(used, policy)
+
+    milestone = dict(decided.get("milestone") or {})
+    receipt: Dict[str, Any] = {
+        "capability": CAPABILITY,
+        "population_base": EXECUTION_POPULATION,
+        "operation": str(body.get("operation") or ""),
+        "measure_concept": _measure(body),
+        "measure_kind": KIND_MILESTONE,
+        "result_shape": "scalar",
+        "execution_owner": OWNER_EXTRAPOLATION,
+        "decision_owner": OWNER_MILESTONE_RULE,
+        # No predicate was requested (a filtered milestone is refused) and none
+        # was applied; no axis likewise. Statements, not omissions.
+        "applied_predicates": [],
+        "group_field_keys": [],
+        # WHICH INPUTS FED THIS FIGURE, each with the date it is as at, and
+        # which ones were declared but did not.
+        "inputs": used,
+        "inputs_declared": sorted(POPULATION_INPUTS),
+        "input_vintage_skew_days": skew,
+        "input_vintage_ceiling_days": ceiling,
+        "input_vintage_ceiling_owner": CEILING_OWNER,
+        "current_funded_balance": current,
+        "base_monthly_run_rate": rr.get("baseMonthlyRunRate"),
+        "annualised_run_rate": rr.get("annualisedRunRate"),
+        "scenario_monthly_run_rate": dict(rr.get("scenarioMonthlyRunRate") or {}),
+        "target": {"concept": str(target.get("concept")),
+                   "comparator": str(target.get("comparator")),
+                   "value": target.get("value")},
+        # The threshold the milestone was measured against — the amount the
+        # question named, or the portfolio's scale (D9).
+        "threshold_applied": threshold,
+        "gap_to_threshold": decided.get("gap"),
+        "scale": scale.to_dict() if scale is not None else None,
+        "milestone_state": decided["state"],
+        "milestone": {k: milestone.get(k) for k in (
+            "threshold", "thresholdLabel", "reached", "baseDate",
+            "downsideDate", "upsideDate", "baseMonths", "downsideMonths",
+            "upsideMonths") if k in milestone},
+        **notes,
+    }
+    value = (milestone.get("baseDate")
+             if decided["state"] == fx_mod.MILESTONE_PROJECTED else None)
     return ForecastOutcome(ok=True, value=value, receipt=receipt)
