@@ -161,3 +161,21 @@ intents added beside the baseline's.
                 off — operator confirmed. 19:30 UTC 6df5e712 deployed (run 36619090442)
                 (vocabulary 2.9.0: exclusions' population, `lapsed`, the
                 answer standard, region basis)
+    2026-09-29  19:37:49 UTC follow-up spot check on 6df5e712 (vocabulary
+                2.9.0), 13 questions; read back by runs 36622570069 and
+                36622780280 (the reader now prints why each unserved
+                question fell). 8/13 served NEW: the answer standard
+                (money, leaders, region basis) confirmed live on funded,
+                pipeline and forecast answers; forecast_003 and
+                forecast_019 served. Not served: forecast_018 (reason
+                not_in [completed, withdrawn] — 'active' pipeline; one
+                equality only), forecast_020 (read as pipeline_stage =
+                WITHDRAWN; the pipeline runtime takes no stage filter),
+                forecast_runoff_002 (clarify: no pipeline concept found for
+                'lapsed'), forecast_014 (clarify: 'completion basis' has no
+                concept — batch 2b), forecast_scale_006 (held shape
+                point_in_time/forecast_completion_rate; reads correctly).
+                Hold: [98] has left the shape, [113] reads its own concept;
+                [121] and [134] (the conversion-rate misreads) not yet
+                re-asked — the hold stays until they are
+
