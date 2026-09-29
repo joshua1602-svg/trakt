@@ -74,8 +74,10 @@
         £100MM (at £80MM, scale is £100MM, £20MM away). A question naming
         "scale" or "securitisation scale" resolves to the portfolio's configured
         threshold; with none configured the agent asks. Owner decision.
-        Open for the build: AUM proposed as the funded balance across the
-        client's portfolios, and the SPV's stage recorded in client config.
+        Assets under management = the funded balance across all the client's
+        portfolios (owner, 2026-09-29). A portfolio's stage — pre-securitisation
+        SPV or established — is recorded in the client configuration (owner,
+        2026-09-29; the field is to be added — not yet built).
 
     D10 WEIGHTED-AVERAGE VALUATION                           SETTLED 2026-09-29
         Answered where the book carries valuations: it is the dashboard's
