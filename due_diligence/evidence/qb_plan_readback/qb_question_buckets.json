@@ -1,0 +1,1229 @@
+{
+ "what_this_is": "The owner's 135-question bank sorted into what the agent MUST answer correctly, what is NICE TO HAVE, and what it is FINE TO DECLINE or ask back. The pass mark for the proof stage. DRAFT — owner review pending.",
+ "status": "draft",
+ "buckets": {
+  "must_answer": [
+   "funded_kpi_001",
+   "funded_kpi_002",
+   "funded_kpi_003",
+   "funded_kpi_004",
+   "funded_kpi_005",
+   "funded_kpi_006",
+   "funded_kpi_007",
+   "funded_kpi_008",
+   "funded_kpi_009",
+   "funded_kpi_011",
+   "funded_kpi_012",
+   "funded_kpi_013",
+   "funded_kpi_015",
+   "funded_kpi_017",
+   "funded_kpi_018",
+   "funded_kpi_020",
+   "funded_breakdown_1d_001",
+   "funded_breakdown_1d_002",
+   "funded_breakdown_1d_004",
+   "funded_breakdown_1d_006",
+   "funded_breakdown_1d_009",
+   "funded_breakdown_1d_014",
+   "funded_breakdown_1d_015",
+   "funded_breakdown_1d_017",
+   "funded_breakdown_1d_019",
+   "funded_breakdown_1d_021",
+   "funded_breakdown_1d_022",
+   "funded_breakdown_1d_023",
+   "funded_breakdown_1d_024",
+   "pipeline_001",
+   "pipeline_002",
+   "pipeline_003",
+   "pipeline_004",
+   "pipeline_005",
+   "pipeline_006",
+   "pipeline_007",
+   "pipeline_008",
+   "pipeline_009",
+   "pipeline_010",
+   "pipeline_011",
+   "pipeline_012",
+   "pipeline_013",
+   "pipeline_014",
+   "pipeline_016",
+   "pipeline_017",
+   "pipeline_018",
+   "pipeline_020",
+   "pipeline_021",
+   "pipeline_024",
+   "pipeline_evolution_001",
+   "pipeline_evolution_002",
+   "pipeline_evolution_003",
+   "pipeline_evolution_004",
+   "pipeline_evolution_007",
+   "pipeline_evolution_008",
+   "pipeline_evolution_011",
+   "pipeline_evolution_012",
+   "pipeline_evolution_013",
+   "pipeline_evolution_014",
+   "forecast_001",
+   "forecast_002",
+   "forecast_003",
+   "forecast_004",
+   "forecast_010",
+   "forecast_011",
+   "forecast_012",
+   "forecast_013",
+   "forecast_scale_001",
+   "forecast_scale_002",
+   "forecast_scale_003",
+   "forecast_scale_004",
+   "forecast_scale_005",
+   "forecast_scale_006",
+   "forecast_scale_007",
+   "forecast_scale_008",
+   "forecast_scale_009",
+   "forecast_scale_010",
+   "forecast_scale_011",
+   "forecast_scale_012",
+   "forecast_scale_016",
+   "forecast_scale_017",
+   "forecast_scale_021",
+   "forecast_scale_022",
+   "pipeline_strat_001",
+   "pipeline_strat_002",
+   "forecast_runoff_001",
+   "forecast_runoff_003",
+   "forecast_runoff_004"
+  ],
+  "nice_to_have": [
+   "funded_kpi_010",
+   "funded_kpi_014",
+   "funded_kpi_016",
+   "funded_kpi_019",
+   "funded_breakdown_1d_005",
+   "funded_breakdown_1d_007",
+   "funded_breakdown_1d_008",
+   "funded_breakdown_1d_010",
+   "funded_breakdown_1d_011",
+   "funded_breakdown_1d_012",
+   "funded_breakdown_1d_013",
+   "funded_breakdown_1d_016",
+   "funded_breakdown_1d_018",
+   "funded_breakdown_1d_020",
+   "pipeline_019",
+   "pipeline_evolution_005",
+   "pipeline_evolution_006",
+   "pipeline_evolution_010",
+   "pipeline_evolution_015",
+   "forecast_005",
+   "forecast_006",
+   "forecast_007",
+   "forecast_008",
+   "forecast_009",
+   "forecast_019",
+   "forecast_scale_013",
+   "forecast_scale_014",
+   "forecast_scale_015",
+   "forecast_scale_019",
+   "forecast_scale_020",
+   "pipeline_strat_003"
+  ],
+  "fine_to_decline": [
+   "funded_breakdown_1d_003",
+   "funded_breakdown_1d_025",
+   "pipeline_015",
+   "pipeline_022",
+   "pipeline_023",
+   "pipeline_evolution_009",
+   "forecast_014",
+   "forecast_015",
+   "forecast_016",
+   "forecast_017",
+   "forecast_018",
+   "forecast_020",
+   "forecast_021",
+   "forecast_022",
+   "forecast_scale_018",
+   "forecast_runoff_002"
+  ]
+ },
+ "questions": {
+  "funded_kpi_001": {
+   "n": 1,
+   "question": "What is the funded balance?",
+   "bucket": "must_answer",
+   "why": "Headline balance",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_kpi_002": {
+   "n": 2,
+   "question": "What is the current funded balance?",
+   "bucket": "must_answer",
+   "why": "Headline balance",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_003": {
+   "n": 3,
+   "question": "What is total current outstanding balance?",
+   "bucket": "must_answer",
+   "why": "Headline balance",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_004": {
+   "n": 4,
+   "question": "How many funded loans are there?",
+   "bucket": "must_answer",
+   "why": "Loan count",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_005": {
+   "n": 5,
+   "question": "How many loans are in the funded book?",
+   "bucket": "must_answer",
+   "why": "Loan count",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_006": {
+   "n": 6,
+   "question": "What is the weighted average current LTV?",
+   "bucket": "must_answer",
+   "why": "WA LTV — the key ERM risk figure",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_007": {
+   "n": 7,
+   "question": "What is WA LTV?",
+   "bucket": "must_answer",
+   "why": "WA LTV",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_008": {
+   "n": 8,
+   "question": "What is the weighted average interest rate?",
+   "bucket": "must_answer",
+   "why": "WA interest rate",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_009": {
+   "n": 9,
+   "question": "What is WA current interest rate?",
+   "bucket": "must_answer",
+   "why": "WA interest rate",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_010": {
+   "n": 10,
+   "question": "What is the simple average interest rate?",
+   "bucket": "nice_to_have",
+   "why": "The weighted average is the standard; a simple average is secondary",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_011": {
+   "n": 11,
+   "question": "What is the average borrower age?",
+   "bucket": "must_answer",
+   "why": "Borrower age drives ERM risk",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_012": {
+   "n": 12,
+   "question": "What is the weighted average borrower age?",
+   "bucket": "must_answer",
+   "why": "WA age is a standard pool statistic",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_013": {
+   "n": 13,
+   "question": "What is the average loan balance?",
+   "bucket": "must_answer",
+   "why": "Average loan size",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_014": {
+   "n": 14,
+   "question": "What is the median loan balance?",
+   "bucket": "nice_to_have",
+   "why": "Useful, secondary to the average",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_kpi_015": {
+   "n": 15,
+   "question": "What is the largest loan?",
+   "bucket": "must_answer",
+   "why": "Largest loan — single-name concentration",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_kpi_016": {
+   "n": 16,
+   "question": "What is the smallest loan?",
+   "bucket": "nice_to_have",
+   "why": "Rarely decision-relevant",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_kpi_017": {
+   "n": 17,
+   "question": "What is the total original balance?",
+   "bucket": "must_answer",
+   "why": "Original balance — standard pool figure",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_018": {
+   "n": 18,
+   "question": "What is the current valuation amount?",
+   "bucket": "must_answer",
+   "why": "Property value — collateral cover",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_019": {
+   "n": 19,
+   "question": "What is the average current valuation?",
+   "bucket": "nice_to_have",
+   "why": "Secondary to the weighted average",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_kpi_020": {
+   "n": 20,
+   "question": "What is the weighted average current valuation?",
+   "bucket": "must_answer",
+   "why": "The dashboard's valuation tile (D10)",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_001": {
+   "n": 21,
+   "question": "Show balance by region.",
+   "bucket": "must_answer",
+   "why": "Standard strat table",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_002": {
+   "n": 22,
+   "question": "Show funded balance by collateral region.",
+   "bucket": "must_answer",
+   "why": "Same as balance by region (property location)",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_003": {
+   "n": 23,
+   "question": "Show balance by obligor region.",
+   "bucket": "fine_to_decline",
+   "why": "The book does not hold the borrower's region; declining is correct",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_004": {
+   "n": 24,
+   "question": "Show loan count by region.",
+   "bucket": "must_answer",
+   "why": "Standard strat table",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_005": {
+   "n": 25,
+   "question": "Show average loan balance by region.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_006": {
+   "n": 26,
+   "question": "Show WA LTV by region.",
+   "bucket": "must_answer",
+   "why": "Risk concentration by region",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_007": {
+   "n": 27,
+   "question": "Show WA interest rate by region.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_008": {
+   "n": 28,
+   "question": "Show average borrower age by region.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_009": {
+   "n": 29,
+   "question": "Show balance by broker.",
+   "bucket": "must_answer",
+   "why": "Broker concentration",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_010": {
+   "n": 30,
+   "question": "Show loan count by broker.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_011": {
+   "n": 31,
+   "question": "Show average loan balance by broker.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_012": {
+   "n": 32,
+   "question": "Show WA LTV by broker.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_013": {
+   "n": 33,
+   "question": "Show WA interest rate by broker.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_014": {
+   "n": 34,
+   "question": "Show balance by LTV bucket.",
+   "bucket": "must_answer",
+   "why": "Standard strat table",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_015": {
+   "n": 35,
+   "question": "Show loan count by LTV bucket.",
+   "bucket": "must_answer",
+   "why": "Standard strat table",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_016": {
+   "n": 36,
+   "question": "Show WA interest rate by LTV bucket.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_017": {
+   "n": 37,
+   "question": "Show balance by borrower age bucket.",
+   "bucket": "must_answer",
+   "why": "Standard ERM strat table",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_018": {
+   "n": 38,
+   "question": "Show loan count by borrower age bucket.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_019": {
+   "n": 39,
+   "question": "Show WA LTV by borrower age bucket.",
+   "bucket": "must_answer",
+   "why": "LTV by age is the core ERM (no-negative-equity) risk view",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_020": {
+   "n": 40,
+   "question": "Show balance by origination channel.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_021": {
+   "n": 41,
+   "question": "Show balance by product type.",
+   "bucket": "must_answer",
+   "why": "Standard strat table",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_022": {
+   "n": 42,
+   "question": "Show balance by account status.",
+   "bucket": "must_answer",
+   "why": "Performance / status of the book",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_023": {
+   "n": 43,
+   "question": "Show balance by borrower structure.",
+   "bucket": "must_answer",
+   "why": "Single vs joint — standard ERM strat",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "funded_breakdown_1d_024": {
+   "n": 44,
+   "question": "Show balance by property type.",
+   "bucket": "must_answer",
+   "why": "Standard ERM strat table",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "funded_breakdown_1d_025": {
+   "n": 45,
+   "question": "Show balance by occupancy type.",
+   "bucket": "fine_to_decline",
+   "why": "The book does not hold occupancy; ERM loans are owner-occupied by design",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_001": {
+   "n": 46,
+   "question": "What is the pipeline amount?",
+   "bucket": "must_answer",
+   "why": "Headline pipeline",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_002": {
+   "n": 47,
+   "question": "How many pipeline cases are there?",
+   "bucket": "must_answer",
+   "why": "Headline pipeline",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_003": {
+   "n": 48,
+   "question": "What is the weighted expected funded amount?",
+   "bucket": "must_answer",
+   "why": "Weighted pipeline — the Pipeline tab's headline",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_004": {
+   "n": 49,
+   "question": "What is the pipeline conversion rate?",
+   "bucket": "must_answer",
+   "why": "Conversion is a core pipeline KPI — NOT BUILT yet (D2a)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_005": {
+   "n": 50,
+   "question": "What is the pipeline amount by stage?",
+   "bucket": "must_answer",
+   "why": "Pipeline by stage",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_006": {
+   "n": 51,
+   "question": "What is the pipeline case count by stage?",
+   "bucket": "must_answer",
+   "why": "Pipeline by stage",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_007": {
+   "n": 52,
+   "question": "What is the pipeline amount by broker?",
+   "bucket": "must_answer",
+   "why": "Broker concentration",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_008": {
+   "n": 53,
+   "question": "What is the pipeline amount by region?",
+   "bucket": "must_answer",
+   "why": "Pipeline by region",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_009": {
+   "n": 54,
+   "question": "What is the pipeline amount by expected completion month?",
+   "bucket": "must_answer",
+   "why": "When the pipeline lands",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_010": {
+   "n": 55,
+   "question": "Which broker has the largest pipeline?",
+   "bucket": "must_answer",
+   "why": "Top broker",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_011": {
+   "n": 56,
+   "question": "Which stage has the largest pipeline?",
+   "bucket": "must_answer",
+   "why": "Largest stage",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_012": {
+   "n": 57,
+   "question": "How much pipeline is expected to complete next month?",
+   "bucket": "must_answer",
+   "why": "Next month's completions",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_013": {
+   "n": 58,
+   "question": "How much pipeline is overdue?",
+   "bucket": "must_answer",
+   "why": "Overdue pipeline",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_014": {
+   "n": 59,
+   "question": "How much pipeline is current month?",
+   "bucket": "must_answer",
+   "why": "This month's completions",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_015": {
+   "n": 60,
+   "question": "Show overdue pipeline cases.",
+   "bucket": "fine_to_decline",
+   "why": "Asks for a list of cases; the agent gives totals (the overdue amount), not case lists",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_016": {
+   "n": 61,
+   "question": "Show pipeline by expected completion date.",
+   "bucket": "must_answer",
+   "why": "When the pipeline lands",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_017": {
+   "n": 62,
+   "question": "Show pipeline stage distribution.",
+   "bucket": "must_answer",
+   "why": "Same as pipeline by stage",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_018": {
+   "n": 63,
+   "question": "Show pipeline weighted expected amount by stage.",
+   "bucket": "must_answer",
+   "why": "Weighted pipeline by stage",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_019": {
+   "n": 64,
+   "question": "Show pipeline weighted expected amount by broker.",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_020": {
+   "n": 65,
+   "question": "Show pipeline amount by product.",
+   "bucket": "must_answer",
+   "why": "Pipeline by product",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_021": {
+   "n": 66,
+   "question": "Show pipeline amount by LTV bucket.",
+   "bucket": "must_answer",
+   "why": "Pipeline by LTV band",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_022": {
+   "n": 67,
+   "question": "Show pipeline amount by age bucket.",
+   "bucket": "fine_to_decline",
+   "why": "Unclear whose age (borrower or case) — asking back is right",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_023": {
+   "n": 68,
+   "question": "Show pipeline amount by source file.",
+   "bucket": "fine_to_decline",
+   "why": "A technical field (which file), not an MI question",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_024": {
+   "n": 69,
+   "question": "Show current month pipeline completions expected.",
+   "bucket": "must_answer",
+   "why": "This month's completions",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_001": {
+   "n": 70,
+   "question": "Show pipeline amount evolution by week.",
+   "bucket": "must_answer",
+   "why": "Pipeline trend",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_002": {
+   "n": 71,
+   "question": "Show pipeline amount evolution by month.",
+   "bucket": "must_answer",
+   "why": "Pipeline trend",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_003": {
+   "n": 72,
+   "question": "Show pipeline case count evolution by week.",
+   "bucket": "must_answer",
+   "why": "Pipeline trend",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_004": {
+   "n": 73,
+   "question": "Show pipeline case count evolution by month.",
+   "bucket": "must_answer",
+   "why": "Pipeline trend",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_005": {
+   "n": 74,
+   "question": "Show pipeline amount by stage over time.",
+   "bucket": "nice_to_have",
+   "why": "Analyst trend view",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_006": {
+   "n": 75,
+   "question": "Show pipeline cases by stage over time.",
+   "bucket": "nice_to_have",
+   "why": "Analyst trend view",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_007": {
+   "n": 76,
+   "question": "Show expected completions by month.",
+   "bucket": "must_answer",
+   "why": "When the pipeline lands",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_008": {
+   "n": 77,
+   "question": "Show weighted expected funded amount by month.",
+   "bucket": "must_answer",
+   "why": "Weighted pipeline by month",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_evolution_009": {
+   "n": 78,
+   "question": "Show pipeline conversion basis over time.",
+   "bucket": "fine_to_decline",
+   "why": "Method detail over time — not an MI question",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_010": {
+   "n": 79,
+   "question": "Show pipeline by broker over time.",
+   "bucket": "nice_to_have",
+   "why": "Analyst trend view",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_011": {
+   "n": 80,
+   "question": "Show pipeline by stage for October and November.",
+   "bucket": "must_answer",
+   "why": "Month-on-month pipeline",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_012": {
+   "n": 81,
+   "question": "Compare October and November pipeline amount.",
+   "bucket": "must_answer",
+   "why": "Month-on-month pipeline",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_013": {
+   "n": 82,
+   "question": "Compare latest pipeline with prior pipeline.",
+   "bucket": "must_answer",
+   "why": "Week-on-week change — a routine management question",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_014": {
+   "n": 83,
+   "question": "Show pipeline growth from October to November.",
+   "bucket": "must_answer",
+   "why": "Month-on-month growth — a routine management question",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_evolution_015": {
+   "n": 84,
+   "question": "Show stage migration over time.",
+   "bucket": "nice_to_have",
+   "why": "Stage migration — analyst view (stage movement is built)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_001": {
+   "n": 85,
+   "question": "What is the forecast funded balance?",
+   "bucket": "must_answer",
+   "why": "Forecast funded balance",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_002": {
+   "n": 86,
+   "question": "What is funded balance plus weighted pipeline?",
+   "bucket": "must_answer",
+   "why": "Forecast funded balance",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_003": {
+   "n": 87,
+   "question": "What is the expected funded balance?",
+   "bucket": "must_answer",
+   "why": "Forecast funded balance",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_004": {
+   "n": 88,
+   "question": "What is the weighted expected pipeline contribution?",
+   "bucket": "must_answer",
+   "why": "Pipeline's part of the forecast",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_005": {
+   "n": 89,
+   "question": "What is the forecast loan count?",
+   "bucket": "nice_to_have",
+   "why": "Secondary forecast figure",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_006": {
+   "n": 90,
+   "question": "Show forecast balance by region.",
+   "bucket": "nice_to_have",
+   "why": "Secondary forecast cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_007": {
+   "n": 91,
+   "question": "Show forecast balance by broker.",
+   "bucket": "nice_to_have",
+   "why": "Not on the Forecast tab",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_008": {
+   "n": 92,
+   "question": "Show forecast balance by LTV bucket.",
+   "bucket": "nice_to_have",
+   "why": "Secondary forecast cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_009": {
+   "n": 93,
+   "question": "Show forecast balance by expected completion month.",
+   "bucket": "nice_to_have",
+   "why": "Secondary forecast cut",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_010": {
+   "n": 94,
+   "question": "How much of the forecast comes from funded book?",
+   "bucket": "must_answer",
+   "why": "The forecast bridge",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_011": {
+   "n": 95,
+   "question": "How much of the forecast comes from pipeline?",
+   "bucket": "must_answer",
+   "why": "The forecast bridge",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_012": {
+   "n": 96,
+   "question": "What is the forecast bridge?",
+   "bucket": "must_answer",
+   "why": "The forecast bridge",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_013": {
+   "n": 97,
+   "question": "Show funded vs pipeline contribution.",
+   "bucket": "must_answer",
+   "why": "The forecast bridge",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_014": {
+   "n": 98,
+   "question": "Show forecast completion basis.",
+   "bucket": "fine_to_decline",
+   "why": "Vague ('basis' of what?) — asking back is right",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_015": {
+   "n": 99,
+   "question": "Show historical conversion basis.",
+   "bucket": "fine_to_decline",
+   "why": "Method detail, not an MI figure",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_016": {
+   "n": 100,
+   "question": "Which stages use historical rates?",
+   "bucket": "fine_to_decline",
+   "why": "Method configuration detail",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_017": {
+   "n": 101,
+   "question": "Which stages use config fallback rates?",
+   "bucket": "fine_to_decline",
+   "why": "Method configuration detail",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_018": {
+   "n": 102,
+   "question": "How much active pipeline is excluded from weighting?",
+   "bucket": "fine_to_decline",
+   "why": "Analyst jargon ('active' exclusions)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_019": {
+   "n": 103,
+   "question": "How much pipeline is excluded because of missing probability?",
+   "bucket": "nice_to_have",
+   "why": "Forecast disclosure detail",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_020": {
+   "n": 104,
+   "question": "How much pipeline is excluded because of withdrawn status?",
+   "bucket": "fine_to_decline",
+   "why": "Analyst jargon; 'pipeline by stage' covers it",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_021": {
+   "n": 105,
+   "question": "Show forecast balance by stage.",
+   "bucket": "fine_to_decline",
+   "why": "The funded book has no stage — asking back is right",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_022": {
+   "n": 106,
+   "question": "Show forecast balance by broker and stage.",
+   "bucket": "fine_to_decline",
+   "why": "The funded book has no stage or broker split in the forecast",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_001": {
+   "n": 107,
+   "question": "When do we reach £25m funded balance?",
+   "bucket": "must_answer",
+   "why": "Scale milestone",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_002": {
+   "n": 108,
+   "question": "When do we reach £50m funded balance?",
+   "bucket": "must_answer",
+   "why": "Scale milestone",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_003": {
+   "n": 109,
+   "question": "When do we reach £75m funded balance?",
+   "bucket": "must_answer",
+   "why": "Scale milestone",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_004": {
+   "n": 110,
+   "question": "When do we reach £100m funded balance?",
+   "bucket": "must_answer",
+   "why": "Scale milestone",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_005": {
+   "n": 111,
+   "question": "When do we reach £150m funded balance?",
+   "bucket": "must_answer",
+   "why": "Scale milestone",
+   "served_by_at_last_check": "new path",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_006": {
+   "n": 112,
+   "question": "What is the current completion run rate?",
+   "bucket": "must_answer",
+   "why": "Run-rate — the old path answers it today; the new path is on hold",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_007": {
+   "n": 113,
+   "question": "What is the annualised completion run rate?",
+   "bucket": "must_answer",
+   "why": "Run-rate",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_008": {
+   "n": 114,
+   "question": "Show the funded balance extrapolation curve.",
+   "bucket": "must_answer",
+   "why": "Scale-up curve",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_009": {
+   "n": 115,
+   "question": "Show the scale-up forecast.",
+   "bucket": "must_answer",
+   "why": "Scale-up curve",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_010": {
+   "n": 116,
+   "question": "What is the downside forecast?",
+   "bucket": "must_answer",
+   "why": "Scenario band",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_011": {
+   "n": 117,
+   "question": "What is the base forecast?",
+   "bucket": "must_answer",
+   "why": "Scenario band",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_012": {
+   "n": 118,
+   "question": "What is the upside forecast?",
+   "bucket": "must_answer",
+   "why": "Scenario band",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_013": {
+   "n": 119,
+   "question": "How much pipeline is needed to reach £100m?",
+   "bucket": "nice_to_have",
+   "why": "A new calculation (pipeline needed for a target)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_014": {
+   "n": 120,
+   "question": "What happens if completion run rate falls by 25%?",
+   "bucket": "nice_to_have",
+   "why": "What-if scenario — NOT BUILT (D2b)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_015": {
+   "n": 121,
+   "question": "What completion rate is assumed from KFI to completion?",
+   "bucket": "nice_to_have",
+   "why": "The forecast's assumed conversion — NOT BUILT (D2a)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_016": {
+   "n": 122,
+   "question": "What is the expected time to securitisation scale?",
+   "bucket": "must_answer",
+   "why": "Time to securitisation scale — needs the portfolio's stage set (D9)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_017": {
+   "n": 123,
+   "question": "Show milestone dates to funding thresholds.",
+   "bucket": "must_answer",
+   "why": "Milestone table",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_018": {
+   "n": 124,
+   "question": "Compare current weighted pipeline forecast with run-rate extrapolation.",
+   "bucket": "fine_to_decline",
+   "why": "A method comparison, not an MI figure",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_019": {
+   "n": 125,
+   "question": "What is the 8-week completion run rate?",
+   "bucket": "nice_to_have",
+   "why": "Run-rate variant",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_020": {
+   "n": 126,
+   "question": "What is the 12-week completion run rate?",
+   "bucket": "nice_to_have",
+   "why": "Run-rate variant",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_scale_021": {
+   "n": 127,
+   "question": "Project funded balance over the next twelve months.",
+   "bucket": "must_answer",
+   "why": "12-month projection",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_scale_022": {
+   "n": 128,
+   "question": "When does the book reach scale?",
+   "bucket": "must_answer",
+   "why": "Time to scale — needs the portfolio's stage set (D9)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "pipeline_strat_001": {
+   "n": 129,
+   "question": "Show pipeline amount by product.",
+   "bucket": "must_answer",
+   "why": "Pipeline by product",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_strat_002": {
+   "n": 130,
+   "question": "Show pipeline amount by LTV band.",
+   "bucket": "must_answer",
+   "why": "Pipeline by LTV band",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "pipeline_strat_003": {
+   "n": 131,
+   "question": "What is the pipeline case count by product?",
+   "bucket": "nice_to_have",
+   "why": "Secondary cut",
+   "served_by_at_last_check": "new path",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_runoff_001": {
+   "n": 132,
+   "question": "What is the weighted expected pipeline?",
+   "bucket": "must_answer",
+   "why": "Weighted pipeline",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_runoff_002": {
+   "n": 133,
+   "question": "How much of the pipeline has lapsed past its stage window?",
+   "bucket": "fine_to_decline",
+   "why": "Analyst jargon ('stage window')",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "today's spot checks (6df5e712 / 438932ac)"
+  },
+  "forecast_runoff_003": {
+   "n": 134,
+   "question": "What is the offer to completion pull-through rate?",
+   "bucket": "must_answer",
+   "why": "Pull-through is the standard mortgage pipeline KPI — NOT BUILT yet (D2a)",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  },
+  "forecast_runoff_004": {
+   "n": 135,
+   "question": "When are pipeline cases expected to complete?",
+   "bucket": "must_answer",
+   "why": "When the pipeline lands",
+   "served_by_at_last_check": "old path / declined",
+   "last_checked": "this morning's full run (ce5d1276)"
+  }
+ }
+}
