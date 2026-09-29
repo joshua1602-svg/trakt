@@ -44,11 +44,20 @@ everyone else is served exactly as before.
 `mi_agent_api/run_production_bank.sh` asks the same 135 questions as
 `qb_full.txt` (the six categories that select exactly `qb_questions.json`; the
 runner's default adds the limits categories, 160 questions). It refuses, before
-asking anything, when the deployed vocabulary is not 2.3.0, when the canary is
+asking anything, when the deployed vocabulary is older than 2.6.0, when the canary is
 not on for that principal, or when the evidence sink is unset. The run is under
 `nohup`: Ctrl-C or closing the tab stops the watching, not the run. The log,
 `/home/qb_plan_rerun_<stamp>.log`, starts with the START TIME (UTC) and is what
 to hand back; the `.jsonl` beside it holds the full answers.
+
+**Spot check first (catalogue batch 1 and D12).** Asks only the questions the
+new pipeline concepts are for — 16 model interpretations, not 135:
+
+    bash mi_agent_api/run_production_bank.sh <your Entra object id> pipeline_003,pipeline_007,pipeline_008,pipeline_009,pipeline_010,pipeline_012,pipeline_013,pipeline_016,pipeline_018,pipeline_019,pipeline_020,pipeline_021,pipeline_strat_001,pipeline_strat_002,pipeline_strat_003,pipeline_evolution_008
+
+Each answer should be a figure the Pipeline tab shows for the same extract
+(weighted pipeline, expected completion month, overdue / next month, broker,
+product, LTV band, reporting region).
 
 **5. Switch the canary off.** `MI_AGENT_PLAN_SERVE` = `off`.
 

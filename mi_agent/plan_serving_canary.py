@@ -716,6 +716,18 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     if scope.get("note"):
         answer = f"{answer} {scope['note']}."
         source_notes.append({"field": "population", "note": scope["note"]})
+    # WHICH REGIONS: the client's reporting taxonomy, and the live cases whose
+    # extract region it could not place — the tab's own disclosure.
+    region = receipt.get("region_basis") or {}
+    if region:
+        note = (f"Regions are the client's reporting regions"
+                + (f" ({region['taxonomy']})" if region.get("taxonomy") else ""))
+        if region.get("unmappedCaseCount"):
+            note += (f"; {int(region['unmappedCaseCount']):,} case(s) "
+                     f"({_money(region.get('unmappedAmount') or 0.0)}) whose "
+                     f"extract region has no governed mapping are in no region")
+        answer = f"{answer} {note}."
+        source_notes.append({"field": "region", "note": note})
     # The expected-completion view counts the cases carrying a forecast; say so.
     if receipt.get("completion_basis"):
         answer = f"{answer} Counted over {receipt['completion_basis']}."
@@ -1105,6 +1117,7 @@ def _stage_name(stage: Any) -> str:
 _PIPELINE_AXES = {
     "pipeline_stage": "stage", "broker_channel": "broker",
     "erm_product_type": "product", "ltv_bucket": "LTV band",
+    "canonical_region_reporting": "region",
     "expected_completion_month": "expected completion month"}
 
 #: At most this many groups are named in a sentence; the table has them all.

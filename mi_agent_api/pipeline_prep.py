@@ -402,6 +402,11 @@ def prepare_pipeline_mi_dataset(
 
     # 9. Region / channel group aliases (mirror funded prep) + provenance.
     group_aliases = _apply_group_aliases(out)
+    # 9b. Governed region harmonisation — the same engine and taxonomy the
+    #     funded book's preparation applies, so "region" on the Pipeline tab and
+    #     in an agent answer is the client's reporting taxonomy, not the
+    #     extract's own spelling (owner, 2026-09-29).
+    region_harmonisation = _apply_region_taxonomy(out, derived)
     out["pipeline_source_file"] = source_file or ""
     if rep_ts is not None:
         out["pipeline_as_of_date"] = rep_ts.date().isoformat()
@@ -415,6 +420,7 @@ def prepare_pipeline_mi_dataset(
     report = _build_report(out, mapping, unmatched, derived, ltv_basis,
                            group_aliases, bucket_issues, rep_ts,
                            prob_basis, historical_model)
+    report["region_harmonisation"] = region_harmonisation
     return out, report
 
 
@@ -797,6 +803,31 @@ def _apply_group_aliases(out: pd.DataFrame) -> List[str]:
         out["origination_channel"] = out["broker_channel"]
         aliases.append("origination_channel<-broker_channel")
     return aliases
+
+
+def _apply_region_taxonomy(out: pd.DataFrame, derived: List[str]) -> Dict[str, Any]:
+    """Stamp ``canonical_region_detail`` / ``canonical_region_reporting`` onto
+    the pipeline, exactly as ``funded_prep._apply_region_taxonomy`` does for the
+    funded book: the governed taxonomy for the client, deterministic, no LLM.
+
+    A raw value with no governed mapping keeps a NULL canonical region and is
+    counted in the returned report — disclosed, never assigned a region. With
+    no taxonomy configured this is a no-op and the pipeline is as before.
+    """
+    import os
+
+    try:
+        from engine import region_taxonomy as _region
+        taxonomy = _region.resolve_taxonomy(
+            os.environ.get("MI_AGENT_CLIENT_ID") or None)
+        report = _region.apply(out, taxonomy)
+    except Exception as exc:  # harmonisation is additive; never block the dataset
+        return {"applied": False, "error": f"{type(exc).__name__}: {exc}"[:200]}
+    if report.get("applied"):
+        for f in (_region.FIELD_DETAIL, _region.FIELD_REPORTING):
+            if f not in derived:
+                derived.append(f)
+    return report
 
 
 def _materialise_buckets(out: pd.DataFrame) -> List[Dict[str, Any]]:

@@ -126,7 +126,7 @@ SUPPORTED_MEASURES: Mapping[str, str] = {
 #: owners break down by stage only.
 SUPPORTED_DIMENSIONS: FrozenSet[str] = frozenset({
     "pipeline_stage", "broker_channel", "erm_product_type", "ltv_bucket",
-    "expected_completion_month"})
+    "expected_completion_month", "canonical_region_reporting"})
 HISTORY_DIMENSIONS: FrozenSet[str] = frozenset({"pipeline_stage"})
 
 #: GOVERNED DIMENSION -> THE COLUMN THE PIPELINE TAB'S BREAKDOWN GROUPS BY. The
@@ -135,16 +135,18 @@ HISTORY_DIMENSIONS: FrozenSet[str] = frozenset({"pipeline_stage"})
 #: erm_product_type), so one concept names both. The LTV band is the shared
 #: bucket engine's, so the two books band alike.
 #:
-#: Region is deliberately absent: "by region" governs to the client's reporting
-#: taxonomy (`canonical_region_reporting`), while the tab groups the extract's
-#: raw obligor region. Serving the tab's rows would substitute one geography
-#: for the other, so the question stays GEOGRAPHY_NOT_SUPPORTED until the
-#: pipeline carries the reporting taxonomy.
+#: Region is the client's REPORTING TAXONOMY, the field "by region" governs to
+#: (compiler: level `reporting`). The preparation layer stamps it on the
+#: pipeline with the funded book's own engine, and the tab's region chart
+#: groups by it (owner, 2026-09-29). The extract's raw region is never served
+#: in its place: without the reporting column the question is refused.
+REGION_FIELD = "canonical_region_reporting"
 TAB_COLUMN: Mapping[str, str] = {
     "pipeline_stage": "pipeline_stage",
     "broker_channel": "broker_channel",
     "erm_product_type": "product_type",
     "ltv_bucket": "ltv_bucket",
+    REGION_FIELD: REGION_FIELD,
 }
 
 #: D11: "overdue" about the pipeline is the tab's own expected-completion
@@ -257,6 +259,30 @@ def requested_dimensions(plan: Any) -> List[str]:
             for d in (output.get("dimensions") or ())]
 
 
+def region_axis(plan: Any) -> Optional[str]:
+    """The reporting-region field a plan groups by, or None.
+
+    A plan asks for geography on its own slot, not as a dimension. Only a
+    grouping at the reporting level is the tab's region chart; a region FILTER
+    ("pipeline in London") or another level is not something the tab publishes.
+    """
+    body = _as_mapping(plan)
+    output = _single_output(body) or {}
+    geography = output.get("geography") or body.get("geography") or {}
+    if not isinstance(geography, Mapping) or not geography.get("group_by"):
+        return None
+    if geography.get("values"):
+        return None
+    field = str(geography.get("canonical_field") or "")
+    return field if field == REGION_FIELD else None
+
+
+def grouping_axes(plan: Any) -> List[str]:
+    """Every field the plan groups by: its dimensions, then a region grouping."""
+    region = region_axis(plan)
+    return requested_dimensions(plan) + ([region] if region else [])
+
+
 def timing_of(plan: Any) -> Optional[str]:
     """The expected-completion timing value a plan filters on, or None.
 
@@ -347,9 +373,12 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
             return (False, FILTERS_NOT_SUPPORTED,
                     f"{TIMING_DIMENSION}={timing!r} is not a governed value "
                     f"({', '.join(TIMING_VALUES)})")
-    if output.get("geography") or (body.get("geography") or {}).get("requested"):
+    if ((output.get("geography") or (body.get("geography") or {}).get("requested"))
+            and region_axis(body) is None):
         return (False, GEOGRAPHY_NOT_SUPPORTED,
-                "the pipeline owners expose no geography breakdown")
+                "the Pipeline tab publishes the pipeline by the client's "
+                "reporting region only; a region filter or another geography "
+                "level is not a figure it publishes")
     if str(body.get("comparison_kind") or "none") != "none":
         return (False, COMPARISON_NOT_SUPPORTED,
                 "the pipeline runtime serves no population comparison")
@@ -363,7 +392,7 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 f"measure {measures[0]!r} has no existing pipeline owner "
                 f"(served: {sorted(SUPPORTED_MEASURES)})")
 
-    dimensions = requested_dimensions(body)
+    dimensions = grouping_axes(body)
     if len(dimensions) > 1:
         return (False, DIMENSION_NOT_SUPPORTED,
                 f"the pipeline owners group by one dimension; this plan names "
@@ -621,7 +650,7 @@ def execute_current(plan: Any, *, source: Any,
     output = _single_output(body) or {}
     measure = str((output.get("measures") or [{}])[0].get("concept") or "")
     kind = SUPPORTED_MEASURES[measure]
-    dimensions = requested_dimensions(body)
+    dimensions = grouping_axes(body)
 
     if not source:
         return PipelineOutcome(ok=False, reason=SOURCE_UNAVAILABLE,
@@ -657,7 +686,8 @@ def execute_current(plan: Any, *, source: Any,
     if dimensions and (kind == _WEIGHTED or dimensions[0] != "pipeline_stage"):
         return _execute_tab_breakdown(body, measure=measure, kind=kind,
                                       dimension=dimensions[0], live=live,
-                                      live_scope=live_scope, dataset=dataset)
+                                      live_scope=live_scope, dataset=dataset,
+                                      report=report)
 
     if dimensions and kind == _AMOUNT:
         # A CURRENT AMOUNT BY STAGE, through the GENERIC DETERMINISTIC ENGINE.
@@ -746,10 +776,13 @@ _SERIES_METRIC: Mapping[str, str] = {
 def _execute_tab_breakdown(body: Mapping[str, Any], *, measure: str, kind: str,
                            dimension: str, live: Any,
                            live_scope: Mapping[str, Any],
-                           dataset: Mapping[str, Any]) -> PipelineOutcome:
+                           dataset: Mapping[str, Any],
+                           report: Optional[Mapping[str, Any]] = None
+                           ) -> PipelineOutcome:
     """A current pipeline figure broken down, read off the Pipeline tab's own
-    breakdown for the same live rows — broker, product, stage (weighted) or
-    expected completion month. Nothing is grouped or summed here."""
+    breakdown for the same live rows — broker, product, LTV band, reporting
+    region, stage (weighted) or expected completion month. Nothing is grouped
+    or summed here."""
     from mi_agent_api import pipeline_contract as pipeline_mod
 
     if dimension == "expected_completion_month":
@@ -779,6 +812,11 @@ def _execute_tab_breakdown(body: Mapping[str, Any], *, measure: str, kind: str,
     receipt["pipeline_scope"] = _noted(live_scope)
     if owner == OWNER_TAB_COMPLETION:
         receipt["completion_basis"] = COMPLETION_BASIS
+    if dimension == REGION_FIELD:
+        # Which taxonomy, and the live cases it could not place — the tab's
+        # own statement, so the answer discloses what the chart leaves out.
+        receipt["region_basis"] = pipeline_mod.region_basis(
+            live, REGION_FIELD, dict(report or {}))
     return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
 
 

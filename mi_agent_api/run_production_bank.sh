@@ -16,7 +16,7 @@
 #
 # It asks each question once through the path POST /mi/query uses, so it costs
 # ~135 model interpretations. It REFUSES before asking anything when the build
-# is not the one being measured (no forecast definitions, vocabulary 2.3.0),
+# is not the one being measured (vocabulary older than 2.6.0, catalogue batch 1),
 # when the canary is not on for the principal, or when the evidence sink is not
 # set — any of those would spend the run and record nothing to read back.
 #
@@ -33,9 +33,9 @@ if [[ -z "${PRINCIPAL}" ]]; then
 fi
 CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,forecast_scale"
 EXPECTED_QUESTIONS=135
-# The oldest vocabulary with the forecast definitions: an older build is not
-# the one being measured.
-MINIMUM_VOCABULARY="2.3.0"
+# The oldest vocabulary with catalogue batch 1 (the Pipeline tab's weighted,
+# timing and breakdown concepts): an older build is not the one being measured.
+MINIMUM_VOCABULARY="2.6.0"
 
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${APP_ROOT}"

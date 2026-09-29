@@ -923,6 +923,56 @@ def _stage_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
+#: The extract's own region column, and the governed reporting region the
+#: preparation layer stamps beside it (``pipeline_prep._apply_region_taxonomy``).
+RAW_REGION_FIELD = "geographic_region_obligor"
+REPORTING_REGION_FIELD = "canonical_region_reporting"
+
+
+def region_breakdown_field(df: pd.DataFrame) -> str:
+    """The column the Pipeline tab's region breakdown groups by.
+
+    The reporting taxonomy wherever the preparation layer resolved it; the raw
+    column only where no taxonomy is configured or none of the extract's values
+    resolved — the same fallback the funded book's ``region_series`` makes.
+    """
+    if (REPORTING_REGION_FIELD in df.columns
+            and df[REPORTING_REGION_FIELD].notna().any()):
+        return REPORTING_REGION_FIELD
+    return RAW_REGION_FIELD
+
+
+def region_basis(df: pd.DataFrame, field: str,
+                 report: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Which region the breakdown is, and the live cases it cannot place.
+
+    A case whose extract region has no governed mapping keeps no reporting
+    region; it is left out of the breakdown and counted here, with the raw
+    values, so the chart and an agent answer can both say so.
+    """
+    harmonisation = (report or {}).get("region_harmonisation") or {}
+    basis: Dict[str, Any] = {
+        "field": field,
+        "taxonomy": (harmonisation.get("reporting_taxonomy")
+                     if field == REPORTING_REGION_FIELD else None),
+        "unmappedCaseCount": 0, "unmappedAmount": 0.0, "unmappedValues": {}}
+    if field != REPORTING_REGION_FIELD or field not in df.columns:
+        return basis
+    unmapped = df[field].isna()
+    if "region_source_value" in df.columns:
+        # A case with no region at all is not "unmapped"; it has nothing to map.
+        raw = df["region_source_value"]
+        unmapped = unmapped & raw.notna() & raw.astype(str).str.strip().ne("")
+        basis["unmappedValues"] = {
+            str(k): int(v) for k, v in
+            raw[unmapped].astype(str).value_counts().items()}
+    basis["unmappedCaseCount"] = int(unmapped.sum())
+    if "current_outstanding_balance" in df.columns:
+        basis["unmappedAmount"] = round(float(coerce_numeric(
+            df.loc[unmapped, "current_outstanding_balance"]).sum()), 2)
+    return basis
+
+
 def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
                   key_name: str = "key") -> List[Dict[str, Any]]:
     """Cap a long categorical breakdown to ``top_n`` rows: the top ``top_n - 1``
@@ -1133,7 +1183,11 @@ def compute_pipeline_snapshot(
     # Long categorical breakdowns are capped to top 10 (+ Other) for the visual;
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
     broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
-    region_full = _dimension_breakdown(df, "geographic_region_obligor", key_name="key")
+    # REGION IS THE CLIENT'S REPORTING TAXONOMY (owner, 2026-09-29), the value
+    # an agent answer groups "by region" on; the extract's own spelling stays
+    # in ``regionSourceBreakdownFull`` for audit.
+    region_field = region_breakdown_field(df)
+    region_full = _dimension_breakdown(df, region_field, key_name="key")
     product_full = _dimension_breakdown(df, "product_type", key_name="key")
     completion_breakdown = _expected_completion_breakdown(df)
     completion_summary = _expected_completion_summary(completion_breakdown, as_of)
@@ -1191,6 +1245,10 @@ def compute_pipeline_snapshot(
         "brokerBreakdownFull": broker_full,
         "regionBreakdown": cap_breakdown(region_full, 10),
         "regionBreakdownFull": region_full,
+        "regionBasis": region_basis(df, region_field, report),
+        "regionSourceBreakdownFull": (
+            _dimension_breakdown(df, RAW_REGION_FIELD, key_name="key")
+            if region_field != RAW_REGION_FIELD else region_full),
         # Product and LTV band (additive): the same amount / count / weighted
         # rows as broker and region. LTV bands come from the shared bucket
         # engine the funded book uses, so the two books band alike.

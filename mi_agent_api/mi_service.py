@@ -462,6 +462,21 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
                 "disposition": (_coverage_resolved() if grouped
                                 else _coverage_missing()),
             })
+        # A GEOGRAPHY GROUPING IS AN AXIS TOO. It travels on its own slot, not
+        # among the dimensions, so it is proved here: "pipeline by region"
+        # answered as a total, or by another geography, is unaccounted.
+        geography = requested.get("geography") or {}
+        if isinstance(geography, Mapping) and geography.get("group_by"):
+            axis = str(geography.get("canonical_field") or "")
+            grouped = bool(axis) and axis in {
+                str(k) for k in (executed.get("group_field_keys") or ())}
+            entries.append({
+                "kind": "governed_plan:geography", "field": axis or "geography",
+                "value": axis, "term": "region",
+                "owner": "governed_plan + specialist execution receipt",
+                "disposition": (_coverage_resolved() if grouped
+                                else _coverage_missing()),
+            })
         # A THRESHOLD IS PART OF WHAT WAS ASKED. "When do we reach £250m?"
         # answered for £75m is a substitution no predicate or axis shows, and
         # it is the defect the milestone rule was moved to its owner to end. So

@@ -289,6 +289,13 @@ export function PipelineSnapshotPanel({
         {byRegion.length > 0 && (
           <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by region`}>
             <BarList data={asMeasure(byRegion, measure)} format={BAR_MEASURE_FORMAT[measure]} />
+            {(snapshot.regionBasis?.unmappedCaseCount ?? 0) > 0 && (
+              <p className="mt-2 text-xs text-ink-500">
+                {snapshot.regionBasis!.unmappedCaseCount.toLocaleString()} case(s) (
+                {formatGBP(snapshot.regionBasis!.unmappedAmount)}) have a region with
+                no governed mapping and are not shown.
+              </p>
+            )}
           </Panel>
         )}
         {byProduct.length > 0 && (

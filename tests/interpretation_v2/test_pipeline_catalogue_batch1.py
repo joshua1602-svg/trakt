@@ -207,17 +207,6 @@ def test_any_other_filter_is_still_refused():
     assert (ok, why) == (False, pipeline_rt.FILTERS_NOT_SUPPORTED)
 
 
-def test_region_is_not_the_tabs_obligor_region():
-    """"By region" is the reporting taxonomy; the tab's region is the raw
-    obligor field. Refused, not substituted."""
-    plan = _plan(operation="breakdown",
-                 geography={"requested": True, "group_by": True,
-                            "level": "reporting"})
-    ok, why, _ = pipeline_rt.check_eligibility(plan)
-    assert (ok, why) == (False, pipeline_rt.GEOGRAPHY_NOT_SUPPORTED)
-    assert "region" not in " ".join(pipeline_rt.TAB_COLUMN)
-
-
 def test_the_weekly_history_breaks_down_by_stage_only():
     plan = _plan(operation="breakdown", dimensions=["broker_channel"],
                  time={"form": "series", "grain": "weekly"})

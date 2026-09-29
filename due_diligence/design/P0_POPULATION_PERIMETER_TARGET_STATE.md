@@ -109,6 +109,12 @@
         does not. When the question does not say which, the agent asks.
         Owner agreed.
 
+    D12 PIPELINE "BY REGION"                                  SETTLED 2026-09-29
+        The client's reporting regions, on the Pipeline tab and in an agent
+        answer alike. The pipeline is harmonised with the funded book's region
+        engine; a region with no governed mapping is disclosed, not placed.
+        Built — §15.2.
+
     D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
         P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
         any vintage today, so "state both vintages" cannot be satisfied until the
@@ -945,7 +951,7 @@ of which the dashboard already computes.
     weighted expected pipeline, total and by    DONE — batch 1: open_totals()["weighted"];
       stage / broker / product / LTV band          _dimension_breakdown weightedExpectedFundedAmount
     product and LTV band on the pipeline        DONE — batch 1: productBreakdownFull, ltvBreakdown
-    region on the pipeline                      OPEN QUESTION — see below
+    region on the pipeline (D12)                DONE — reporting taxonomy on the tab and agent
     what carries no forecast weight, and why    pipeline_prep.completion_probability_summary
       (withdrawn, lapsed, missing probability)     by_source
     the forecast's parts: funded, pipeline      forecast_bridge.compute_forecast_bridge
@@ -967,14 +973,19 @@ of which the dashboard already computes.
     expected-completion months — whether the model reads each one this way is
     what the spot check measures.
 
-    REGION ON THE PIPELINE is not wired, deliberately. "By region" governs to
-    the client's reporting taxonomy (`canonical_region_reporting`, the
-    compiler's default); the Pipeline tab groups the extract's raw obligor
-    region (`geographic_region_obligor`). Serving the tab's rows would answer a
-    different geography from the one the funded book answers to the same
-    words. It stays GEOGRAPHY_NOT_SUPPORTED (served by the legacy path) until
-    the pipeline is mapped through the same region taxonomy — an owner
-    question: should the Pipeline tab also show the reporting taxonomy?
+    REGION ON THE PIPELINE (D12, owner 2026-09-29: "the Pipeline tab should
+    also group by the reporting regions" — YES). "By region" governs to the
+    client's reporting taxonomy (`canonical_region_reporting`); the tab used
+    to group the extract's raw spelling. Now the pipeline's preparation stamps
+    the reporting region with the funded book's own engine
+    (`engine.region_taxonomy`, `pipeline_prep._apply_region_taxonomy`), the
+    tab's region chart groups by it (the raw spelling kept in
+    `regionSourceBreakdownFull` for audit), and the agent reads that chart. A
+    case whose region has no governed mapping is placed in no region and
+    disclosed on the chart and in the answer (`regionBasis`). Without the
+    reporting column the agent refuses rather than serve the raw spelling; a
+    region FILTER and other geography levels remain refused. Pinned by
+    `tests/interpretation_v2/test_the_pipeline_region_is_the_reporting_region.py`.
 
     The forecast-balance hold (§14.6) is released by this backlog, not before
     it: once the curve, the scenarios and the forecast's parts each have their

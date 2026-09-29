@@ -152,6 +152,25 @@ describe("PipelineSnapshotPanel", () => {
     expect(screen.queryByText(/vs prior week/)).not.toBeInTheDocument();
   });
 
+  it("says how many cases have a region the reporting taxonomy cannot place", () => {
+    render(<PipelineSnapshotPanel snapshot={{
+      ...NOV,
+      regionBasis: { field: "canonical_region_reporting", taxonomy: "uk_itl1",
+                     unmappedCaseCount: 3, unmappedAmount: 450_000,
+                     unmappedValues: { Atlantis: 3 } },
+    }} />);
+    expect(screen.getByText(/have a region with no governed mapping/)).toBeInTheDocument();
+  });
+
+  it("adds nothing under the region chart when every region is placed", () => {
+    render(<PipelineSnapshotPanel snapshot={{
+      ...NOV,
+      regionBasis: { field: "canonical_region_reporting", taxonomy: "uk_itl1",
+                     unmappedCaseCount: 0, unmappedAmount: 0, unmappedValues: {} },
+    }} />);
+    expect(screen.queryByText(/no governed mapping/)).not.toBeInTheDocument();
+  });
+
   it("renders an unavailable state gracefully", () => {
     const snap = { ...NOV, ok: false, error: "No pipeline data for this reporting date." };
     render(<PipelineSnapshotPanel snapshot={snap} />);

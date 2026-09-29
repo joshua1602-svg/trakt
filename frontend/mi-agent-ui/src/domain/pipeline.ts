@@ -64,6 +64,17 @@ export interface DimensionBucket {
   sharePct?: number;
 }
 
+/** Which region the region breakdown is: the client's reporting taxonomy
+ *  where the extract's regions resolve to it, and the live cases whose region
+ *  has no governed mapping (left out of the chart, disclosed here). */
+export interface PipelineRegionBasis {
+  field: string;
+  taxonomy: string | null;
+  unmappedCaseCount: number;
+  unmappedAmount: number;
+  unmappedValues: Record<string, number>;
+}
+
 /** Prior weekly pipeline snapshot aggregates, for week-on-week tile deltas.
  *
  * Additive + optional: present only when a genuine prior weekly extract exists.
@@ -175,6 +186,10 @@ export interface PipelineSnapshot {
   /** Uncapped detail (API / agent), present when the breakdown was capped. */
   brokerBreakdownFull?: DimensionBucket[];
   regionBreakdownFull?: DimensionBucket[];
+  /** The region basis of the region breakdown (additive). */
+  regionBasis?: PipelineRegionBasis;
+  /** The extract's own region spelling, kept for audit (additive). */
+  regionSourceBreakdownFull?: DimensionBucket[];
   /** Product (capped top 10 + Other) and LTV band breakdowns — additive. */
   productBreakdown?: DimensionBucket[];
   productBreakdownFull?: DimensionBucket[];

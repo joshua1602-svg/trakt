@@ -48,6 +48,8 @@ ADMITTED = {
     65: "pipeline", 129: "pipeline",    # pipeline amount by product
     131: "pipeline",                    # pipeline case count by product
     66: "pipeline", 130: "pipeline",    # pipeline amount by LTV bucket / band
+    # The Pipeline tab's region chart is the reporting region (owner, same day).
+    53: "pipeline",                     # pipeline amount by region
 }
 
 #: Plans the runtime would answer with a figure the question did not ask for.
