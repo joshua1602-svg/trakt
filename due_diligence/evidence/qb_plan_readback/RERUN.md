@@ -121,3 +121,9 @@ intents added beside the baseline's.
     2026-09-29  12:28 UTC 14effc33 deployed (run 36567963153): monthly series
                 D7, scale D9 (production stage not set), catalogue batch 1,
                 pipeline region D12
+    2026-09-29  14:53 UTC 438932ac deployed (run 36585701951; a5604967:
+                batch 2 forecast semantic model, funded breadth, answer
+                wording; vocabulary 2.8.0)
+    2026-09-29  15:10:48 UTC full bank on 438932ac (vocabulary 2.8.0),
+                135 selected — run in place of the 51-question spot check,
+                which it contains; log /home/qb_plan_rerun_20260929T151048Z.log
