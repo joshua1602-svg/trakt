@@ -39,7 +39,12 @@ everyone else is served exactly as before.
 **4. Run the bank.** Azure portal → `trakt-mi-api` → *SSH* → *Go*, then:
 
     for d in $(ls -td /tmp/*/); do [ -f "$d/mi_agent_api/app.py" ] && cd "$d" && break; done
-    bash mi_agent_api/run_production_bank.sh <your Entra object id>
+    bash mi_agent_api/run_production_bank.sh <your Entra object id> all
+
+`all` is required for the whole bank: without a second argument the script
+refuses and asks nothing, so a command whose question list was lost to a line
+break cannot spend the full run. Paste a spot check as ONE line, and check the
+preflight says `questions selected: N (spot check)` before leaving it.
 
 `mi_agent_api/run_production_bank.sh` asks the same 135 questions as
 `qb_full.txt` (the six categories that select exactly `qb_questions.json`; the
@@ -124,6 +129,11 @@ intents added beside the baseline's.
     2026-09-29  14:53 UTC 438932ac deployed (run 36585701951; a5604967:
                 batch 2 forecast semantic model, funded breadth, answer
                 wording; vocabulary 2.8.0)
-    2026-09-29  15:10:48 UTC full bank on 438932ac (vocabulary 2.8.0),
-                135 selected — run in place of the 51-question spot check,
-                which it contains; log /home/qb_plan_rerun_20260929T151048Z.log
+    2026-09-29  15:10:48 UTC full bank started on 438932ac by mistake (the
+                spot check's id list was split onto its own line); stopped by
+                the operator after funded_kpi_001..005 (kill, ps confirmed).
+                The script now refuses without `all` or an id list.
+    2026-09-29  15:14:42 UTC combined spot check on 438932ac (vocabulary
+                2.8.0), 51 selected (spot check); log
+                /home/qb_plan_rerun_20260929T151442Z.log — read back from
+                this START TIME

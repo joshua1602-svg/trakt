@@ -8,11 +8,13 @@
 # named here.
 #
 #     for d in $(ls -td /tmp/*/ ); do [ -f "$d/mi_agent_api/app.py" ] && cd "$d" && break; done
-#     bash mi_agent_api/run_production_bank.sh <principal object id>
 #     bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...>
+#     bash mi_agent_api/run_production_bank.sh <principal object id> all
 #
-# The optional second argument asks only the named bank questions — a spot
-# check of particular changes rather than the whole bank.
+# The second argument is REQUIRED: the named bank questions (a spot check of
+# particular changes), or `all` for the whole bank. The whole bank is never the
+# default — a command whose question list was lost (a line break in the paste)
+# must stop here, not spend ~135 model interpretations.
 #
 # It asks each question once through the path POST /mi/query uses, so it costs
 # ~135 model interpretations. It REFUSES before asking anything when the build
@@ -26,11 +28,16 @@
 set -euo pipefail
 
 PRINCIPAL="${1:-}"
-IDS="${2:-}"
-if [[ -z "${PRINCIPAL}" ]]; then
-  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> [id,id,...]" >&2
+SELECTION="${2:-}"
+if [[ -z "${PRINCIPAL}" || -z "${SELECTION}" || $# -gt 2 ]]; then
+  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...|all>" >&2
+  echo "  <id,id,...>  only the named bank questions, comma-separated, no spaces" >&2
+  echo "  all          the whole bank (~135 model interpretations)" >&2
+  echo "Nothing was asked." >&2
   exit 2
 fi
+IDS=""
+[[ "${SELECTION}" != "all" ]] && IDS="${SELECTION}"
 CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,forecast_scale"
 EXPECTED_QUESTIONS=135
 # The oldest vocabulary with catalogue batch 2 (the forecast semantic model;
