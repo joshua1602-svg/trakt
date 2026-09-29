@@ -57,6 +57,12 @@ def summarise(record: Dict[str, Any]) -> Dict[str, Any]:
     serving = record.get("serving") or {}
     eligibility = record.get("eligibility") or {}
     filters = list(plan.get("filters") or ()) + list(output.get("filters") or ())
+    # WHY THE LANGUAGE STEP FAILED, when it did: the interpreter's own reason
+    # (code, subject, the client's error text). Without it an interpreter
+    # failure reads the same whether the model timed out, was refused by the
+    # provider, or emitted an intent the parser rejected.
+    failure = (record.get("model") or {}).get("failure") or None
+    usage = (record.get("model") or {}).get("usage") or {}
     return {
         # WHAT THE MODEL WAS SHOWN. 2.3.0 is the first vocabulary that defines
         # the forecast measures, so a comparison across runs must be able to
@@ -81,6 +87,14 @@ def summarise(record: Dict[str, Any]) -> Dict[str, Any]:
         "eligibility_reason": eligibility.get("reason"),
         "serving_decision": serving.get("decision"),
         "serving_reason": serving.get("reason"),
+        "interpreter_failure": ({k: str(failure.get(k) or "")[:300]
+                                 for k in ("code", "subject", "detail")}
+                                if isinstance(failure, dict) else None),
+        "model_usage": {k: usage.get(k) for k in
+                        ("input_tokens", "output_tokens",
+                         "cache_read_input_tokens",
+                         "cache_creation_input_tokens", "rounds")
+                        if k in usage},
     }
 
 
@@ -92,6 +106,10 @@ def why_lines(record: Dict[str, Any], summary: Dict[str, Any]) -> List[str]:
     lines = [f"reading: measures={summary.get('measures')} "
              f"dimensions={summary.get('dimensions')} "
              f"filters={summary.get('filters')}"]
+    failure = summary.get("interpreter_failure")
+    if failure:
+        lines.append(f"interpreter: {failure.get('code')}: "
+                     f"{failure.get('subject')}: {failure.get('detail')}")
     detail = str((record.get("eligibility") or {}).get("detail") or "")
     if detail:
         lines.append(f"why: {detail[:300]}")
