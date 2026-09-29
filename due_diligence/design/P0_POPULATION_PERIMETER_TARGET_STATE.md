@@ -1194,3 +1194,37 @@ platform path does), "by region" now answers from the governed field; on a
 book that does not, it is FIELD_NOT_IN_BOOK. Serving that refusal to the reader
 — instead of falling back — belongs with served clarifications (§15, next).
 Pinned by `tests/interpretation_v2/test_funded_breadth.py`.
+
+## 18. Every funded answer says what it is (D4) — brought forward (2026-09-29)
+
+Owner instruction: "Fix the wording before proof stage otherwise we will forget
+and have to go back." A funded breakdown read "Here is the bar for your query,
+covering 10 groups" — no measure, no grouping, no date — so a text channel, and
+the evidence a bank run is judged on, carried no answer.
+
+One composer, both paths. `adapters._answer` is the lead sentence every funded
+answer uses, legacy and governed alike; it now composes:
+
+    a breakdown    "Balance by Region — largest: East Midlands £831K, East of
+                   England £761K, Yorkshire and The Humber £752K, and 7 more
+                   (10 groups)." ("highest" for an average or a ratio;
+                   "Number of loans" for a count)
+    a series       "Balance over 5 reporting dates, 2025-07-31 to 2025-11-30:
+                   from £9.4MM to £12.1MM." — read in time order, never ranked;
+                   a grouped series names its leaders at the latest date
+    one figure     unchanged ("Median Balance: £162K · 36 loans.")
+
+— from the same rows, labels and formatters the table and chart are built
+from; the ordering is presentation, nothing is computed.
+
+The governed funded answer now carries the same execution receipt the legacy
+answer does (`execution_receipt.build_receipt`, one owner): "Calculated: Total
+Balance · grouped by Region · 10 groups · 36 loans · as at 30 November 2025" —
+built from what ran and the book's own cut-off date (`reporting_date_label`),
+never from the question. Forecast and stage-movement answers already stated
+their measure and dates (their own renderers, D4). Pipeline answers stated
+the measure but not the extract they were read from — "The live pipeline
+amount is £1.1m." — and now say "as at the weekly extract of <date>" (a grouped
+series names its first and last extract).
+
+Pinned by `tests/interpretation_v2/test_answer_wording.py`.

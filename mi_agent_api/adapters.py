@@ -581,11 +581,19 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
     # line would have said "covering 1 group", it comes AFTER the ranked lead
     # so no ranked answer changes, and it uses the same row, labels and
     # formatters as the KPI artifact — a rendering, not a second calculation.
+    series = _series_lead(rows, (qr or {}).get("resolved_fields") or {}, hints,
+                          spec)
+    if series:
+        return series
     if len(rows) == 1:
         line = _scalar_line(rows[0], (qr or {}).get("resolved_fields") or {},
                             hints, spec)
         if line:
             return line
+    breakdown = _breakdown_lead(rows, (qr or {}).get("resolved_fields") or {},
+                                hints, spec)
+    if breakdown:
+        return breakdown
     noun = "result" if chart_type in (None, "none") else chart_type
     if n is not None:
         groups = "1 group" if n == 1 else f"{n:,} groups"
@@ -642,6 +650,145 @@ def _ranked_lead(rows, resolved: Mapping[str, Any],
     measure = _kpi_label(ranked_key, resolved)
     groups = "1 group" if len(rows) == 1 else f"{len(rows):,} groups"
     return f"{label} has the {superlative} {measure}: {shown} ({groups})."
+
+
+#: How many groups a breakdown's sentence names. The table has them all.
+_LEAD_GROUPS = 3
+
+
+def _lead_value_key(row: Mapping[str, Any], axes: List[str],
+                    resolved: Mapping[str, Any], hints: Optional[Dict[str, Any]],
+                    spec: Mapping[str, Any]) -> Tuple[Optional[str], str, Any]:
+    """`(column, format, scale)` of the figure a lead sentence states: the
+    spec's own measure as the executor named its column, else the first figure
+    that is not a count or a share. The same format the table uses."""
+    aggregation = str(spec.get("aggregation") or "").lower()
+    metric = str(spec.get("metric") or "")
+    numeric = [k for k in row
+               if k not in axes and isinstance(row.get(k), (int, float))
+               and not isinstance(row.get(k), bool)]
+    if aggregation == "count":
+        key = next((k for k in numeric if str(k).endswith("_count")), None)
+    else:
+        key = next((k for k in numeric if metric and str(k).startswith(metric)),
+                   next((k for k in numeric
+                         if not str(k).endswith(("_count", "_pct"))), None))
+    if key is None:
+        return None, "", None
+    h = _hint(hints, key)
+    return key, (h.get("format") or _infer_col_format(key, resolved)), h.get("scale")
+
+
+def _lead_measure(key: str, resolved: Mapping[str, Any],
+                  spec: Mapping[str, Any]) -> str:
+    """The measure's words: its label with its statistic, or "Number of loans"."""
+    if str(spec.get("aggregation") or "").lower() == "count":
+        return "Number of loans"
+    return _kpi_label(key, resolved)
+
+
+
+def _breakdown_lead(rows, resolved: Mapping[str, Any],
+                    hints: Optional[Dict[str, Any]],
+                    spec: Optional[Mapping[str, Any]]) -> str:
+    """"Balance by Region — largest: South East £4.2MM, London £3.9MM, Wales
+    £3.1MM, and 7 more (10 groups)." — a breakdown, in words.
+
+    A BREAKDOWN IS ANSWERED BY NAMING THE MEASURE, THE AXIS AND THE LEADERS.
+    It used to read "Here is the bar for your query, covering 10 groups" —
+    true, and it named neither what was measured nor what it was grouped by, so
+    a text-first channel (and the evidence a bank run is judged on) carried no
+    answer at all. Owner instruction, 2026-09-29: fix it before the proof stage.
+
+    The same rows, labels and formatters the table and chart are built from:
+    the groups are the executor's, ordered by their own figure for the
+    sentence (the table keeps every row); nothing is computed. "Largest" for a
+    total or a count, "highest" for an average or a ratio.
+    """
+    if not rows or len(rows) < 2 or not isinstance(spec, Mapping):
+        return ""
+    axes = [str(d) for d in (spec.get("dimensions") or [spec.get("dimension")])
+            if d]
+    axes = [a for a in axes if a in rows[0]]
+    if not axes:
+        return ""
+    aggregation = str(spec.get("aggregation") or "").lower()
+    key, fmt, scale = _lead_value_key(rows[0], axes, resolved, hints, spec)
+    if key is None:
+        return ""
+
+    def _value(row) -> Optional[float]:
+        v = row.get(key)
+        return (float(v) if isinstance(v, (int, float)) and not isinstance(v, bool)
+                and v == v else None)
+
+    def _group(row) -> str:
+        return " / ".join(str(row.get(a)) for a in axes)
+
+    ranked = sorted((r for r in rows if _value(r) is not None),
+                    key=lambda r: _value(r), reverse=True)
+    if not ranked:
+        return ""
+    named = ranked[:_LEAD_GROUPS]
+    shown = ", ".join(f"{_group(r)} {_format_kpi_value(r.get(key), fmt, scale)}"
+                      for r in named)
+    rest = len(rows) - len(named)
+    measure = _lead_measure(key, resolved, spec)
+    axis_words = " and ".join(_label_for(a, resolved) for a in axes)
+    word = "largest" if aggregation in ("sum", "count", "balance_sum") else "highest"
+    groups = f"{len(rows):,} groups" if len(axes) == 1 else f"{len(rows):,} combinations"
+    return (f"{measure} by {axis_words} — {word}: {shown}"
+            + (f", and {rest:,} more" if rest > 0 else "") + f" ({groups}).")
+
+
+#: The column a governed series stacks its periods by (the temporal runtime's
+#: `REPORTING_DATE`, the governed header's own reporting date).
+_SERIES_DATE = "reporting_date"
+
+
+def _series_lead(rows, resolved: Mapping[str, Any],
+                 hints: Optional[Dict[str, Any]],
+                 spec: Optional[Mapping[str, Any]]) -> str:
+    """"Balance over 5 reporting dates, 2025-07-31 to 2025-11-30: from £9.4MM
+    to £12.1MM." — a series, in words, start to end.
+
+    A SERIES IS READ IN TIME ORDER. Ranked like a breakdown it would mix
+    periods ("largest: 2025-11 £12.1MM, 2025-10 …"), which answers a question
+    nobody asked. So the ungrouped series states its first and last figures;
+    a grouped one states its span and the leaders at the latest date. The rows
+    are the stacked series the temporal runtime built from each snapshot's own
+    execution — read here, never recomputed.
+    """
+    if not rows or not isinstance(spec, Mapping):
+        return ""
+    axes = [str(d) for d in (spec.get("dimensions") or [spec.get("dimension")]) if d]
+    if _SERIES_DATE not in rows[0] or _SERIES_DATE in axes:
+        return ""
+    key, fmt, scale = _lead_value_key(rows[0], axes + [_SERIES_DATE], resolved,
+                                      hints, spec)
+    if key is None:
+        return ""
+    dates = sorted({str(r.get(_SERIES_DATE)) for r in rows if r.get(_SERIES_DATE)})
+    if not dates:
+        return ""
+    measure = _lead_measure(key, resolved, spec)
+    span = (f"{len(dates)} reporting dates, {dates[0]} to {dates[-1]}"
+            if len(dates) > 1 else f"the reporting date {dates[0]}")
+    if not axes:
+        by_date = {str(r.get(_SERIES_DATE)): r.get(key) for r in rows}
+        first, last = by_date.get(dates[0]), by_date.get(dates[-1])
+        if len(dates) == 1:
+            return f"{measure} at {span}: {_format_kpi_value(last, fmt, scale)}."
+        return (f"{measure} over {span}: from {_format_kpi_value(first, fmt, scale)} "
+                f"to {_format_kpi_value(last, fmt, scale)}.")
+    latest = [r for r in rows if str(r.get(_SERIES_DATE)) == dates[-1]]
+    lead = _breakdown_lead(latest, resolved, hints, spec)
+    if not lead:
+        return ""
+    if len(dates) == 1:
+        return f"{lead[:-1]}, at {dates[-1]}."
+    return (f"{lead[:-1]}, at {dates[-1]} — the latest of {len(dates)} "
+            f"reporting dates from {dates[0]}.")
 
 
 def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],

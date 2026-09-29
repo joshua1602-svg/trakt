@@ -273,6 +273,25 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
         "warnings": warnings,
         "metadata": {},
     }
+    # THE EXECUTION RECEIPT, from the one owner every funded answer's receipt
+    # line comes from (`execution_receipt.build_receipt`): what was measured,
+    # over which loans, grouped how, and AS AT the book's own cut-off — D4 on
+    # the answer itself. Built from the executed result and the frame, never
+    # from the question; the governed coverage owner, not the legacy semantic
+    # guard, judges it. A series is described by the temporal runtime's own
+    # evidence instead, so only a single-snapshot answer gets one here.
+    if executed is None:
+        try:
+            from mi_agent import execution_receipt as receipt_mod
+            from mi_agent.mi_agent_workflow import reporting_date_label
+            workflow["execution_receipt"] = receipt_mod.build_receipt(
+                spec=spec, query_result=result,
+                semantics=dict(semantics) if isinstance(semantics, Mapping) else {},
+                facets=(), dataset=execution_population,
+                period=reporting_date_label(frame), frame=frame).to_dict()
+        except Exception as exc:                                     # noqa: BLE001
+            # A disclosure must never cost an answer that would otherwise stand.
+            warnings.append(f"Receipt not rendered: {type(exc).__name__}")
     payload = adapt_workflow_result(workflow, portfolio_id=portfolio_id,
                                     as_of=as_of)
     # THE TWO GOVERNED OBJECTS, CARRIED SO THE COVERAGE OWNER CAN RECONCILE THEM.
@@ -601,6 +620,11 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
             return "n/a"
         return _money(value) if is_amount else f"{float(value):,.0f}"
 
+    # D4: THE EXTRACT THE FIGURE WAS READ FROM, on the sentence. A current
+    # figure is as at one weekly extract — the dataset the runtime read.
+    extract = str((receipt.get("dataset") or {}).get("as_of_date") or "")
+    as_at = f", as at the weekly extract of {extract}" if extract else ""
+
     if shape == "scalar":
         value = float(outcome.value)
         kpis = [{"field": measure, "label": label,
@@ -612,9 +636,9 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
         if timing:
             # D11: the bucket, stated against the extract's month.
             answer = (f"The {phrase} {_timing_phrase(timing)} is "
-                      f"{_shown(value)}.")
+                      f"{_shown(value)}{as_at}.")
         else:
-            answer = f"The {phrase} is {_shown(value)}."
+            answer = f"The {phrase} is {_shown(value)}{as_at}."
     elif shape == "grouped":
         # Months read in date order; every other breakdown largest first, so
         # "which is largest" is answered by the sentence itself.
@@ -637,7 +661,7 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                   + ", ".join(f"{named(r[str(axis)])} {_shown(r['value'])}"
                               for r in shown)
                   + (f", and {len(rows) - len(shown):,} more"
-                     if len(rows) > len(shown) else "") + ".")
+                     if len(rows) > len(shown) else "") + f"{as_at}.")
     elif shape in ("dated", "grouped_dated"):
         # THE PIPELINE AT NAMED DATES. D4: the measure and every extract date
         # are in the sentence; the rule that chose each extract (D7 for a
@@ -686,7 +710,10 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                         for st in stages}}
                     for per in periods]
             series = [{"key": st, "label": st} for st in stages]
-            answer = (f"The {phrase} by stage across {span}: "
+            # The first and last extract, so the series says when it spans.
+            window = (f" ({periods[0]} to {periods[-1]})"
+                      if len(periods) > 1 else f" ({periods[0]})" if periods else "")
+            answer = (f"The {phrase} by stage across {span}{window}: "
                       f"{', '.join(_stage_name(st) for st in stages)}.")
         else:
             rows = sorted(({"period": str(c["period"]), "value": c["value"]}
