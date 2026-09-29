@@ -417,7 +417,8 @@ def test_every_population_slot_now_tells_the_model_what_it_is_for():
     assert set(slots["base"]["enum"]) == set(POPULATION_BASES)
     assert set(slots["lens"]["enum"]) == set(POPULATION_LENSES)
     assert "ATOMIC" in slots["source_reference"]["description"]
-    assert "get_source_portfolios" in slots["source_reference"]["description"]
+    # The names are in the prompt's per-request CLIENT CONTEXT (§21).
+    assert "CLIENT CONTEXT" in slots["source_reference"]["description"]
 
 
 def test_the_value_list_guidance_no_longer_dead_ends_a_named_book(vocabulary):
@@ -463,12 +464,17 @@ def test_the_registry_is_per_call_and_never_remembered(vocabulary, registry):
 
     class Recording(ScriptedClient):
         def emit_intent(self, **kwargs):
-            dispatch = kwargs.get("dispatch")
-            seen.append(dispatch.__self__.source_registry)
+            # The client's books reach the model in the per-request CLIENT
+            # CONTEXT block, after the cached prefix (P0 design §21).
+            client = json.loads(kwargs["system"][-1]["text"].split("\n", 1)[1])
+            seen.append([row["name"] for row in
+                         client["source_portfolios"]["portfolios"]])
             return super().emit_intent(**kwargs)
 
+    names = [record.display_label for record in registry]
+    assert names, "premise: the registry names books"
     interpreter = OpusInterpreter(Recording(intent_payload()), vocabulary=vocabulary)
     interpreter.interpret("total balance", source_registry=registry)
     interpreter.interpret("total balance")
-    assert seen == [registry, None], (
+    assert seen == [names, []], (
         "the interpreter carried a registry between questions")

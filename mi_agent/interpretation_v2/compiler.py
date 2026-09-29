@@ -349,6 +349,25 @@ class CompilerContext:
         return canonical_field in self.available_fields
 
 
+def _implies(predicate: FilterBinding, comparator: str, value: Any) -> bool:
+    """Does an existing predicate already keep only rows `comparator value`?
+    Decided for the comparators a statistic scope declares (`gt`, `ge`); any
+    other scope is never assumed to be implied."""
+    number = lambda v: (isinstance(v, (int, float))            # noqa: E731
+                        and not isinstance(v, bool))
+    if comparator not in ("gt", "ge") or not number(value):
+        return False
+    held = predicate.value
+    low = (held if predicate.comparator in ("gt", "ge", "eq") and number(held)
+           else (held[0] if predicate.comparator == "between"
+                 and isinstance(held, (list, tuple)) and held
+                 and number(held[0]) else None))
+    if low is None:
+        return False
+    strict = predicate.comparator == "gt"
+    return low > value or (low == value and (strict or comparator == "ge"))
+
+
 class DeterministicCompiler:
     """Compiles a CandidateIntent against one governed context.
 
@@ -438,7 +457,8 @@ class DeterministicCompiler:
         outputs: List[OutputPlan] = []
         for output in intent.effective_outputs():
             plan_output, out_reasons, out_notes = self._bind_output(
-                output, intent=intent, inherited_geography=top_geography)
+                output, intent=intent, inherited_geography=top_geography,
+                plan_filters=top_filters)
             reasons.extend(out_reasons)
             notes.extend(out_notes)
             if plan_output is not None:
@@ -992,7 +1012,8 @@ class DeterministicCompiler:
                 reasons, notes)
 
     def _bind_output(self, output: RequestedOutput, *, intent: CandidateIntent,
-                     inherited_geography: Optional[GeographyBinding]
+                     inherited_geography: Optional[GeographyBinding],
+                     plan_filters: Sequence[FilterBinding] = ()
                      ) -> Tuple[Optional[OutputPlan], List[CompileReason], List[str]]:
         reasons: List[CompileReason] = []
         notes: List[str] = []
@@ -1037,6 +1058,10 @@ class DeterministicCompiler:
         filters, filter_reasons = self._bind_filters(output.filters,
                                                      slot=f"{slot}.filters")
         reasons.extend(filter_reasons)
+        scope_reasons, scope_notes = self._apply_statistic_scope(
+            measures, filters, plan_filters)
+        reasons.extend(scope_reasons)
+        notes.extend(scope_notes)
 
         requested_geography = output.geography
         if geography_from_dimension is not None and not requested_geography.requested:
@@ -1054,6 +1079,59 @@ class DeterministicCompiler:
                            dimensions=tuple(dimensions), filters=tuple(filters),
                            geography=geography),
                 reasons, notes)
+
+    def _apply_statistic_scope(self, measures: Sequence[MeasureBinding],
+                               filters: List[FilterBinding],
+                               plan_filters: Sequence[FilterBinding]
+                               ) -> Tuple[List[CompileReason], List[str]]:
+        """A STATISTIC GOVERNED OVER ITS OWN POPULATION, written onto the plan.
+
+        The registry may say which rows a statistic counts — the minimum
+        balance counts only balances above zero (owner decision D14), because a
+        redeemed loan's balance is zeroed on purpose and "the smallest loan" is
+        not £0. That is a rule about the FIGURE, so it becomes a predicate on
+        the output that carries it: in the plan and its identity, applied by
+        the executor like any filter, disclosed by the receipt and proved by
+        the coverage ledger. Nothing downstream knows the rule exists.
+
+        An output is one figure. If the scoped measure shares its output with
+        another, the predicate would change that figure too — so the plan is
+        refused rather than answered wrongly. A predicate already on the field
+        that implies the scope stands on its own; one that does not is kept
+        beside it, and a runtime that takes one predicate per field refuses.
+        """
+        reasons: List[CompileReason] = []
+        notes: List[str] = []
+        for measure in measures:
+            concept = self.context.vocabulary.resolve(measure.concept)
+            scope = concept.scope_for(measure.statistic) if concept else None
+            if scope is None:
+                continue
+            comparator, value = scope
+            if len(measures) > 1:
+                reasons.append(CompileReason(
+                    UNSUPPORTED_COMPOSITION, measure.concept,
+                    f"the {measure.statistic} of {measure.concept!r} counts only "
+                    f"rows where it is {comparator} {value!r}; asked beside "
+                    f"another figure in one output it would change that figure "
+                    f"too — it is its own figure"))
+                continue
+            existing = [f for f in (*filters, *plan_filters)
+                        if f.canonical_field == concept.canonical_field]
+            if any(_implies(f, comparator, value) for f in existing):
+                notes.append(f"the {measure.statistic} of {measure.concept!r} "
+                             f"counts only rows where it is {comparator} "
+                             f"{value!r}; the question's own predicate already "
+                             f"restricts it")
+                continue
+            filters.append(FilterBinding(
+                concept=concept.concept_id, comparator=comparator,
+                canonical_field=concept.canonical_field, value=value))
+            notes.append(f"the {measure.statistic} of {measure.concept!r} counts "
+                         f"only rows where it is {comparator} {value!r} — the "
+                         f"governed registry's statistic scope (owner decision "
+                         f"D14)")
+        return reasons, notes
 
     # -- C. authorise composition ------------------------------------------- #
 

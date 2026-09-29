@@ -118,8 +118,10 @@ def test_todays_compiler_reproduces_the_recorded_plans(replay):
     # borrower_type: the legacy concept is folded into it (`superseded_by`).
     # 83 ("pipeline growth October to November"): normalisation keeps the
     # measure's owner, the pipeline, which implements the metric delta (§20.3).
+    # 16 ("what is the smallest loan?"): the minimum balance counts only
+    # balances above zero, a predicate on the plan (owner decision D14, §21.3).
     assert moved == {112: "forecast", 113: "forecast", 125: "forecast",
-                     43: "funded", 83: "pipeline"}
+                     43: "funded", 83: "pipeline", 16: "funded"}
 
 
 def test_exactly_the_pinned_questions_are_newly_admitted(replay):

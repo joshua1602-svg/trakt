@@ -1382,3 +1382,83 @@ Its two misreads now have their own concepts ([121] → stage_completion_rate,
 evidence that they read there, not before.
 
 Pinned by `test_stage_conversion.py` and `test_pipeline_change.py`.
+
+## 21. The full bank; one model call; the smallest loan (2026-09-29)
+
+### 21.1 What the full bank showed
+
+The 21:21 UTC full bank on b1ef994f served 64 of 135 on the governed path.
+Every one of the 68 questions from [68] on failed at the language step with
+the provider's "credit balance is too low" — the account ran out mid-run; the
+readback now prints the interpreter's own failure reason, so this reads as
+what it was. Of the 67 asked before that, must answer 48/48 and nice to have
+15/15 were served (this morning, on the same 67: 37). One must-answer was
+answered wrongly — [59] "How much pipeline is current month?" was read as the
+current period and answered with the whole live pipeline; vocabulary 2.11.0
+defines a month named as the pipeline's own attribute as its expected
+completion timing.
+
+### 21.2 One model call, not a retrieval loop
+
+Owner direction (2026-09-29): "we definitely want to move away from 3 calls
+for speed and cost."
+
+The interpreter looked the governed catalogue up through eight read-only
+metadata tools. The readback's token counts measured the loop: a median of
+about 37k cached prompt tokens read — three sequential model calls, each
+re-reading the ~12k prefix plus the tool results — and ~780 output tokens, for
+metadata that is identical for every question. That was the right design
+against the alternative it replaced (a 24k-token flat vocabulary, sent
+uncached, that under-described every concept). It is not against a cached
+prefix.
+
+Now the model reads the whole semantic model up front, the way a semantic-layer
+analyst product reads its semantic model on every request:
+
+    system  [ rules | orientation | GOVERNED CATALOGUE ]   cached, shared
+            [ CLIENT CONTEXT ]                              per request
+    tools   emit_candidate_intent only; tool_choice forced; max_rounds = 1
+
+  * The catalogue is `metadata.governed_catalogue` — the metadata service's
+    OWN views (`get_concept_metadata`, `get_allowed_values`,
+    `search_capabilities`, the asset and portfolio context), over the same
+    index the compiler binds against. It can advertise nothing the tools could
+    not, and `test_model_sees_no_data` walks it with the rest of the prompt.
+  * A client's source portfolio NAMES are per request (`client_context`),
+    after the cache breakpoint — a registry belongs to one client and a cached
+    prefix is shared.
+  * The same model; the same rules; the same compiler re-validating every
+    concept. What changes is only where the model reads the catalogue from.
+  * Notes in the intent are asked to be one short sentence each (output tokens
+    are the slowest and dearest part of a call).
+  * Every outcome records `model_calls` and `model_ms`, and the readback
+    projects them, so the saving is measured rather than asserted.
+
+The interpreter moved, so its behaviour must be measured again before its
+numbers describe it (`test_the_measured_policy_has_not_moved_since_it_was_
+measured` is repointed at the change): the next bank run on the deployed
+change is that measurement.
+
+### 21.3 D14 — the smallest loan has a balance
+
+Owner decision (2026-09-29): "smallest loan should have a simple rule where it
+must be > 0." A redeemed loan's balance is zeroed on purpose
+(`closed_account.zero_fields`), so the minimum over the funded book was £0.
+
+  * The rule is the REGISTRY's: `statistic_scope: {min: {comparator: gt,
+    value: 0}}` on current_outstanding_balance, in the build script's
+    curation (`build_mi_semantics_registry.py`), regenerated — the build
+    script also now carries the two earlier hand edits (D10's balance-weighted
+    valuation, 2.8.0's `superseded_by`), so regeneration reproduces the file.
+  * The compiler writes it onto the plan as a predicate on the figure's own
+    output. The executor applies it like any filter, the receipt discloses it
+    ("Minimum Balance · Balance > 0 · N loans"), and the coverage ledger
+    proves it. Nothing downstream knows the rule exists.
+  * A question that already restricts the balance ("the smallest loan over
+    £50k") stands on its own. A minimum asked beside another figure in one
+    output is refused rather than answered — the predicate would change the
+    other figure too.
+
+Pinned by `test_smallest_loan_has_a_balance.py`,
+`test_governed_metadata_access.py` (the catalogue is the tools' own views; one
+call) and `test_model_sees_no_data.py`.

@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
 
@@ -72,10 +73,10 @@ from .outcomes import (
     CompileReason,
     REASON_CODES,
 )
-from .metadata import GovernedMetadataService, metadata_tool_schemas
+from .metadata import client_context, governed_catalogue
 from .vocabulary import GovernedVocabulary, load_governed_vocabulary
 
-INTERPRETER_VERSION = "interpretation_v2.opus_interpreter/1.0.0"
+INTERPRETER_VERSION = "interpretation_v2.opus_interpreter/2.0.0"
 
 #: The tool the model fills in. Named for what it does, so the model's own
 #: reasoning about the call is about interpretation rather than querying.
@@ -101,21 +102,28 @@ rather than approximate.
 
 HOW TO WORK
 
-You have read-only metadata tools over Trakt's governed registries. Use them — \
-do not guess a concept identifier from memory. A normal sequence is:
+The GOVERNED CATALOGUE below is Trakt's whole governed semantic model for this \
+environment: every concept with its role, definition, aliases, temporality, \
+permitted and default statistics and, where Trakt governs a value list, its \
+`allowed_values`; every capability with its operations and owned measures; \
+and the asset and portfolio configuration. CLIENT CONTEXT names this client's \
+source portfolios. Read them — do not guess a concept identifier from memory, \
+and do not name one the catalogue does not carry.
 
-  * `search_concepts` to find the governed identifier for a business word;
-  * `get_concept_metadata` to confirm its role, temporality and permitted
-    statistics;
-  * `get_allowed_values` BEFORE asserting any filter value;
-  * `search_capabilities` / `get_capability_metadata` when the question asks
-    for a named analysis rather than a figure;
-  * `get_asset_metadata` and `get_portfolio_semantic_context` when the question
-    depends on what this environment actually is;
-  * `get_source_portfolios` when the question appears to name a particular book
-    rather than describe one.
+  * a business word is matched to a concept by its identifier, label, aliases
+    and definition;
+  * a concept's role, temporality and permitted statistics are in its entry;
+  * a filter value is one of that concept's `allowed_values`;
+  * a named analysis rather than a figure is matched to a capability and its
+    operations;
+  * what this environment actually is — the asset, the portfolio, the
+    configured geography — is in `asset` and `portfolio_context`;
+  * a book the question names rather than describes is matched against
+    CLIENT CONTEXT `source_portfolios`.
 
-Retrieve what you need, then call `emit_candidate_intent` exactly once.
+Everything you need is in front of you: call `emit_candidate_intent` exactly \
+once. Keep every note in it brief — a claim, a disclosure or a question is one \
+short sentence, not an explanation.
 
 MINIMUM SUFFICIENT GOVERNED INTENT
 
@@ -169,7 +177,7 @@ business, and it does not need you to enumerate it.
 
 RULES
 
-1. Name governed concept identifiers you have confirmed through the tools. If \
+1. Name governed concept identifiers you have found in the catalogue. If \
    the question needs a concept the registry does not carry, do not substitute \
    the nearest one — record it in `ambiguity` and leave the slot empty. A \
    refusal downstream is correct; a near-miss binding is not.
@@ -186,13 +194,14 @@ RULES
    somebody else owns. A concept marked `owned_by_capability` takes NO \
    `statistic` and NO `weight` — the capability decides both — and it needs no \
    period stated for a movement it defines itself.
-3a. A filter value must come from `get_allowed_values`. If that reports \
-   `has_governed_values: false`, do NOT assert a value against it: record it in \
-   `ambiguity` with blocking=true instead. A value you cannot check is a guess.
+3a. A filter value must be one of the concept's `allowed_values`. A concept \
+   with no `allowed_values` has no governed value list: do NOT assert a value \
+   against it; record it in `ambiguity` with blocking=true instead. A value you \
+   cannot check is a guess.
 3a-i. ONE THING IS NAMED RATHER THAN FILTERED: a source portfolio. A book has \
    an identity, not a value, so it does not go in `filters` and no value list \
-   governs it. Call `get_source_portfolios` for the names this client declares; \
-   if the question names one, put the reader's phrase verbatim in \
+   governs it. CLIENT CONTEXT lists the names this client declares under \
+   `source_portfolios`; if the question names one, put the reader's phrase verbatim in \
    `population.source_reference` and the deterministic registry resolves it. \
    Only a name matching none of them, or more than one, is a blocking \
    ambiguity. Never author an identifier, a path, a dataset or a run.
@@ -215,7 +224,7 @@ RULES
    `reporting` a governed default resolves it, so an empty basis there is safe \
    and is NOT a blocking ambiguity.
 6. Record `evidence`: for each material claim, the words from the question that \
-   support it.
+   support it and the claim in one short sentence.
 7. `statistic` is what the question asks for. If it does not say, leave it \
    empty and the governed registry's default will apply. Do not invent one.
 8. `ambiguity` has two uses and the difference matters. Set `blocking: true` \
@@ -337,29 +346,44 @@ class InterpretationOutcome:
 # Prompt assembly — the one place the model's input is built
 # --------------------------------------------------------------------------- #
 
-def build_system_blocks(vocabulary: GovernedVocabulary) -> List[Dict[str, Any]]:
-    """The standing context: the rules, then a short orientation block.
+def build_system_blocks(vocabulary: GovernedVocabulary, *,
+                        source_registry: Any = None) -> List[Dict[str, Any]]:
+    """The standing context: the rules, the orientation block, the governed
+    catalogue — and, after them, what THIS request's client declares.
 
-    Deliberately NOT the registry. Dumping 150 concepts into every prompt cost
-    24k tokens a question and still under-described every one of them; the model
-    now RETRIEVES what it needs through the metadata tools, the way an analyst
-    inspects the workbook's headers and definitions before deciding what a
-    question means.
+    ONE CALL, NOT A RETRIEVAL LOOP (P0 design §21). The model used to look the
+    catalogue up through metadata tools, about three sequential model calls a
+    question on the 2026-09-29 full bank, each paying the whole prefix again
+    for metadata that never changes between questions. The catalogue is now
+    handed over whole — the tools' own views, from the same service
+    (`metadata.governed_catalogue`) — and the intent is emitted in one call.
 
-    Identical for every question in a run, so it sits in the cached prefix — a
-    breakpoint on the last block covers the tools and the system together.
+    CACHED. The first three blocks are identical for every question and every
+    client, so the breakpoint on the catalogue caches the tools and all three
+    together: a cached token costs a tenth of a fresh one and is read faster.
+    The client's source portfolio names come AFTER the breakpoint, per request,
+    because a registry belongs to one client and a cached prefix is shared.
 
     Nothing in here is data. ``test_model_sees_no_data`` asserts that over this
-    exact function's output and over every metadata tool result.
+    exact function's output.
     """
     return [
         {"type": "text", "text": SYSTEM_PROMPT},
         {"type": "text",
-         "text": ("GOVERNED CONTEXT — the closed enumerations, and how to find "
-                  "everything else:\n"
+         "text": ("GOVERNED CONTEXT — the closed enumerations:\n"
                   + json.dumps(vocabulary.orientation_payload(), indent=1,
-                               sort_keys=True)),
+                               sort_keys=True))},
+        {"type": "text",
+         "text": ("GOVERNED CATALOGUE — every concept and capability Trakt "
+                  "governs here:\n"
+                  + json.dumps(governed_catalogue(vocabulary), sort_keys=True,
+                               separators=(",", ":"), default=str)),
          "cache_control": {"type": "ephemeral"}},
+        {"type": "text",
+         "text": ("CLIENT CONTEXT — this client's governed source portfolios:\n"
+                  + json.dumps(client_context(vocabulary, source_registry),
+                               sort_keys=True, separators=(",", ":"),
+                               default=str))},
     ]
 
 
@@ -392,12 +416,11 @@ class AnthropicInterpreterClient:
     acceptance claim would be false, and the only way to know is to read it back.
     """
 
-    #: How many retrieve-then-think rounds the model gets before the intent tool
-    #: is forced. Bounded because an unbounded loop is an unbounded bill, and
-    #: because a question needing more than this many lookups is a question the
-    #: vocabulary does not describe well enough — which is a finding, not a
-    #: reason to keep paying.
-    max_rounds = 6
+    #: How many model calls a question gets. ONE (P0 design §21): the governed
+    #: catalogue is in the prompt, so the first round is the last and forces
+    #: the intent tool. The loop stays general — a client handed metadata
+    #: tools and more rounds still works — but the interpreter offers none.
+    max_rounds = 1
 
     def __init__(self, *, model: str = CONFIGURED_MODEL,
                  api_key: Optional[str] = None, max_tokens: int = 4096,
@@ -433,6 +456,12 @@ class AnthropicInterpreterClient:
         messages: List[Dict[str, Any]] = [{"role": "user", "content": user}]
         usage = {"input_tokens": 0, "output_tokens": 0,
                  "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+        token_keys = tuple(usage)
+        # HOW LONG, AND HOW MANY CALLS: the two numbers speed is judged on,
+        # recorded on every outcome (the readback projects them).
+        usage["model_calls"] = 0
+        usage["model_ms"] = 0
+        started = time.monotonic()
         calls: List[Dict[str, Any]] = []
         model_id = ""
 
@@ -454,16 +483,19 @@ class AnthropicInterpreterClient:
             # the argument outright where it does not.
             if self._temperature is not None:
                 kwargs["temperature"] = self._temperature
+            usage["model_calls"] += 1
             try:
                 message = client.messages.create(**kwargs)
             except Exception as exc:  # noqa: BLE001 - transport failure is an outcome
+                usage["model_ms"] = int((time.monotonic() - started) * 1000)
                 return ModelResponse(payload=None, usage=usage, model_id=model_id,
                                      error=f"{type(exc).__name__}: {exc}",
                                      metadata_calls=tuple(calls))
 
             model_id = str(getattr(message, "model", "") or "") or model_id
+            usage["model_ms"] = int((time.monotonic() - started) * 1000)
             if getattr(message, "usage", None) is not None:
-                for key in usage:
+                for key in token_keys:
                     usage[key] += int(getattr(message.usage, key, 0) or 0)
 
             payload = None
@@ -554,33 +586,30 @@ class OpusInterpreter:
     version = INTERPRETER_VERSION
 
     def __init__(self, client: InterpreterClient, *,
-                 vocabulary: Optional[GovernedVocabulary] = None,
-                 metadata: Optional[GovernedMetadataService] = None) -> None:
+                 vocabulary: Optional[GovernedVocabulary] = None) -> None:
         self.client = client
+        #: The catalogue the model reads is built from the SAME index the
+        #: compiler validates against (`metadata.governed_catalogue`). One that
+        #: drifted from it would advertise concepts that then refuse, which is
+        #: worse than showing the model nothing.
         self.vocabulary = vocabulary or load_governed_vocabulary()
-        #: The metadata service reads from the SAME index the compiler validates
-        #: against. A service that drifted from it would advertise concepts that
-        #: then refuse, which is worse than showing the model nothing.
-        self.metadata = metadata or GovernedMetadataService(self.vocabulary)
 
     def interpret(self, question: str, *,
                   source_registry: Any = None) -> InterpretationOutcome:
         """One question -> one intent.
 
         `source_registry` is THIS request's client's governed source portfolios.
-        It is passed per call and reaches only the per-call metadata service, so
-        an interpreter held open across clients never remembers one — the same
-        request-scoping the compiler already has, and for the same reason.
+        It is passed per call and reaches only this call's CLIENT CONTEXT block,
+        after the cached prefix, so an interpreter held open across clients
+        never remembers one — the same request-scoping the compiler already
+        has, and for the same reason.
         """
-        system = build_system_blocks(self.vocabulary)
+        system = build_system_blocks(self.vocabulary,
+                                     source_registry=source_registry)
         user = build_user_prompt(question)
-        service = GovernedMetadataService(self.vocabulary,
-                                          source_registry=source_registry)
         response = self.client.emit_intent(
             system=system, user=user, tool_schema=build_tool_schema(),
-            tool_name=INTENT_TOOL_NAME,
-            metadata_tools=metadata_tool_schemas(),
-            dispatch=service.call)
+            tool_name=INTENT_TOOL_NAME)
 
         if response.payload is None:
             return InterpretationOutcome(

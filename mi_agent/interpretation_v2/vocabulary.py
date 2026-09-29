@@ -105,7 +105,15 @@ from mi_agent import semantic_model as _semantic_model
 #: reporting period. The 2026-09-29 full bank read it as the current period
 #: and answered with the whole live pipeline — a must-answer question (D13)
 #: answered wrongly.
-VOCABULARY_VERSION = "2.11.0"
+#:
+#: 2.12.0 (owner decisions 2026-09-29) — D14: the minimum balance counts only
+#: balances above zero (`statistic_scope` on the registry field, written onto
+#: the plan by the compiler), and the model is told so; §21: the model is
+#: handed the governed catalogue whole, in the cached prompt, and answers in
+#: ONE call instead of retrieving it through lookup tools — so the orientation
+#: block's "how to find a concept" and the named-book axis point at the
+#: catalogue and the per-request CLIENT CONTEXT.
+VOCABULARY_VERSION = "2.12.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -263,10 +271,11 @@ PORTFOLIO_SCOPE_AXES: Mapping[str, Any] = {
                     "books, and naming one is not the same as asking for the "
                     "acquired role.",
             "values": {
-                "the reader's phrase": "call get_source_portfolios for the "
-                                       "governed names this client declares, "
-                                       "and put the reader's phrase here. "
-                                       "Never an id, a path or a dataset.",
+                "the reader's phrase": "match it against CLIENT CONTEXT "
+                                       "source_portfolios, the governed names "
+                                       "this client declares, and put the "
+                                       "reader's phrase here. Never an id, a "
+                                       "path or a dataset.",
             },
         },
         {
@@ -774,6 +783,18 @@ class SemanticConcept:
     geography_level: Optional[str] = None
     canonical_field: Optional[str] = None
     owning_capability: Optional[str] = None
+    #: A statistic governed over its own population: `(statistic, comparator,
+    #: value)` — the rows that statistic counts (the registry's
+    #: `statistic_scope`; owner decision D14, the minimum balance counts only
+    #: balances above zero). The compiler writes it onto the plan.
+    statistic_scope: Tuple[Tuple[str, str, Any], ...] = ()
+
+    def scope_for(self, statistic: Optional[str]) -> Optional[Tuple[str, Any]]:
+        """`(comparator, value)` the named statistic counts over, or None."""
+        for stat, comparator, value in self.statistic_scope:
+            if stat == statistic:
+                return comparator, value
+        return None
 
     @property
     def is_specialist(self) -> bool:
@@ -820,6 +841,14 @@ class SemanticConcept:
             view["default_weight_concept"] = self.default_weight_concept
         if self.bucket_concept:
             view["banded_as"] = self.bucket_concept
+        if self.statistic_scope:
+            # Said to the model so it does not add the predicate itself: the
+            # compiler writes it onto the plan.
+            view["statistic_scope"] = {
+                stat: (f"counts only rows where {self.concept_id} "
+                       f"{_COMPARATOR_WORDS.get(comparator, comparator)} {value}"
+                       f"; the compiler applies this, do not add it as a filter")
+                for stat, comparator, value in self.statistic_scope}
         if self.is_specialist:
             view["note"] = ("Owned by a capability. Name it; do not impose a "
                             "statistic or weight and do not decompose it.")
@@ -956,9 +985,10 @@ class GovernedVocabulary:
                 "dimensions": len(self.dimensions()),
             },
             "how_to_find_a_concept": (
-                "Call search_concepts to find the governed identifier for a "
-                "business word, get_concept_metadata for its full definition, "
-                "and get_allowed_values before asserting any filter value."),
+                "Every governed concept is in the GOVERNED CATALOGUE with its "
+                "definition, aliases, permitted statistics and, where Trakt "
+                "governs a value list, its allowed_values; a filter value "
+                "must be one of them."),
         }
 
 
@@ -1022,6 +1052,12 @@ def _concept_from_registry(canonical_field: str, mi_entry: Mapping[str, Any],
     aliases.discard("")
     aliases.discard(canonical_field)
 
+    scope: List[Tuple[str, str, Any]] = []
+    for raw, rule in sorted((mi_entry.get("statistic_scope") or {}).items()):
+        stat = _AGG_TRANSLATION.get(str(raw).strip().lower())
+        if stat in stats and isinstance(rule, Mapping) and rule.get("comparator"):
+            scope.append((stat, str(rule["comparator"]), rule.get("value")))
+
     basis, level = GEOGRAPHY_CONCEPTS.get(canonical_field, (None, None))
     return SemanticConcept(
         concept_id=canonical_field,
@@ -1047,7 +1083,13 @@ def _concept_from_registry(canonical_field: str, mi_entry: Mapping[str, Any],
         geography_basis=basis,
         geography_level=level,
         canonical_field=canonical_field,
+        statistic_scope=tuple(scope),
     )
+
+
+#: How a governed comparator reads in a sentence the model is shown.
+_COMPARATOR_WORDS = {"gt": ">", "ge": ">=", "lt": "<", "le": "<=",
+                     "eq": "=", "ne": "!="}
 
 
 def _specialist_concepts(capabilities: Iterable[str]) -> Dict[str, SemanticConcept]:

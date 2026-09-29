@@ -212,7 +212,9 @@ def test_region_and_two_dimensions_is_too_many_axes():
 @pytest.mark.parametrize("statistic, reduce, words", [
     ("median", pd.Series.median, "Median Balance: £"),
     ("max", pd.Series.max, "Maximum Balance: £"),
-    ("min", pd.Series.min, "Minimum Balance: £")])
+    # The minimum counts only balances above zero (D14,
+    # test_smallest_loan_has_a_balance.py).
+    ("min", lambda s: s[s > 0].min(), "Minimum Balance: £")])
 def test_median_largest_smallest_are_the_executors(statistic, reduce, words,
                                                   monkeypatch, book, semantics):
     intent = _intent(operation="point_in_time",

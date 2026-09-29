@@ -949,8 +949,8 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                         "maxLength": _MAX_SOURCE_REFERENCE,
                         "description":
                             "WHICH BOOK by name, when the question names one. "
-                            "Call get_source_portfolios for the governed names "
-                            "this client declares, and put the reader's own "
+                            "CLIENT CONTEXT lists the governed names this "
+                            "client declares; put the reader's own "
                             "phrase here verbatim — never an id, a path, a "
                             "dataset or a run. The deterministic registry "
                             "resolves the phrase and refuses what it cannot. "

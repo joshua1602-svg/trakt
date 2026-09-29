@@ -554,20 +554,27 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
 
     was_paras, now_paras = _paragraphs(was_prompt), _paragraphs(SYSTEM_PROMPT)
     amended = [p for p in was_paras if p not in now_paras]
-    #: The three paragraphs the slice 3 affordance was authorised to amend: the
-    #: tool list (one tool added), the RULES block (rules 3a-i and 9 added), and
-    #: preservation check A (the named source portfolio added to what must never
-    #: be dropped). Identified by their opening words so this reads as intent
-    #: rather than as a hash nobody can check.
-    assert len(amended) == 3, (
-        f"{len(amended)} paragraphs of the measured prompt changed; three were "
-        f"authorised")
-    assert amended[0].startswith("* `search_concepts`")
-    assert amended[1].startswith("1. Name governed concept identifiers")
-    assert amended[2].startswith("A. PRESERVATION.")
+    #: The paragraphs authorised to be amended, identified by their opening
+    #: words so this reads as intent rather than as a hash nobody can check:
+    #:   slice 3 portfolio affordance — the tool list (one tool added), the
+    #:     RULES block (rules 3a-i and 9 added), and preservation check A (the
+    #:     named source portfolio added to what must never be dropped);
+    #:   one call, not a retrieval loop (owner direction 2026-09-29, P0 design
+    #:     §21) — HOW TO WORK now points at the governed catalogue in the prompt
+    #:     instead of the lookup tools (its three paragraphs), and the rules
+    #:     that named a tool (1, 3a, 3a-i) name the catalogue; rule 6 asks for
+    #:     each claim in one short sentence.
+    AUTHORISED_AMENDMENTS = ("You have read-only metadata tools",
+                             "* `search_concepts`",
+                             "Retrieve what you need",
+                             "1. Name governed concept identifiers",
+                             "A. PRESERVATION.")
+    assert [p for p in amended
+            if not p.startswith(AUTHORISED_AMENDMENTS)] == [], (
+        "a paragraph of the measured prompt changed that was not authorised")
     assert len(now_paras) == len(was_paras), (
-        "the prompt gained or lost a paragraph; the three authorised changes "
-        "are all amendments to existing ones")
+        "the prompt gained or lost a paragraph; the authorised changes are "
+        "all amendments to existing ones")
 
     # -- the tool surface: one tool added, the rest untouched ---------------- #
     was_metadata = subprocess.run(
@@ -680,9 +687,16 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
                                     "cohort_conversion", "stage_pull_through",
                                     "stage_completion_rate"}
 
+    #: ONE KEY REWORDED, BY NAME. `how_to_find_a_concept` told the model to
+    #: call the lookup tools; with the governed catalogue in the prompt (one
+    #: call, P0 design §21) it points at the catalogue instead.
+    AUTHORISED_REWORDINGS = {"how_to_find_a_concept"}
+
     for key in sorted(set(was) & set(now)):
         if key == "vocabulary_version":
             continue                       # moves with the block, by design
+        if key in AUTHORISED_REWORDINGS:
+            continue
         if key == "concept_counts":
             before_ids = set(was_vocabulary.concepts)
             after_ids = set(vocabulary.concepts)

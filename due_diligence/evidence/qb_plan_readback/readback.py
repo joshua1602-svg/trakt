@@ -93,7 +93,8 @@ def summarise(record: Dict[str, Any]) -> Dict[str, Any]:
         "model_usage": {k: usage.get(k) for k in
                         ("input_tokens", "output_tokens",
                          "cache_read_input_tokens",
-                         "cache_creation_input_tokens", "rounds")
+                         "cache_creation_input_tokens", "model_calls",
+                         "model_ms")
                         if k in usage},
     }
 

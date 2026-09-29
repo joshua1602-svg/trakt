@@ -303,7 +303,10 @@ def test_the_model_and_tool_configuration_did_not_change():
     assert defaults["temperature"].default is None, (
         "temperature must stay unset so the benchmark configuration is the one "
         "Run 6 used")
-    assert AnthropicInterpreterClient.max_rounds == 6
+    # ONE model call a question (owner direction 2026-09-29, P0 design §21):
+    # the governed catalogue is in the prompt, so the first round forces the
+    # intent tool. It was six retrieve-then-think rounds, about three used.
+    assert AnthropicInterpreterClient.max_rounds == 1
 
 
 def test_the_policy_phase_changed_only_the_interpreter():

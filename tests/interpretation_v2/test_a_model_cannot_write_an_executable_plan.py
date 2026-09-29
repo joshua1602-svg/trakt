@@ -216,13 +216,15 @@ def test_a_concept_outside_this_asset_class_fails_closed(vocabulary, compiler):
 
 
 def test_the_orientation_block_is_not_the_registry(vocabulary):
-    """The model is oriented, then it RETRIEVES.
+    """The orientation block orients; the CATALOGUE describes.
 
-    The standing block carries the closed enumerations and counts — not the
-    concepts. Dumping 150 of them into every prompt was the previous design's
-    other mistake: 24k tokens a question, and still too little about each one.
+    The orientation block carries the closed enumerations and counts — not the
+    concepts. The concepts are the governed catalogue's (P0 design §21): the
+    metadata tools' own full views, in their own cached block, rather than the
+    previous design's flat name list, which was 24k uncached tokens a question
+    and still too little about each concept.
     """
     payload = vocabulary.orientation_payload()
     assert "concepts" not in payload
     assert payload["concept_counts"]["total"] > 100
-    assert "search_concepts" in payload["how_to_find_a_concept"]
+    assert "GOVERNED CATALOGUE" in payload["how_to_find_a_concept"]
