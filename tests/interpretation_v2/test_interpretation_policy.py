@@ -266,7 +266,11 @@ def test_the_measured_policy_has_not_moved_since_it_was_measured():
     # in unmeasured beside it. `test_the_interpreter_policy_did_not_move` is what
     # constrains WHAT moved: 23 of the prompt's 26 paragraphs word for word, and
     # every pre-existing metadata tool schema byte-identical.
-    measured_at = "88fdf7f9"
+    # Repointed again at the one-call interpreter (88a50290, P0 design §21):
+    # the governed catalogue moved into the prompt and the retrieval loop went,
+    # so the behaviour measured at 88fdf7f9 no longer describes this code. The
+    # next bank run on the deployed change is its measurement.
+    measured_at = "88a50290"
     diff = subprocess.run(
         ["git", "diff", "--name-only", measured_at, "--",
          "mi_agent/interpretation_v2/opus_interpreter.py"],
