@@ -675,12 +675,15 @@ def _open_scale_up(request: Mapping[str, Any], threshold: Optional[float] = None
                        f"the owner did not say which completion signal its "
                        f"run-rate used ({signal_kind!r}), so its inputs cannot "
                        f"be stated")
+    # The inputs' words are the semantic model's (the view's declared inputs),
+    # not this module's.
+    declared = MODEL.views["scale_up"].inputs
     funded = {"as_of": fx.get("fundedReportingDate"),
               "reporting_period": fx.get("reportingPeriod"),
-              "label": "funded book",
+              "label": declared["funded"]["label"],
               "owner": POPULATION_INPUTS["funded"]["owner"]}
     flow = {"as_of": fx.get("completionFlowExtractDate"),
-            "label": "pipeline completion flow",
+            "label": declared["signal"]["label"],
             "owner": POPULATION_INPUTS["pipeline"]["owner"]}
     pipeline_fed = signal_kind == fx_mod.SIGNAL_OBSERVED_COMPLETION_FLOW
     inputs = {"funded": ("funded", funded),

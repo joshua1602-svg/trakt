@@ -1047,11 +1047,9 @@ def live_pipeline_scope(df: pd.DataFrame, *, names_a_stage: bool = False
 
 
 def _gbp(value: Optional[float]) -> str:
-    amount = float(value or 0.0)
-    for size, unit in ((1e9, "bn"), (1e6, "m"), (1e3, "k")):
-        if abs(amount) >= size:
-            return f"£{amount / size:,.1f}{unit}"
-    return f"£{amount:,.0f}"
+    """Money in an answer sentence, by the answer standard."""
+    from mi_agent import answer_standard
+    return answer_standard.money(float(value or 0.0))
 
 
 def _stage_label(stage: Any) -> str:
@@ -1074,8 +1072,10 @@ def live_pipeline_note(scope: Optional[Dict[str, Any]]) -> Optional[str]:
         parts = [f"{_stage_label(r['stage'])} {int(r['caseCount']):,} "
                  f"({_gbp(r.get('amount'))})"
                  for r in excluded.get("stages") or ()]
-        return (f"Live pipeline ({stages}); excludes {int(excluded['cases']):,} "
-                f"closed or unmapped case(s): " + ", ".join(parts))
+        from mi_agent import answer_standard
+        return (f"Live pipeline ({stages}); excludes "
+                f"{answer_standard.plural(excluded['cases'], 'closed or unmapped case')}: "
+                + ", ".join(parts))
     left = [_stage_label(s) for s in scope.get("excluded_stages") or ()]
     if left:
         return f"Live pipeline ({stages}); {', '.join(left)} not counted"

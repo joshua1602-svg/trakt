@@ -198,9 +198,15 @@ def test_the_answer_names_the_regions_and_what_it_left_out(monkeypatch):
     payload, record = _served(_BY_REGION, monkeypatch, pipeline_source=_source())
     assert payload is not None, record.get("execution")
     answer = payload["answer"]
-    assert answer.startswith("The live pipeline amount by region: ")
-    assert "Regions are the client's reporting regions (uk_itl1)" in answer
-    assert "1 case(s)" in answer and "no governed mapping" in answer
+    # The answer standard: measure, grouping, leaders, how many groups.
+    assert answer.startswith("Live pipeline amount by region — largest: ")
+    assert "groups), as at the weekly extract of" in answer
+    # The regions are named as the client's; the taxonomy's own id is for the
+    # notes, not the sentence.
+    assert "Regions are the client's reporting regions;" in answer
+    assert "uk_itl1" not in answer
+    assert any("uk_itl1" in n["note"] for n in payload["sourceNotes"])
+    assert "1 case (" in answer and "no governed mapping is in no region" in answer
     coverage = _governed_plan_coverage(payload)
     assert coverage["unaccounted"] == []
     assert any(e["kind"] == "governed_plan:geography" for e in coverage["concepts"])

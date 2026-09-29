@@ -56,7 +56,7 @@ views:
     # adapter names which, from the owner's `completionSignalKind`.
     inputs:
       funded: {as_of: fundedReportingDate, label: funded book}
-      signal: {as_of: completionFlowExtractDate, label: pipeline completion flow}
+      signal: {as_of: completionFlowExtractDate, label: completion history}
     available_when: {signal: completionRunRateForecast.available}
 
 dimensions:

@@ -20,6 +20,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+from mi_agent import answer_standard as _standard
+
 # Technical diagnostics that are useful for engineers but must NOT appear in the
 # normal user-facing MI card. They are retained in API metadata/diagnostics and
 # logged backend-side instead. Business-facing warnings (missing data, unavailable
@@ -193,17 +195,15 @@ def _kpi_label(key: str, resolved: Dict[str, Any]) -> str:
 
 
 def _format_kpi_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
+    """A figure as a DASHBOARD TILE shows it ("£87.1MM"), in the request's
+    reporting currency — the platform's one money formatter with the tiles'
+    suffixes. An answer SENTENCE states money with the chat suffixes instead
+    (`_prose_value`)."""
     if not isinstance(value, (int, float)):
         return str(value)
     if fmt == "gbp":
-        v = float(value)
-        if abs(v) >= 1e9:
-            return f"£{v / 1e9:.2f}BN"
-        if abs(v) >= 1e6:
-            return f"£{v / 1e6:.1f}MM"
-        if abs(v) >= 1e3:
-            return f"£{v / 1e3:.0f}K"
-        return f"£{v:,.0f}"
+        from mi_agent_api import currency as currency_mod
+        return currency_mod.format_money(float(value), suffixes=("BN", "MM", "K"))
     if fmt == "pct":
         # Apply the storage scale from the dataset contract: a fraction (0.51)
         # displays as 51.0%, points (51) display as 51.0%. Never guessed.
@@ -536,6 +536,16 @@ def _interpreted_string(interpreted: Any) -> str:
     return ""
 
 
+def _prose_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
+    """A figure as an answer SENTENCE states it: money by the answer standard
+    ("£87.1m", `mi_agent.answer_standard.money`), anything else exactly as the
+    tile and table show it. The same figure, the same formatter owner — only
+    the magnitude suffixes differ, as the platform's convention says."""
+    if fmt == "gbp" and isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _standard.money(value)
+    return _format_kpi_value(value, fmt, scale)
+
+
 def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional[str],
             hints: Optional[Dict[str, Any]] = None,
             spec: Optional[Mapping[str, Any]] = None) -> str:
@@ -642,9 +652,9 @@ def _ranked_lead(rows, resolved: Mapping[str, Any],
     if ranked_key is None:
         return ""
     h = _hint(hints, ranked_key)
-    shown = _format_kpi_value(row.get(ranked_key),
-                              h.get("format") or _infer_col_format(ranked_key, resolved),
-                              h.get("scale"))
+    shown = _prose_value(row.get(ranked_key),
+                         h.get("format") or _infer_col_format(ranked_key, resolved),
+                         h.get("scale"))
     superlative = ("lowest" if str(spec.get("sort_direction") or "desc").lower() == "asc"
                    else "highest")
     measure = _kpi_label(ranked_key, resolved)
@@ -652,8 +662,8 @@ def _ranked_lead(rows, resolved: Mapping[str, Any],
     return f"{label} has the {superlative} {measure}: {shown} ({groups})."
 
 
-#: How many groups a breakdown's sentence names. The table has them all.
-_LEAD_GROUPS = 3
+#: How many groups a breakdown's sentence names: the answer standard's.
+_LEAD_GROUPS = _standard.LEAD_GROUPS
 
 
 def _lead_value_key(row: Mapping[str, Any], axes: List[str],
@@ -729,16 +739,16 @@ def _breakdown_lead(rows, resolved: Mapping[str, Any],
                     key=lambda r: _value(r), reverse=True)
     if not ranked:
         return ""
-    named = ranked[:_LEAD_GROUPS]
-    shown = ", ".join(f"{_group(r)} {_format_kpi_value(r.get(key), fmt, scale)}"
-                      for r in named)
-    rest = len(rows) - len(named)
     measure = _lead_measure(key, resolved, spec)
     axis_words = " and ".join(_label_for(a, resolved) for a in axes)
     word = "largest" if aggregation in ("sum", "count", "balance_sum") else "highest"
-    groups = f"{len(rows):,} groups" if len(axes) == 1 else f"{len(rows):,} combinations"
-    return (f"{measure} by {axis_words} — {word}: {shown}"
-            + (f", and {rest:,} more" if rest > 0 else "") + f" ({groups}).")
+    lead = _standard.breakdown_lead(
+        measure, axis_words,
+        [(_group(r), _prose_value(r.get(key), fmt, scale))
+         for r in ranked[:_LEAD_GROUPS]],
+        total=len(rows), word=word,
+        noun="groups" if len(axes) == 1 else "combinations")
+    return f"{lead}."
 
 
 #: The column a governed series stacks its periods by (the temporal runtime's
@@ -778,9 +788,9 @@ def _series_lead(rows, resolved: Mapping[str, Any],
         by_date = {str(r.get(_SERIES_DATE)): r.get(key) for r in rows}
         first, last = by_date.get(dates[0]), by_date.get(dates[-1])
         if len(dates) == 1:
-            return f"{measure} at {span}: {_format_kpi_value(last, fmt, scale)}."
-        return (f"{measure} over {span}: from {_format_kpi_value(first, fmt, scale)} "
-                f"to {_format_kpi_value(last, fmt, scale)}.")
+            return f"{measure} at {span}: {_prose_value(last, fmt, scale)}."
+        return (f"{measure} over {span}: from {_prose_value(first, fmt, scale)} "
+                f"to {_prose_value(last, fmt, scale)}.")
     latest = [r for r in rows if str(r.get(_SERIES_DATE)) == dates[-1]]
     lead = _breakdown_lead(latest, resolved, hints, spec)
     if not lead:
@@ -845,7 +855,7 @@ def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
     for key, value in items:
         h = _hint(hints, key)
         fmt = h.get("format") or _infer_col_format(key, resolved)
-        shown = _format_kpi_value(value, fmt, h.get("scale"))
+        shown = _prose_value(value, fmt, h.get("scale"))
         if shown in (None, ""):
             continue
         label = _kpi_label(key, resolved)

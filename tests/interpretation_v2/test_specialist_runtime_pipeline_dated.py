@@ -312,5 +312,5 @@ def test_the_monthly_answer_says_it_is_monthly(monkeypatch, history):
         _intent(operation="series", time={"form": "series", "grain": "monthly"}),
         monkeypatch, history)
     assert payload is not None, record.get("execution")
-    assert "3 month(s), at the last weekly extract of each" in payload["answer"]
+    assert "3 months, at the last weekly extract of each" in payload["answer"]
     assert any(n["field"] == "grain: monthly" for n in payload["sourceNotes"])

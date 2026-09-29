@@ -490,7 +490,7 @@ def test_the_curve_answer_is_a_line_chart_of_the_owners_bands(monkeypatch, funde
                                      "periods_ahead": 12})),
         monkeypatch, funded_root, estate)
     assert payload["answer"].startswith(
-        "Projected funded balance over the next 12 month(s)")
+        "Projected funded balance over the next 12 months, ")
     chart = payload["artifacts"][0]
     assert chart["type"] == "chart" and chart["chartType"] == "line"
     assert [s["key"] for s in chart["series"]] == ["downside", "base", "upside"]

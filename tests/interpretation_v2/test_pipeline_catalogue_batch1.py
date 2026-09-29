@@ -250,4 +250,5 @@ def test_a_broker_breakdown_names_the_leaders(monkeypatch):
     payload, record = _served(intent, monkeypatch, pipeline_source=_source())
     assert payload is not None, record.get("execution")
     leader = _tab()["brokerBreakdownFull"][0]["key"]
-    assert payload["answer"].startswith(f"The live pipeline amount by broker: {leader}")
+    assert payload["answer"].startswith(
+        f"Live pipeline amount by broker — largest: {leader} ")

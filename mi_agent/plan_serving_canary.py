@@ -57,6 +57,7 @@ import logging
 import os
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
+from mi_agent import answer_standard as _standard
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_shadow_evidence as evidence
 from mi_agent import plan_shadow_wiring as wiring
@@ -653,15 +654,24 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
             columns=[{"key": str(axis), "label": axis_label.capitalize()},
                      {"key": "value", "label": label}],
             description=f"{len(rows)} rows.")]
-        # The sentence names the leaders; a long breakdown (hundreds of
-        # brokers) is capped in the sentence and complete in the table.
         named = (_stage_name if axis == "pipeline_stage" else str)
-        shown = rows[:_SENTENCE_ROWS]
-        answer = (f"The {phrase} by {axis_label}: "
-                  + ", ".join(f"{named(r[str(axis)])} {_shown(r['value'])}"
-                              for r in shown)
-                  + (f", and {len(rows) - len(shown):,} more"
-                     if len(rows) > len(shown) else "") + f"{as_at}.")
+        if axis == "expected_completion_month":
+            # A TIMELINE reads in date order, every month named (capped for a
+            # long one); the table has them all.
+            shown = rows[:_SENTENCE_ROWS]
+            answer = (f"The {phrase} by {axis_label}: "
+                      + ", ".join(f"{named(r[str(axis)])} {_shown(r['value'])}"
+                                  for r in shown)
+                      + (f", and {len(rows) - len(shown):,} more"
+                         if len(rows) > len(shown) else "") + f"{as_at}.")
+        else:
+            # THE ANSWER STANDARD: the measure, the grouping, the leaders and
+            # how many groups — the same sentence a funded breakdown makes.
+            lead = _standard.breakdown_lead(
+                phrase[:1].upper() + phrase[1:], axis_label,
+                [(named(r[str(axis)]), _shown(r["value"])) for r in rows],
+                total=len(rows))
+            answer = f"{lead}{as_at}."
     elif shape in ("dated", "grouped_dated"):
         # THE PIPELINE AT NAMED DATES. D4: the measure and every extract date
         # are in the sentence; the rule that chose each extract (D7 for a
@@ -690,7 +700,7 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                        + [{"key": st, "label": st} for st in stages])
         artefacts = [_artefact("table", "Pipeline at the named dates",
                                rows=rows, columns=columns,
-                               description=f"{len(rows)} weekly extract(s).")]
+                               description=f"{_standard.plural(len(rows), 'weekly extract')}.")]
     else:
         # A SERIES, weekly. One row per governed extract; a grouped series gets
         # one column per stage, which is the shape the accepted evolution route
@@ -699,9 +709,10 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
         # A MONTHLY series is one point per month — D7's extract, the last
         # weekly one dated within the month — and says so; the rule is in the
         # source notes. Otherwise the series is weekly and says that.
-        span = (f"{len(periods)} month(s), at the last weekly extract of each"
+        span = (f"{_standard.plural(len(periods), 'month')}, at the last weekly "
+                f"extract of each"
                 if receipt.get("grain") == "monthly"
-                else f"{len(periods)} weekly extract(s)")
+                else _standard.plural(len(periods), "weekly extract"))
         if axis:
             stages = sorted({str(c[axis]) for c in outcome.cells})
             rows = [{"period": per,
@@ -749,14 +760,18 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     # extract region it could not place — the tab's own disclosure.
     region = receipt.get("region_basis") or {}
     if region:
-        note = (f"Regions are the client's reporting regions"
-                + (f" ({region['taxonomy']})" if region.get("taxonomy") else ""))
+        note = "Regions are the client's reporting regions"
         if region.get("unmappedCaseCount"):
-            note += (f"; {int(region['unmappedCaseCount']):,} case(s) "
+            unmapped = int(region["unmappedCaseCount"])
+            note += (f"; {_standard.plural(unmapped, 'case')} "
                      f"({_money(region.get('unmappedAmount') or 0.0)}) whose "
-                     f"extract region has no governed mapping are in no region")
+                     f"extract region has no governed mapping "
+                     f"{'is' if unmapped == 1 else 'are'} in no region")
         answer = f"{answer} {note}."
-        source_notes.append({"field": "region", "note": note})
+        # The taxonomy's own name is for the reader of the notes, not the
+        # sentence.
+        source_notes.append({"field": "region", "note": note + (
+            f" (taxonomy: {region['taxonomy']})" if region.get("taxonomy") else "")})
     # The expected-completion view counts the cases carrying a forecast; say so.
     if receipt.get("completion_basis"):
         answer = f"{answer} Counted over {receipt['completion_basis']}."
@@ -873,7 +888,7 @@ def render_stage_movement(plan: Mapping[str, Any], outcome: Any, *,
             "id": f"art_{uuid.uuid4().hex[:8]}", "type": "table",
             "title": "Governed stage movement", "rows": outcome.rows,
             "columns": outcome.columns,
-            "description": f"{len(outcome.rows)} row(s).",
+            "description": f"{_standard.plural(len(outcome.rows), 'row')}.",
             "source": {"engine": "mi_agent.governed_plan",
                        "label": "MI Agent · table", "spec": spec_dict,
                        "asOf": dataset.get("as_of_date") or as_of,
@@ -975,12 +990,9 @@ def _attempt_forecast(body: Dict[str, Any], *, plan: Mapping[str, Any],
 
 
 def _money(value: Any) -> str:
-    """A reader-facing GBP amount. Presentation only: no figure is derived."""
-    amount = float(value)
-    for size, unit in ((1e9, "bn"), (1e6, "m"), (1e3, "k")):
-        if abs(amount) >= size:
-            return f"£{amount / size:,.1f}{unit}"
-    return f"£{amount:,.0f}"
+    """A reader-facing amount, by the answer standard: the platform's money
+    formatter, in the request's reporting currency. Presentation only."""
+    return _standard.money(value)
 
 
 def _as_at_clause(inputs: Mapping[str, Any]) -> str:
@@ -1138,6 +1150,10 @@ def _milestone_sentence(receipt: Mapping[str, Any], outcome: Any, as_at: str
     return answer, kpis, "Forecast milestone"
 
 
+#: Axes whose order is the owner's and is itself the answer: a breakdown by
+#: them names every row in that order rather than leading with the largest.
+_OWNER_ORDERED_AXES = frozenset({"forecast_scenario", "funding_threshold"})
+
 #: Reader-facing names for the axes a forecast figure is broken down by.
 #: Presentation only.
 _FORECAST_AXES = {
@@ -1207,9 +1223,9 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
         bands = ", ".join(f"{_words(c)} {_shown_in(unit, last.get(c))}"
                           for c in columns)
         horizon = receipt.get("horizon") or {}
-        span = (f"over the next {horizon.get('periods_ahead')} month(s)"
+        span = (f"over the next {_standard.plural(horizon['periods_ahead'], 'month')}"
                 if horizon.get("periods_ahead") else
-                f"over the owner's {horizon.get('published_months')}-month horizon")
+                f"over the {horizon.get('published_months')}-month forecast horizon")
         rate = receipt.get("base_monthly_run_rate")
         answer = (f"{label} {span}, {first.get('period')} to "
                   f"{last.get('period')}: {bands} by {last.get('period')}"
@@ -1226,9 +1242,18 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
     if shape == "grouped":
         axis_label = _FORECAST_AXES.get(str(axis), _words(axis))
         rows = [dict(c) for c in (outcome.cells or ())]
-        parts = ", ".join(f"{_words(r.get(axis))} {_shown_in(unit, r.get('value'))}"
-                          for r in rows)
-        answer = f"{label} by {axis_label}: {parts}."
+        if str(axis) in _OWNER_ORDERED_AXES:
+            # The owner's order IS the answer (downside → upside, the ladder
+            # low to high): every row, as published.
+            parts = ", ".join(f"{_words(r.get(axis))} {_shown_in(unit, r.get('value'))}"
+                              for r in rows)
+            answer = f"{label} by {axis_label}: {parts}."
+        else:
+            ranked = sorted(rows, key=lambda r: -float(r.get("value") or 0.0))
+            answer = _standard.breakdown_lead(
+                label, axis_label,
+                [(_words(r.get(axis)), _shown_in(unit, r.get("value")))
+                 for r in ranked], total=len(rows)) + "."
         basis = receipt.get("axis_basis") or {}
         if basis.get("field"):
             unplaced = basis.get("unplacedForecastAmount") or 0.0
