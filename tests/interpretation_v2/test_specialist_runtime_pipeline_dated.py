@@ -235,3 +235,62 @@ def test_serve_refuses_an_ambiguous_month_and_legacy_serves(monkeypatch, history
         monkeypatch, history)
     assert payload is None
     assert record["serving"]["reason"].endswith(pipeline_rt.PERIOD_LABEL_AMBIGUOUS)
+
+
+# --------------------------------------------------------------------------- #
+# a series BY MONTH is D7's extract for each month, never the weekly series
+# --------------------------------------------------------------------------- #
+#
+# The 2026-09-29 production bank asked "Show pipeline amount evolution by month"
+# and was served all 90 weekly extracts: the series path never read the grain.
+
+_MONTHLY = ["2025-10-30", "2025-11-27", "2026-10-29"]
+
+
+def _series(history, grain, operation="series", **over):
+    plan = _plan(operation=operation,
+                 time={"form": "series", "grain": grain}, **over)
+    assert pipeline_rt.check_eligibility(plan) == (True, "", ""), \
+        pipeline_rt.check_eligibility(plan)
+    return pipeline_rt.execute_temporal(plan, root=history, client_id=_CLIENT)
+
+
+def test_a_monthly_series_is_the_last_weekly_extract_of_each_month(history):
+    by_date, _ = _owner(history)
+    outcome = _series(history, "monthly")
+    assert outcome.ok, outcome.detail
+    assert [c["period"] for c in outcome.cells] == _MONTHLY
+    assert [c["value"] for c in outcome.cells] == [
+        by_date[d]["metrics"]["pipeline_amount"] for d in _MONTHLY]
+    assert outcome.receipt["grain"] == "monthly"
+    assert outcome.receipt["month_rule"] == pipeline_rt.MONTH_RULE
+    assert outcome.receipt["selected_periods"] == _MONTHLY
+
+
+def test_a_weekly_series_is_every_extract(history):
+    outcome = _series(history, "weekly")
+    assert [c["period"] for c in outcome.cells] == list(_DATES)
+    assert outcome.receipt["grain"] == "weekly"
+    assert "month_rule" not in outcome.receipt
+
+
+def test_a_monthly_stage_series_keeps_only_those_extracts(history):
+    outcome = _series(history, "monthly", operation="breakdown",
+                      dimensions=["pipeline_stage"])
+    assert outcome.ok, outcome.detail
+    assert sorted({c["period"] for c in outcome.cells}) == _MONTHLY
+
+
+def test_a_grain_the_weekly_history_cannot_state_is_refused(history):
+    plan = _plan(operation="series", time={"form": "series", "grain": "quarterly"})
+    ok, why, _ = pipeline_rt.check_eligibility(plan)
+    assert (ok, why) == (False, pipeline_rt.PERIOD_NOT_SUPPORTED)
+
+
+def test_the_monthly_answer_says_it_is_monthly(monkeypatch, history):
+    payload, record = _served(
+        _intent(operation="series", time={"form": "series", "grain": "monthly"}),
+        monkeypatch, history)
+    assert payload is not None, record.get("execution")
+    assert "3 month(s), at the last weekly extract of each" in payload["answer"]
+    assert any(n["field"] == "grain: monthly" for n in payload["sourceNotes"])

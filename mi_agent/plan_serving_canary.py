@@ -654,6 +654,12 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
         # one column per stage, which is the shape the accepted evolution route
         # already publishes.
         periods = sorted({str(c["period"]) for c in outcome.cells})
+        # A MONTHLY series is one point per month — D7's extract, the last
+        # weekly one dated within the month — and says so; the rule is in the
+        # source notes. Otherwise the series is weekly and says that.
+        span = (f"{len(periods)} month(s), at the last weekly extract of each"
+                if receipt.get("grain") == "monthly"
+                else f"{len(periods)} weekly extract(s)")
         if axis:
             stages = sorted({str(c[axis]) for c in outcome.cells})
             rows = [{"period": per,
@@ -662,13 +668,13 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                         for st in stages}}
                     for per in periods]
             series = [{"key": st, "label": st} for st in stages]
-            answer = (f"The {phrase} by stage across {len(periods)} weekly "
-                      f"extract(s): {', '.join(_stage_name(st) for st in stages)}.")
+            answer = (f"The {phrase} by stage across {span}: "
+                      f"{', '.join(_stage_name(st) for st in stages)}.")
         else:
             rows = sorted(({"period": str(c["period"]), "value": c["value"]}
                            for c in outcome.cells), key=lambda r: r["period"])
             series = [{"key": "value", "label": label}]
-            answer = f"The {phrase} across {len(periods)} weekly extract(s)"
+            answer = f"The {phrase} across {span}"
             if rows:
                 answer += (f", from {_shown(rows[0]['value'])} at {rows[0]['period']} "
                            f"to {_shown(rows[-1]['value'])} at {rows[-1]['period']}")
@@ -686,6 +692,9 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     source_notes = [{"field": f"period: {row.get('requested')}",
                      "note": f"{row.get('extract_date')} — {row.get('rule')}"}
                     for row in (receipt.get("period_resolution") or ())]
+    if receipt.get("month_rule"):
+        source_notes.append({"field": "grain: monthly",
+                             "note": str(receipt["month_rule"])})
     # WHAT THE FIGURE LEAVES OUT, on the sentence and in the notes — the same
     # disclosure the Pipeline tab makes, in the Pipeline owner's words.
     if scope.get("note"):

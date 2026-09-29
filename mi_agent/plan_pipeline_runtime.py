@@ -151,6 +151,13 @@ MONTH_RULE = "D7: the last weekly extract dated within the named month"
 TEMPORAL_GRAIN = "weekly"
 TEMPORAL_BASIS = "governed_weekly_pipeline_extracts"
 
+#: The grains a pipeline SERIES can honestly be stated at. The history is
+#: weekly; a monthly series is the weekly one read at D7's extract for each
+#: month (the last weekly extract dated within it), so "by month" is answered
+#: month by month and never as the weekly series. Any other grain — quarterly,
+#: daily — has no owner and is refused rather than served at the weekly grain.
+SERIES_GRAINS: FrozenSet[str] = frozenset({"", "weekly", "monthly"})
+
 
 # --------------------------------------------------------------------------- #
 # reading the plan
@@ -288,6 +295,11 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
         if operation not in TEMPORAL_OPERATIONS:
             return (False, OPERATION_NOT_SUPPORTED,
                     f"operation={operation!r} has no weekly pipeline owner")
+        grain = str(period.get("grain") or "")
+        if grain not in SERIES_GRAINS:
+            return (False, PERIOD_NOT_SUPPORTED,
+                    f"the pipeline history is weekly and is served weekly or, "
+                    f"by D7, monthly; a {grain!r} series has no owner")
         return True, "", ""
 
     if is_dated(body):
@@ -356,7 +368,8 @@ OWNER_OPEN_TOTALS = "pipeline_contract.open_totals"
 def _receipt(plan: Mapping[str, Any], *, measure: str, kind: str,
              dimensions: Sequence[str], dataset: Mapping[str, Any],
              result_shape: str, owner: str,
-             periods: Optional[Sequence[str]] = None
+             periods: Optional[Sequence[str]] = None,
+             grain: str = TEMPORAL_GRAIN
              ) -> Dict[str, Any]:
     """The governed execution receipt for one pipeline execution.
 
@@ -382,7 +395,7 @@ def _receipt(plan: Mapping[str, Any], *, measure: str, kind: str,
     }
     if periods is not None:
         row["temporal_basis"] = TEMPORAL_BASIS
-        row["grain"] = TEMPORAL_GRAIN
+        row["grain"] = grain
         row["selected_periods"] = [str(p) for p in periods]
     return row
 
@@ -668,12 +681,24 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
             ok=False, reason=HISTORY_UNAVAILABLE,
             detail="the governed weekly pipeline history is empty for this "
                    "client")
+    # BY MONTH IS D7'S EXTRACT FOR EACH MONTH. The owner publishes the weekly
+    # series; a monthly plan keeps, for every month, the last weekly extract
+    # dated within it — the same rule a named month follows — and states it.
+    grain = "monthly" if str((body.get("period") or {}).get("grain") or "") \
+        == "monthly" else TEMPORAL_GRAIN
+    if grain == "monthly":
+        kept = set(last_extract_of_each_month(
+            [str(p.get("extract_date") or "") for p in periods]))
+        periods = [p for p in periods if str(p.get("extract_date") or "") in kept]
+        by_stage = [r for r in by_stage if str(r.get("period") or "") in kept]
     weeks = [str(p.get("week") or p.get("extract_date") or "") for p in periods]
     dataset = {
         "identity": "governed_weekly_pipeline_extracts",
         "extracts_used": int(series.get("uniqueWeeklyExtractsUsed") or len(periods)),
         "source_files": [str(f) for f in (series.get("sourceFiles") or ())],
     }
+    if grain == "monthly":
+        dataset["extracts_used"] = len(periods)
 
     if dimensions:
         if not by_stage:
@@ -689,8 +714,11 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
         receipt = _receipt(body, measure=measure, kind=kind,
                            dimensions=dimensions, dataset=dataset,
                            result_shape="grouped_series", owner=OWNER_EVOLUTION,
-                           periods=sorted({c["period"] for c in cells}))
+                           periods=sorted({c["period"] for c in cells}),
+                           grain=grain)
         receipt["pipeline_scope"] = _noted(live_scope)
+        if grain == "monthly":
+            receipt["month_rule"] = MONTH_RULE
         return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
 
     metric = "pipeline_amount" if kind == _AMOUNT else "pipeline_case_count"
@@ -701,8 +729,10 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
              for p in periods]
     receipt = _receipt(body, measure=measure, kind=kind, dimensions=[],
                        dataset=dataset, result_shape="series",
-                       owner=OWNER_EVOLUTION, periods=weeks)
+                       owner=OWNER_EVOLUTION, periods=weeks, grain=grain)
     receipt["pipeline_scope"] = _noted(_series_scope())
+    if grain == "monthly":
+        receipt["month_rule"] = MONTH_RULE
     return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
 
 
@@ -716,6 +746,17 @@ def _month_of(extract_date: Any) -> Optional[Tuple[int, int]]:
         return int(text[0:4]), int(text[5:7])
     except ValueError:
         return None
+
+
+def last_extract_of_each_month(dates: Sequence[str]) -> List[str]:
+    """D7 for every month the history holds: the last weekly extract dated
+    within it, in date order. A selection of extracts, not a figure."""
+    latest: Dict[Tuple[int, int], str] = {}
+    for date in dates:
+        month = _month_of(date)
+        if month is not None and date > latest.get(month, ""):
+            latest[month] = date
+    return sorted(latest.values())
 
 
 def last_extract_in_month(dates: Sequence[str], *, month: int,
