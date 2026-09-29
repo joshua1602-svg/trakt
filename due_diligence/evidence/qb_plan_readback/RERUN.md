@@ -76,3 +76,13 @@ misreads: [76], [77], [94], [114], [117], [127] and [98], [121]. A shape can be
 released when the misreads have left it. The release is a code change pinned by
 `tests/interpretation_v2/test_production_bank_perimeter.py`, with the re-run's
 intents added beside the baseline's.
+
+## Run log
+
+    2026-09-28  baseline run (vocabulary 2.2.0), main build; canary off after
+    2026-09-29  06:58:59 UTC re-run on ce5d1276 (vocabulary 2.3.0), 135/135;
+                read back by run 36547210324; readings in
+                qb_rerun_intents_20260929.json
+    2026-09-29  09:47 UTC d74ae632 deployed (live pipeline D8, weighted-average
+                valuation D10); MI_AGENT_PLAN_SERVE set to off — operator
+                confirmed, build.commit d74ae632 confirmed by the operator
