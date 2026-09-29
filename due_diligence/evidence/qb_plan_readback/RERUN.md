@@ -79,7 +79,7 @@ intents added beside the baseline's.
 
 ## Run log
 
-    2026-09-28  baseline run (vocabulary 2.2.0), main build; canary off after
+    2026-09-28  baseline run (vocabulary 2.2.0), main build; canary left on
     2026-09-29  06:58:59 UTC re-run on ce5d1276 (vocabulary 2.3.0), 135/135;
                 read back by run 36547210324; readings in
                 qb_rerun_intents_20260929.json
