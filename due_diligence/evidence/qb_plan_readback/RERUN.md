@@ -158,6 +158,6 @@ intents added beside the baseline's.
                 _025 (FIELD_NOT_IN_BOOK — correct). No question landed in a
                 held shape. Changes: design §19; vocabulary 2.9.0
     2026-09-29  after the 15:14:42 spot check: MI_AGENT_PLAN_SERVE set to
-                off — operator confirmed. 6df5e712 deploying (run 36619090442)
+                off — operator confirmed. 19:30 UTC 6df5e712 deployed (run 36619090442)
                 (vocabulary 2.9.0: exclusions' population, `lapsed`, the
                 answer standard, region basis)
