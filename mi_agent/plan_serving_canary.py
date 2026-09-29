@@ -293,6 +293,9 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
         except Exception as exc:                                     # noqa: BLE001
             # A disclosure must never cost an answer that would otherwise stand.
             warnings.append(f"Receipt not rendered: {type(exc).__name__}")
+    region = _region_disclosure(result, frame)
+    if region:
+        workflow["answer_notes"] = [region]
     payload = adapt_workflow_result(workflow, portfolio_id=portfolio_id,
                                     as_of=as_of)
     # THE TWO GOVERNED OBJECTS, CARRIED SO THE COVERAGE OWNER CAN RECONCILE THEM.
@@ -343,6 +346,32 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
 # --------------------------------------------------------------------------- #
 # the production entry point
 # --------------------------------------------------------------------------- #
+
+def _region_disclosure(result: Any, frame: Any) -> str:
+    """D12 on a funded answer: a breakdown by, or restriction to, the reporting
+    region says which location its regions are, and a breakdown says what it
+    could not place — the disclosure the Pipeline and Forecast answers make,
+    read from the harmonisation's own record (`region_taxonomy.disclosure`).
+
+    Over the whole book the counts are the book's; an answer over part of it
+    names the basis without counts, since the book's are not its own."""
+    from engine import region_taxonomy as region_mod
+
+    executed = dict(getattr(result, "metadata", None) or {})
+    grouped = region_mod.FIELD_REPORTING in (executed.get("group_field_keys") or ())
+    predicates = [p for p in (executed.get("applied_predicates") or ())
+                  if isinstance(p, Mapping)]
+    restricted = any(str(p.get("field") or "") == region_mod.FIELD_REPORTING
+                     for p in predicates)
+    if not (grouped or restricted) or frame is None:
+        return ""
+    told = region_mod.disclosure(frame)
+    whole_book = grouped and not predicates
+    return _standard.region_note(
+        told["source_field_rows"], noun="loan", counts=whole_book,
+        unmapped=told["unmapped_rows"] if whole_book else 0,
+        unmapped_amount=told["unmapped_amount"] if whole_book else 0.0)
+
 
 def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           run_id: Optional[str] = None, legacy_result: Any, frame: Any,
@@ -760,13 +789,10 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     # extract region it could not place — the tab's own disclosure.
     region = receipt.get("region_basis") or {}
     if region:
-        note = "Regions are the client's reporting regions"
-        if region.get("unmappedCaseCount"):
-            unmapped = int(region["unmappedCaseCount"])
-            note += (f"; {_standard.plural(unmapped, 'case')} "
-                     f"({_money(region.get('unmappedAmount') or 0.0)}) whose "
-                     f"extract region has no governed mapping "
-                     f"{'is' if unmapped == 1 else 'are'} in no region")
+        note = _standard.region_note(
+            region.get("sourceFieldRows"), noun="case",
+            unmapped=int(region.get("unmappedCaseCount") or 0),
+            unmapped_amount=float(region.get("unmappedAmount") or 0.0))
         answer = f"{answer} {note}."
         # The taxonomy's own name is for the reader of the notes, not the
         # sentence.
@@ -1256,10 +1282,13 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
                  for r in ranked], total=len(rows)) + "."
         basis = receipt.get("axis_basis") or {}
         if basis.get("field"):
-            unplaced = basis.get("unplacedForecastAmount") or 0.0
-            answer = (f"{answer} Regions are the client's reporting regions"
-                      + (f"; {_money(unplaced)} of the forecast has no region "
-                         f"and is in none" if unplaced else "") + ".")
+            # Funded loans and pipeline cases together: the bases are named,
+            # not counted in one noun.
+            note = _standard.region_note(
+                basis.get("sourceFieldRows"), counts=False,
+                unplaced_amount=float(basis.get("unplacedForecastAmount") or 0.0),
+                unplaced_of="the forecast")
+            answer = f"{answer} {note}."
         answer = f"{answer} {as_at}"
         also = [k for k in (rows[0] if rows else {}) if k not in (axis, "value")]
         columns = ([{"key": str(axis), "label": axis_label.capitalize()},

@@ -818,9 +818,21 @@ def _apply_region_taxonomy(out: pd.DataFrame, derived: List[str]) -> Dict[str, A
 
     try:
         from engine import region_taxonomy as _region
-        taxonomy = _region.resolve_taxonomy(
-            os.environ.get("MI_AGENT_CLIENT_ID") or None)
-        report = _region.apply(out, taxonomy)
+        from mi_agent import mi_geography as _geo
+        client = os.environ.get("MI_AGENT_CLIENT_ID") or None
+        taxonomy = _region.resolve_taxonomy(client)
+        # WHICH COLUMNS FEED IT, in the order MI states — the book's own basis
+        # first, as `funded_prep._apply_region_taxonomy` reads the funded
+        # book. The engine's default order leads with the borrower column, and
+        # `_apply_group_aliases` fills that column FROM the property's region
+        # when the extract has no borrower geography: read first, the property's
+        # location was recorded as the borrower's address.
+        try:
+            geography = _geo.contract_for_scope(client_id=client, frame=out)
+        except Exception:  # noqa: BLE001 - the stated collateral-first order stands
+            geography = None
+        report = _region.apply(out, taxonomy, source_fields=_geo.taxonomy_source_fields(
+            geography, extra=_region.SOURCE_FIELDS))
     except Exception as exc:  # harmonisation is additive; never block the dataset
         return {"applied": False, "error": f"{type(exc).__name__}: {exc}"[:200]}
     if report.get("applied"):

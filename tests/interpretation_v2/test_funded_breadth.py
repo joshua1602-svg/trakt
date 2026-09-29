@@ -133,6 +133,28 @@ def test_balance_by_region_is_the_books_reporting_regions(monkeypatch, harmonise
     expected = harmonised.groupby("canonical_region_reporting")[
         "current_outstanding_balance"].sum()
     assert cells == pytest.approx({k: float(v) for k, v in expected.items()})
+    # D12 on the answer: which regions, on which location — read from the
+    # harmonisation's own record of the column each loan's region came from.
+    assert ("Regions are the client's reporting regions, by the property's "
+            "location.") in payload["answer"]
+    assert "whose region has no governed mapping" not in payload["answer"]
+
+
+def test_a_loan_the_taxonomy_cannot_place_is_disclosed_not_placed(monkeypatch, book,
+                                                                  semantics):
+    from mi_agent_api import funded_prep
+    frame = book.copy()
+    frame.loc[frame.index[0], "collateral_geography"] = "Atlantis"
+    funded_prep._apply_region_taxonomy(frame)
+    payload, record, coverage = _served(_intent(geography=_REGION), monkeypatch,
+                                        frame, semantics)
+    assert payload is not None, record.get("execution")
+    assert coverage["unaccounted"] == []
+    amount = float(frame.loc[frame.index[0], "current_outstanding_balance"])
+    from mi_agent import answer_standard
+    assert (f"1 loan ({answer_standard.money(amount)}) whose region has no "
+            f"governed mapping is in no region.") in payload["answer"]
+    assert any(n.get("field") == "disclosure" for n in payload["sourceNotes"])
 
 
 @pytest.mark.parametrize("measure", [
@@ -159,6 +181,7 @@ def test_a_region_restriction_is_a_proved_predicate(monkeypatch, harmonised,
     expected = harmonised.loc[harmonised["canonical_region_reporting"] == region,
                               "current_outstanding_balance"].sum()
     assert record["execution"]["value"] == pytest.approx(float(expected))
+    assert "by the property's location." in payload["answer"]
 
 
 def test_a_book_without_the_reporting_region_is_named_not_crashed(

@@ -203,7 +203,10 @@ def test_the_answer_names_the_regions_and_what_it_left_out(monkeypatch):
     assert "groups), as at the weekly extract of" in answer
     # The regions are named as the client's; the taxonomy's own id is for the
     # notes, not the sentence.
-    assert "Regions are the client's reporting regions;" in answer
+    # The pipeline's regions rest on the property's location — recorded as
+    # such even though the extract's borrower column is aliased from it.
+    assert "Regions are the client's reporting regions, by the property's location;" \
+        in answer
     assert "uk_itl1" not in answer
     assert any("uk_itl1" in n["note"] for n in payload["sourceNotes"])
     assert "1 case (" in answer and "no governed mapping is in no region" in answer
@@ -230,3 +233,42 @@ def test_a_region_asked_for_and_not_grouped_is_unaccounted():
     coverage = _governed_plan_coverage(envelope)
     assert [e["kind"] for e in coverage["unaccounted"]] == [
         "governed_plan:geography"]
+
+
+def test_the_harmonisation_records_which_column_each_region_came_from():
+    """The basis an answer states is the harmonisation's own record, not an
+    assumption: each row names the source column its raw region was read from,
+    and the one disclosure counts them."""
+    import pandas as pd
+    from engine import region_taxonomy
+
+    taxonomy = region_taxonomy.resolve_taxonomy(None)
+    frame = pd.DataFrame({
+        "collateral_geography": ["London", "Atlantis", None, "Wales"],
+        "geographic_region_obligor": ["UKI", None, "Scotland", None],
+        "current_outstanding_balance": [1.0, 2.0, 3.0, 4.0]})
+    report = region_taxonomy.apply(
+        frame, taxonomy,
+        source_fields=("collateral_geography", "geographic_region_obligor"))
+    assert list(frame[region_taxonomy.FIELD_SOURCE_FIELD]) == [
+        "collateral_geography", "collateral_geography",
+        "geographic_region_obligor", "collateral_geography"]
+    assert report["source_field_rows"] == {"collateral_geography": 3,
+                                           "geographic_region_obligor": 1}
+    told = region_taxonomy.disclosure(frame, report)
+    assert told["unmapped_rows"] == 1 and told["unmapped_amount"] == 2.0
+    assert told["unmapped_values"] == {"Atlantis": 1}
+
+    from mi_agent import answer_standard
+    assert answer_standard.region_note(told["source_field_rows"], noun="loan") == (
+        "Regions are the client's reporting regions — by the property's location "
+        "for 3 loans and the borrower's address for 1 loan")
+
+
+def test_the_pipeline_reads_its_own_basis_first_not_the_alias():
+    """`_apply_group_aliases` copies the property's region into the borrower
+    column when the extract has none. Read first, the pipeline's regions were
+    recorded as the borrower's address; the stated order reads the property's."""
+    frame, report = _prepared("Atlantis")
+    rows = report["region_harmonisation"]["source_field_rows"]
+    assert set(rows) == {"collateral_geography"}, rows

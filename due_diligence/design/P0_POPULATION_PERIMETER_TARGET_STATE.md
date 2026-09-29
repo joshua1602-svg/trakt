@@ -1228,3 +1228,80 @@ amount is £1.1m." — and now say "as at the weekly extract of <date>" (a group
 series names its first and last extract).
 
 Pinned by `tests/interpretation_v2/test_answer_wording.py`.
+
+## 19. The combined spot check, and what it changed (2026-09-29)
+
+Run on 438932ac (vocabulary 2.8.0), 51 questions from 15:14:42 UTC; read back
+by run 36594305684. **45 of 51 were served by the governed path; on the
+morning's run the same 51 had 1.** Every figure cross-checked adds up: the
+forecast by region and by LTV band each total the £94.1m forecast funded
+balance, and the 12-month curve plus six months at the run-rate is the
+18-month curve.
+
+The six that fell to the old path, and what each needed:
+
+| question | reading | why it fell | change |
+|---|---|---|---|
+| forecast_018/019/020 — pipeline excluded from weighting (all / missing probability / withdrawn) | correct: forecast, **pipeline** base, `weighting_excluded_amount` (+ reason) | the forecast runtime executed the `forecast` population only; the old path then answered 019 with the whole live pipeline (4,835 cases, £969.8m) | §19.1 |
+| forecast_runoff_002 — lapsed past its stage window | clarify: "no governed concept for a stage window" | `lapsed` was defined in five words | §19.2 |
+| funded_breakdown_1d_003 — by obligor region | `geographic_region_obligor` | the production book does not carry it: FIELD_NOT_IN_BOOK, and the old path's refusal says so | none — correct |
+| funded_breakdown_1d_025 — by occupancy type | `occupancy_type` | as above | none — correct |
+
+### 19.1 Each figure declares the population it is measured over
+
+The semantic model now says, per measure, which population the figure is
+measured over: the capability's own (`population: forecast`) unless the entry
+names one of its view's inputs and reads that input alone —
+`weighting_excluded_amount` / `_case_count`, `population: pipeline`. The
+forecast runtime reads its executable populations and each plan's execution
+population from the model; the population gate and the receipt prove the
+plan's base against that declaration. A plan naming another population is
+refused `POPULATION_NOT_MEASURED`, never answered from it; a model declaring a
+funded figure is refused at load (the runtime sits above the funded gate).
+
+### 19.2 Definitions (vocabulary 2.9.0)
+
+`lapsed` is defined in the pipeline's own terms — an open case in its stage
+longer than that stage's validity window, measured from the book's history
+("lapsed", "expired", "past its stage window") — and the exclusion measure
+says it is measured over the pipeline. The bank runner's minimum vocabulary
+is 2.9.0.
+
+### 19.3 One answer standard (`mi_agent.answer_standard`)
+
+The spot check stated the one book's funded balance as "£87.1MM" in a funded
+answer and "£87.1m" in a forecast answer; a pipeline breakdown named ten
+brokers where a funded one named three; answers said "month(s)", "case(s)",
+"the owner's 18-month horizon" and showed the taxonomy id "(uk_itl1)"; the
+pipeline and forecast sentences hard-coded "£". One module now decides those
+words, presentation only:
+
+    money()           the platform formatter (mi_agent_api.currency), chat
+                      suffixes bn/m/k — tiles keep BN/MM/K — in the client's
+                      reporting currency
+    plural()          a count agreed with its noun
+    breakdown_lead()  measure, grouping, the three leaders, how many groups
+    region_note()     which regions, on which location, and what is in none
+
+A timeline (expected completion month) and an owner-ordered axis (scenario,
+threshold ladder) keep their order and name every row.
+
+### 19.4 Regions say which location they are (D12, completed)
+
+The harmonisation (`engine.region_taxonomy.apply`) records, per row, the
+source column its raw region came from (`region_source_field`), and one
+`disclosure()` serves every surface. Every region answer — funded, pipeline,
+forecast — now states the basis from that record through `mi_geography`'s
+basis of the column: "Regions are the client's reporting regions, by the
+property's location". A funded region breakdown also discloses loans the
+taxonomy cannot place, as the pipeline and forecast answers already did.
+
+Found on the way, at its source: the pipeline's `_apply_group_aliases` copies
+the property's region into the borrower column when the extract has none, and
+the harmonisation read that column first, so the pipeline's regions were
+recorded as the borrower's address. Its harmonisation now reads the book's
+own basis first, as the funded book's does. The figures are unchanged; the
+record of what they rest on is now true.
+
+Pinned by `test_forecast_semantic_model.py`, `test_answer_standard.py`,
+`test_funded_breadth.py` and `test_the_pipeline_region_is_the_reporting_region.py`.

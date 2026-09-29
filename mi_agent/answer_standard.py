@@ -21,13 +21,15 @@ it formats a figure it is handed and never derives one.
                          more (N groups)": the measure, the grouping, the
                          leaders and how many groups there are. The table
                          carries every group.
+    region_note(...)     which regions, on which location — the property's
+                         or the borrower's — and what is in no region.
 """
 from __future__ import annotations
 
 from typing import Any, Iterable, Optional, Sequence, Tuple
 
 __all__ = ["LEAD_GROUPS", "CHAT_SUFFIXES", "money", "plural", "breakdown_lead",
-           "ordered"]
+           "ordered", "region_note"]
 
 #: How many groups a breakdown's sentence names. The table has them all.
 LEAD_GROUPS = 3
@@ -75,3 +77,51 @@ def ordered(pairs: Iterable[Tuple[str, Optional[float]]]) -> Sequence[Tuple[str,
             if isinstance(value, (int, float)) and not isinstance(value, bool)
             and value == value]
     return sorted(kept, key=lambda pair: pair[1], reverse=True)
+
+
+#: How a reader names each geography basis (`mi_agent.mi_geography`). A column
+#: that carries no basis is the book's own region field, and is said so.
+_BASIS_WORDS = {"collateral": "the property's location",
+                "borrower": "the borrower's address"}
+_NO_BASIS_WORDS = "the book's own region field"
+
+
+def region_note(source_field_rows: Optional[dict] = None, *, noun: str = "case",
+                unmapped: int = 0, unmapped_amount: float = 0.0,
+                unplaced_amount: float = 0.0, unplaced_of: str = "",
+                counts: bool = True) -> str:
+    """The sentence every reporting-region answer carries, WITHOUT a closing
+    full stop: "Regions are the client's reporting regions, by the property's
+    location; 2 cases (£150k) whose region has no governed mapping are in no
+    region". `counts=False` names two bases without their row counts — for an
+    answer over part of a book, where the book's counts are not its own.
+
+    WHICH LOCATION is read from the harmonisation's own record of the column
+    each row's region came from (`engine.region_taxonomy.FIELD_SOURCE_FIELD`),
+    through `mi_geography`'s basis of that column — never assumed. A book whose
+    regions rest on two bases says how many rows rest on each.
+    """
+    from mi_agent import mi_geography as _geo
+
+    by_basis: dict = {}
+    for column, rows in (source_field_rows or {}).items():
+        words = _BASIS_WORDS.get(str(_geo.basis_of_field(column) or ""),
+                                 _NO_BASIS_WORDS)
+        by_basis[words] = by_basis.get(words, 0) + int(rows)
+    note = "Regions are the client's reporting regions"
+    if len(by_basis) == 1:
+        note += f", by {next(iter(by_basis))}"
+    elif by_basis:
+        ranked = sorted(by_basis.items(), key=lambda kv: -kv[1])
+        note += (" — by " + " and ".join(
+            f"{words} for {plural(rows, noun)}" for words, rows in ranked)
+                 if counts else
+                 ", by " + " or ".join(words for words, _ in ranked))
+    if unmapped:
+        note += (f"; {plural(unmapped, noun)} ({money(unmapped_amount)}) whose "
+                 f"region has no governed mapping {'is' if int(unmapped) == 1 else 'are'} "
+                 f"in no region")
+    if unplaced_amount:
+        note += (f"; {money(unplaced_amount)} of {unplaced_of or 'the figure'} "
+                 f"has no region and is in none")
+    return note

@@ -400,6 +400,14 @@ def test_forecast_by_region_is_the_views_reporting_regions(monkeypatch, funded_r
     assert keys <= set(taxonomy.values)
     assert out.receipt["group_field_keys"] == ["canonical_region_reporting"]
     assert out.receipt["axis_basis"]["field"] == "canonical_region_reporting"
+    # What the regions rest on, per source column, over the rows the breakdown
+    # adds up: every funded loan here was placed from the borrower column.
+    rows = out.receipt["axis_basis"]["sourceFieldRows"]
+    assert rows.get("geographic_region_obligor", 0) >= 1
+    from mi_agent import answer_standard
+    note = answer_standard.region_note(rows, counts=False)
+    assert note.startswith("Regions are the client's reporting regions, by ")
+    assert "the borrower's address" in note
 
 
 # --------------------------------------------------------------------------- #

@@ -869,6 +869,18 @@ def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
     return " · ".join(parts) + "." if parts else ""
 
 
+def _with_notes(answer: str, workflow: Dict[str, Any], refused: bool) -> str:
+    """The disclosures the serving path attached (`answer_notes`), stated after
+    the lead and before the receipt — what the figure rests on and what it
+    leaves out, e.g. which location its regions are (the answer standard's
+    `region_note`). A refusal carries none."""
+    notes = [str(n).strip().rstrip(".") for n in (workflow.get("answer_notes") or ())
+             if str(n).strip()]
+    if refused or not notes or not answer:
+        return answer
+    return " ".join([answer.rstrip()] + [f"{n}." for n in notes])
+
+
 def _with_receipt(answer: str, workflow: Dict[str, Any]) -> str:
     """Append the execution receipt to a successful substantive answer.
 
@@ -971,6 +983,9 @@ def adapt_workflow_result(
     reconciliation = (workflow.get("reconciliation")
                       or (workflow.get("metadata") or {}).get("reconciliation"))
     source_notes = _source_notes(qr, spec)
+    for note in workflow.get("answer_notes") or ():
+        source_notes = list(source_notes or []) + [
+            {"field": "disclosure", "note": str(note)}]
 
     artifacts: List[Dict[str, Any]] = []
     chart_type = cr.get("chart_type") if cr else None
@@ -1080,9 +1095,11 @@ def adapt_workflow_result(
         # sentence gave "Here is the result for your query" on a refusal — a
         # success-shaped answer to a question that was not answered.
         "answer": _with_receipt(
-            workflow.get("answer")
-            or (workflow.get("error") if refused else None)
-            or _answer(workflow.get("interpreted"), qr, chart_type, hints, spec),
+            _with_notes(
+                workflow.get("answer")
+                or (workflow.get("error") if refused else None)
+                or _answer(workflow.get("interpreted"), qr, chart_type, hints, spec),
+                workflow, refused),
             workflow),
         # P0: the machine-derived statement of what was ACTUALLY executed —
         # measure, aggregation, filters that really narrowed the frame,

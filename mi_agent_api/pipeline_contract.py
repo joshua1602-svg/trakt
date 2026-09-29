@@ -955,21 +955,18 @@ def region_basis(df: pd.DataFrame, field: str,
         "field": field,
         "taxonomy": (harmonisation.get("reporting_taxonomy")
                      if field == REPORTING_REGION_FIELD else None),
-        "unmappedCaseCount": 0, "unmappedAmount": 0.0, "unmappedValues": {}}
+        "unmappedCaseCount": 0, "unmappedAmount": 0.0, "unmappedValues": {},
+        "sourceFieldRows": {}}
     if field != REPORTING_REGION_FIELD or field not in df.columns:
         return basis
-    unmapped = df[field].isna()
-    if "region_source_value" in df.columns:
-        # A case with no region at all is not "unmapped"; it has nothing to map.
-        raw = df["region_source_value"]
-        unmapped = unmapped & raw.notna() & raw.astype(str).str.strip().ne("")
-        basis["unmappedValues"] = {
-            str(k): int(v) for k, v in
-            raw[unmapped].astype(str).value_counts().items()}
-    basis["unmappedCaseCount"] = int(unmapped.sum())
-    if "current_outstanding_balance" in df.columns:
-        basis["unmappedAmount"] = round(float(coerce_numeric(
-            df.loc[unmapped, "current_outstanding_balance"]).sum()), 2)
+    # The one disclosure every region breakdown makes (the harmonisation's
+    # owner), in this contract's keys.
+    from engine import region_taxonomy as _region
+    told = _region.disclosure(df, harmonisation)
+    basis.update({"unmappedCaseCount": told["unmapped_rows"],
+                  "unmappedAmount": told["unmapped_amount"],
+                  "unmappedValues": told["unmapped_values"],
+                  "sourceFieldRows": told["source_field_rows"]})
     return basis
 
 

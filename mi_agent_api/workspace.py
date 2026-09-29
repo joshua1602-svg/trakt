@@ -416,6 +416,16 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
                                 "current_outstanding_balance")
     unplaced_pipeline = _unplaced(pipeline_df, region_field,
                                   "weighted_expected_funded_amount")
+    # WHAT THE REGIONS REST ON: rows per source column the harmonisation read,
+    # over the rows the breakdown adds up — every funded loan, and the pipeline
+    # cases carrying forecast weight.
+    from engine import region_taxonomy as _region
+    source_rows: Dict[str, int] = {}
+    for frame in (funded_df, forecast_rows(pipeline_df)):
+        if frame is None:
+            continue
+        for column, rows in _region.source_field_rows(frame).items():
+            source_rows[column] = source_rows.get(column, 0) + rows
     return {
         "byRegion": region,
         # Which region the breakdown adds up in, and what it cannot place —
@@ -425,6 +435,7 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
             "unplacedFundedAmount": unplaced_funded,
             "unplacedWeightedPipelineAmount": unplaced_pipeline,
             "unplacedForecastAmount": round(unplaced_funded + unplaced_pipeline, 2),
+            "sourceFieldRows": source_rows,
         },
         "byLtvBucket": ltv,
         "byCompletionMonth": by_month,

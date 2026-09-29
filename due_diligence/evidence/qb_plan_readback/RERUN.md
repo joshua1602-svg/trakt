@@ -76,8 +76,8 @@ forecast_003, forecast_014, forecast_scale_006/_007/_008/_011 decide whether
 the D6 holds can be released.
 
 **Combined spot check (a5604967: batch 1, D12 region, batch 2, funded breadth,
-answer wording) — the one to run now.** Every question those changes are for,
-51 model interpretations:
+answer wording) — run 2026-09-29 15:14:42 UTC, 45/51 served (design §19).**
+Every question those changes are for, 51 model interpretations:
 
     bash mi_agent_api/run_production_bank.sh <your Entra object id> pipeline_003,pipeline_007,pipeline_008,pipeline_009,pipeline_010,pipeline_012,pipeline_013,pipeline_016,pipeline_018,pipeline_019,pipeline_020,pipeline_021,pipeline_strat_001,pipeline_strat_002,pipeline_strat_003,pipeline_evolution_008,forecast_002,forecast_004,forecast_005,forecast_006,forecast_008,forecast_010,forecast_011,forecast_012,forecast_013,forecast_018,forecast_019,forecast_020,forecast_scale_007,forecast_scale_008,forecast_scale_009,forecast_scale_010,forecast_scale_011,forecast_scale_012,forecast_scale_017,forecast_scale_021,forecast_runoff_002,funded_kpi_014,funded_kpi_015,funded_kpi_016,funded_kpi_020,funded_breakdown_1d_001,funded_breakdown_1d_002,funded_breakdown_1d_003,funded_breakdown_1d_004,funded_breakdown_1d_005,funded_breakdown_1d_006,funded_breakdown_1d_007,funded_breakdown_1d_008,funded_breakdown_1d_023,funded_breakdown_1d_025
 
@@ -86,6 +86,19 @@ book; a breakdown names its measure, grouping and leading groups; every answer
 states its as-at date. The funded region questions answer only where the
 production book carries the reporting region; otherwise the evidence records
 FIELD_NOT_IN_BOOK and the old path answers.
+
+**Follow-up spot check (vocabulary 2.9.0: the exclusions' population, `lapsed`,
+the answer standard, region basis) — the one to run next.** The six the
+combined check did not serve for a fixable reason, one question per changed
+wording, and the three hold readings the combined check did not ask — 13
+model interpretations:
+
+    bash mi_agent_api/run_production_bank.sh <your Entra object id> forecast_018,forecast_019,forecast_020,forecast_runoff_002,funded_kpi_001,funded_breakdown_1d_001,pipeline_007,pipeline_008,forecast_006,forecast_scale_021,forecast_003,forecast_014,forecast_scale_006
+
+What good looks like: the three exclusion questions and `lapsed` are served as
+the Forecast tab's 'excluded from weighting' figures; money reads £87.1m on
+every path; a pipeline breakdown leads with three groups and says how many
+there are; every region answer says "by the property's location".
 
 **5. Switch the canary off.** `MI_AGENT_PLAN_SERVE` = `off`.
 
@@ -137,3 +150,10 @@ intents added beside the baseline's.
                 2.8.0), 51 selected (spot check); log
                 /home/qb_plan_rerun_20260929T151442Z.log — read back from
                 this START TIME
+    2026-09-29  15:14:42 run read back by run 36594305684 (51 records):
+                45/51 served NEW (the morning's run: 1/51). Not served:
+                forecast_018/019/020 (POPULATION_NOT_FORECAST — read
+                correctly, runtime executed forecast only), forecast_runoff_002
+                (clarify: 'lapsed' undefined), funded_breakdown_1d_003 and
+                _025 (FIELD_NOT_IN_BOOK — correct). No question landed in a
+                held shape. Changes: design §19; vocabulary 2.9.0
