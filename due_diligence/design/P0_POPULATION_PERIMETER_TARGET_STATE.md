@@ -76,8 +76,18 @@
         threshold; with none configured the agent asks. Owner decision.
         Assets under management = the funded balance across all the client's
         portfolios (owner, 2026-09-29). A portfolio's stage — pre-securitisation
-        SPV or established — is recorded in the client configuration (owner,
-        2026-09-29; the field is to be added — not yet built).
+        SPV or established — is recorded in the client configuration as
+        `portfolio.stage` (owner, 2026-09-29). ERE is a pre-securitisation SPV
+        (owner, 2026-09-29).
+        BUILT: `config/system/scale_policy.yaml` holds the two thresholds;
+        `mi_agent_api/scale_policy.py` resolves them from the stage; the model
+        names the word `scale` as a milestone target (vocabulary 2.5.0, the
+        figure never shown to it); the compiler binds it as a governed named
+        threshold; the forecast runtime resolves it after interpretation and
+        refuses SCALE_NOT_CONFIGURED when no stage is recorded; the milestone
+        rule publishes the gap still to go. The live service reads the
+        ACTIVATED client configuration, so the stage reaches production through
+        onboarding's standing field, not the repository file.
 
     D10 WEIGHTED-AVERAGE VALUATION                           SETTLED 2026-09-29
         Answered where the book carries valuations: it is the dashboard's

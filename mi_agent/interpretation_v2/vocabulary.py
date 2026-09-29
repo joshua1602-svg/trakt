@@ -62,7 +62,11 @@ from .metadata import _slug
 #: and the LTV denominator, which the model was told it could not ask for. The
 #: registry entry now carries `weighted_avg` weighted by current balance — the
 #: tile's own definition — so the model is shown one more permitted statistic.
-VOCABULARY_VERSION = "2.4.0"
+#:
+#: 2.5.0 lets a milestone name `scale` instead of an amount (owner decision D9,
+#: 2026-09-29): the forecast_milestone_date definition says so, and the figure
+#: is the portfolio's, resolved after interpretation.
+VOCABULARY_VERSION = "2.5.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -567,8 +571,19 @@ SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
         "The MONTH in which the funded balance is projected to reach ONE "
         "stated amount, at the completion run-rate. Its `target` is "
         "`forecast_funded_balance`, comparator `gte`, with the amount the "
-        "question names. It is NOT a balance, and NOT a table of dates for "
-        "several amounts."),
+        "question names. When the question asks whether the portfolio is at "
+        "scale, or when it reaches scale or securitisation scale, and names no "
+        "amount, the target `value` is the word `scale`: the portfolio's own "
+        "threshold is applied after interpretation — never write a number for "
+        "it. It is NOT a balance, and NOT a table of dates for several "
+        "amounts."),
+}
+
+#: THRESHOLDS A TARGET MAY NAME INSTEAD OF AN AMOUNT. The word is the model's;
+#: the figure is the portfolio's, resolved after interpretation and never shown
+#: to the model (D9: `mi_agent_api.scale_policy`).
+NAMED_THRESHOLDS: Mapping[str, str] = {
+    "scale": "the portfolio's scale threshold for its stage (owner decision D9)",
 }
 
 SPECIALIST_DIMENSIONS: Mapping[str, Tuple[str, ...]] = {

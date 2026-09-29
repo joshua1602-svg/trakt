@@ -63,6 +63,12 @@ portfolio:
   country: GB
   base_currency: GBP
   static_reporting_date: "2025-11-30"
+  # WHAT "SCALE" MEANS FOR THIS BOOK (owner decision D9, 2026-09-29): a new SPV
+  # before securitisation, whose scale is config/system/scale_policy.yaml's
+  # threshold for that stage. Owner-confirmed for ERE on 2026-09-29. The live
+  # service reads the ACTIVATED client configuration, so this takes effect in
+  # production when the client configuration is next activated.
+  stage: pre_securitisation_spv
 
 # default_regime = client default preference for regulatory output.
 default_regime: ESMA_Annex2

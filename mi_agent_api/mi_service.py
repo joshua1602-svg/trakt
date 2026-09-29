@@ -472,7 +472,8 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
             same = isinstance(got, Mapping) and all(
                 str(got.get(key)) == str(wanted_target.get(key))
                 for key in ("concept", "comparator")) and \
-                _same_number(got.get("value"), wanted_target.get("value"))
+                _same_threshold(got.get("value"), wanted_target.get("value"),
+                                executed)
             entries.append({
                 "kind": "governed_plan:target", "field": "target",
                 "value": (f"{wanted_target.get('comparator')} "
@@ -500,6 +501,20 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
     return {"version": 1, "concepts": entries,
             "unaccounted": [e for e in entries
                             if e["disposition"] == _coverage_missing()]}
+
+
+def _same_threshold(got: Any, wanted: Any, executed: Mapping[str, Any]) -> bool:
+    """The executed threshold is the one asked for.
+
+    A NAMED threshold ("scale", D9) is accounted for only when the receipt
+    names the same word AND states the portfolio threshold it resolved to; an
+    amount must be the same amount.
+    """
+    if isinstance(wanted, str):
+        scale = executed.get("scale") or {}
+        return str(got) == wanted and scale.get("named") == wanted \
+            and _same_number(scale.get("threshold"), executed.get("threshold_applied"))
+    return _same_number(got, wanted)
 
 
 def _same_number(left: Any, right: Any) -> bool:

@@ -521,17 +521,21 @@ def milestone_answer(milestones: Sequence[Dict[str, Any]], threshold: float,
     true exactly when one is at least the other — so it is tested first, and
     a ladder row's `reached` flag is never read as though it answered that.
 
-    Returns `{"state": <one of the MILESTONE_* constants>, "milestone": row|None}`.
-    The caller phrases each state; this decides which state it is, once.
+    Returns `{"state": <one of the MILESTONE_* constants>, "milestone": row|None,
+    "gap": amount still to go (0 once reached)}`. The caller phrases each
+    state; this decides which state it is, once — and owns the gap, the same
+    comparison stated as an amount, so no caller computes it again.
     """
+    gap = round(max(float(threshold) - float(current_balance or 0), 0.0), 2)
     if float(current_balance or 0) >= float(threshold):
-        return {"state": MILESTONE_ALREADY_REACHED, "milestone": None}
+        return {"state": MILESTONE_ALREADY_REACHED, "milestone": None, "gap": gap}
     m = milestone_for(milestones, threshold)
     if m is None:
-        return {"state": MILESTONE_BEYOND_HORIZON, "milestone": None}
+        return {"state": MILESTONE_BEYOND_HORIZON, "milestone": None, "gap": gap}
     if m.get("reached"):
-        return {"state": MILESTONE_BEYOND_HORIZON_LADDER, "milestone": m}
-    return {"state": MILESTONE_PROJECTED, "milestone": m}
+        return {"state": MILESTONE_BEYOND_HORIZON_LADDER, "milestone": m,
+                "gap": gap}
+    return {"state": MILESTONE_PROJECTED, "milestone": m, "gap": gap}
 
 
 def build_extrapolation(output_root, pipeline_root, client_id: str,

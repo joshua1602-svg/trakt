@@ -88,6 +88,7 @@ from .vocabulary import (
     CHANGE_FORM_CAPABILITY,
     CHANGE_FORM_MODE,
     CAPABILITY_OPERATIONS,
+    NAMED_THRESHOLDS,
     STATISTICS_FORBIDDING_WEIGHT,
     STATISTICS_REQUIRING_WEIGHT,
     GovernedVocabulary,
@@ -774,14 +775,20 @@ class DeterministicCompiler:
         concept, reason = self._resolve(intent.target.concept, slot="target")
         if reason is not None:
             return None, [reason]
-        if not isinstance(intent.target.value, (int, float)) \
-                or isinstance(intent.target.value, bool):
+        value = intent.target.value
+        # A NAMED THRESHOLD ("scale", D9) is a word the vocabulary governs; its
+        # figure is the portfolio's and is resolved after interpretation, so
+        # the plan carries the word. Any other non-number is refused.
+        if isinstance(value, str) and value.strip().lower() in NAMED_THRESHOLDS:
+            value = value.strip().lower()
+        elif not isinstance(value, (int, float)) or isinstance(value, bool):
             return None, [CompileReason(
                 UNSUPPORTED_FILTER, "target",
-                "a threshold must be a number")]
+                "a threshold must be a number, or a governed named threshold "
+                f"({', '.join(sorted(NAMED_THRESHOLDS))})")]
         return (TargetBinding(concept=concept.concept_id,
                               comparator=intent.target.comparator,
-                              value=intent.target.value,
+                              value=value,
                               canonical_field=concept.canonical_field,
                               capability_owner=concept.owning_capability),
                 reasons)

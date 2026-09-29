@@ -77,6 +77,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
 
+from mi_agent.interpretation_v2.vocabulary import NAMED_THRESHOLDS
+
 CAPABILITY = "forecast"
 
 #: WHICH POPULATION THIS RUNTIME EXECUTES. Its own declaration, and never
@@ -147,6 +149,9 @@ EXECUTION_FAILED = "EXECUTION_FAILED"
 #: P0 §9 — the two reasons a derived population adds.
 POPULATION_INPUT_UNRESOLVED = "POPULATION_INPUT_UNRESOLVED"
 POPULATION_VINTAGE_SKEW = "POPULATION_VINTAGE_SKEW"
+#: A milestone named "scale" for a portfolio whose stage is not recorded (D9):
+#: there is no threshold to reach, and none is guessed.
+SCALE_NOT_CONFIGURED = "SCALE_NOT_CONFIGURED"
 
 #: WHAT THIS RUNTIME SERVES, as (operation, measure) -> the figure it reads.
 KIND_MILESTONE = "milestone"
@@ -341,10 +346,14 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     target = target_of(body)
     if kind == KIND_MILESTONE:
         value = (target or {}).get("value")
+        # A positive amount, or a governed NAMED threshold ("scale", D9) whose
+        # figure the portfolio supplies at execution.
+        named = isinstance(value, str) and value in NAMED_THRESHOLDS
         if (not target or str(target.get("concept") or "") != TARGET_CONCEPT
                 or str(target.get("comparator") or "") not in TARGET_COMPARATORS
-                or isinstance(value, bool)
-                or not isinstance(value, (int, float)) or value <= 0):
+                or (not named and (isinstance(value, bool)
+                                   or not isinstance(value, (int, float))
+                                   or value <= 0))):
             return (False, TARGET_NOT_SUPPORTED,
                     f"a milestone is served for a positive "
                     f"{TARGET_CONCEPT} threshold compared "
@@ -569,7 +578,17 @@ def _execute_run_rate(body: Mapping[str, Any], *, kind: str, output_root: Any,
     from mi_agent_api import forecast_extrapolation as fx_mod
 
     target = target_of(body) if kind == KIND_MILESTONE else None
-    threshold = float(target["value"]) if target else None
+    scale = None
+    if target and isinstance(target.get("value"), str):
+        # D9: "scale" is the PORTFOLIO's threshold for its recorded stage —
+        # resolved here, after interpretation, and never guessed.
+        from mi_agent_api import scale_policy
+        scale, why, detail = scale_policy.resolve(client_id)
+        if scale is None:
+            return _refuse(SCALE_NOT_CONFIGURED, detail)
+        threshold = scale.threshold
+    else:
+        threshold = float(target["value"]) if target else None
     try:
         fx = fx_mod.build_extrapolation(
             output_root, pipeline_root, client_id, run_id,
@@ -665,6 +684,11 @@ def _execute_run_rate(body: Mapping[str, Any], *, kind: str, output_root: Any,
             "target": {"concept": str(target.get("concept")),
                        "comparator": str(target.get("comparator")),
                        "value": target.get("value")},
+            # The threshold the milestone was measured against — the amount
+            # the question named, or the portfolio's scale (D9).
+            "threshold_applied": threshold,
+            "gap_to_threshold": decided.get("gap"),
+            "scale": scale.to_dict() if scale is not None else None,
             "milestone_state": decided["state"],
             "milestone": {k: milestone.get(k) for k in (
                 "threshold", "thresholdLabel", "reached", "baseDate",

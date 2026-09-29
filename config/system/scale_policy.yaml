@@ -1,0 +1,25 @@
+# WHAT "SCALE" MEANS — owner decision D9 (2026-09-29).
+#
+# Specific to the portfolio's stage, never a figure the model invents. A
+# question that names "scale" (or "securitisation scale") instead of an amount
+# is answered against the threshold for the stage the client configuration
+# records as `portfolio.stage`. With no stage recorded, the agent does not guess.
+#
+#   established             a client is AT SCALE once its assets under
+#                           management — the funded balance across all the
+#                           client's portfolios — exceed the threshold.
+#   pre_securitisation_spv  a new SPV before securitisation: scale is the
+#                           threshold (at £80MM, scale is £100MM, £20MM away).
+#
+# Read by mi_agent_api/scale_policy.py. The figures here are never shown to the
+# model (tests/interpretation_v2/test_model_sees_no_data.py).
+version: 1
+stages:
+  pre_securitisation_spv:
+    label: new SPV before securitisation
+    threshold: 100000000
+    measured_on_label: the SPV's funded balance
+  established:
+    label: established client
+    threshold: 200000000
+    measured_on_label: assets under management (the funded balance across all the client's portfolios)

@@ -967,21 +967,34 @@ def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
 
     if kind == forecast_rt.KIND_MILESTONE:
         target = receipt.get("target") or {}
-        threshold = _money(target.get("value"))
+        scale = receipt.get("scale") or None
+        threshold = _money(receipt.get("threshold_applied", target.get("value")))
         state = str(receipt.get("milestone_state") or "")
         row = receipt.get("milestone") or {}
         label = f"Forecast milestone date (funded balance reaching {threshold})"
+        # D9: a question about SCALE is answered against the portfolio's own
+        # threshold, and the answer says which rule set it and what it is
+        # measured on — the reader never has to know the number to ask.
+        if scale:
+            label = (f"Scale ({scale.get('decision')}): for a "
+                     f"{scale.get('stage_label')}, scale is {threshold}, measured "
+                     f"on {scale.get('measured_on')}")
         from mi_agent_api import forecast_extrapolation as fx_mod
         if state == fx_mod.MILESTONE_ALREADY_REACHED:
             answer = (f"{label}: already reached — the funded balance is "
-                      f"{_money(receipt.get('current_funded_balance'))}. {as_at}")
-            kpi_value = "reached"
+                      f"{_money(receipt.get('current_funded_balance'))}"
+                      + (", so the portfolio is at scale" if scale else "")
+                      + f". {as_at}")
+            kpi_value = "at scale" if scale else "reached"
         elif state == fx_mod.MILESTONE_PROJECTED:
+            to_go = (f", {_money(receipt.get('gap_to_threshold'))} to go"
+                     if receipt.get("gap_to_threshold") else "")
             answer = (f"{label}: around {row.get('baseDate')} at the base "
                       f"completion run-rate of {_money(base_rate)}/month "
                       f"(downside {row.get('downsideDate')}, upside "
                       f"{row.get('upsideDate')}), from a funded balance of "
-                      f"{_money(receipt.get('current_funded_balance'))}. {as_at}")
+                      f"{_money(receipt.get('current_funded_balance'))}{to_go}. "
+                      f"{as_at}")
             kpi_value = str(row.get("baseDate"))
         else:
             answer = (f"{label}: beyond the projection horizon, so no date is "

@@ -301,6 +301,35 @@ def client_geography_basis(client_id: Optional[str] = None, *,
     return None
 
 
+#: Where a client records its portfolio's stage (owner decision D9,
+#: 2026-09-29): the same ``portfolio.*`` block as the asset class.
+_CLIENT_STAGE_PATHS = (
+    ("portfolio", "stage"),
+    ("stage",),
+)
+
+#: The stages D9 distinguishes. Anything else is not a stage this estate
+#: governs, and is reported as none rather than guessed at.
+PORTFOLIO_STAGES = ("pre_securitisation_spv", "established")
+
+
+def client_portfolio_stage(client_id: Optional[str] = None, *,
+                           document: Optional[Mapping[str, Any]] = None
+                           ) -> Optional[str]:
+    """The portfolio stage the CLIENT layer records, or ``None``.
+
+    ``pre_securitisation_spv`` or ``established``; what each means for "scale"
+    is ``config/system/scale_policy.yaml``'s to say, not this module's.
+    """
+    doc = document if document is not None else _client_config(client_id)
+    for path in _CLIENT_STAGE_PATHS:
+        value = _dig(doc, path)
+        if value:
+            text = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+            return text if text in PORTFOLIO_STAGES else None
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # Operational evidence: which portfolios actually register pipeline data
 # --------------------------------------------------------------------------- #
