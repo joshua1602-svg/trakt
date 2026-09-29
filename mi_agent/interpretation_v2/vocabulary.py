@@ -99,7 +99,13 @@ from mi_agent import semantic_model as _semantic_model
 #: pipeline's change between two dated extracts (`movement` / `compare`,
 #: `CAPABILITY_CHANGE_FORMS`), so a metric delta on a pipeline measure stays
 #: with the pipeline instead of reaching a funded-book runtime.
-VOCABULARY_VERSION = "2.10.0"
+#:
+#: 2.11.0 says that a month named as the pipeline's own attribute ("how much
+#: pipeline is current month") is the expected-completion timing, not a
+#: reporting period. The 2026-09-29 full bank read it as the current period
+#: and answered with the whole live pipeline — a must-answer question (D13)
+#: answered wrongly.
+VOCABULARY_VERSION = "2.11.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -647,8 +653,13 @@ SPECIALIST_DIMENSION_DEFINITIONS: Mapping[str, str] = {
         "case is past its expected completion), `current_month` (this month) "
         "or `next_month` (the first month after). Filter on ONE value for "
         "'how much pipeline is overdue', 'expected to complete this month' or "
-        "'next month'. It is about the PIPELINE; overdue LOANS are arrears, "
-        "a different question."),
+        "'next month'. A month named AS the pipeline's own attribute — "
+        "'current month pipeline', 'how much pipeline is current month', "
+        "'this month's pipeline', 'next month's pipeline' — is this timing, "
+        "NOT a reporting period: the pipeline is always read at its latest "
+        "weekly extract, so reading 'current month' as the period would "
+        "return the whole pipeline. It is about the PIPELINE; overdue LOANS "
+        "are arrears, a different question."),
     **{name: d.definition for name, d in _FORECAST_MODEL.dimensions.items()},
     **{name: d.definition for name, d in _STAGE_MODEL.dimensions.items()},
 }

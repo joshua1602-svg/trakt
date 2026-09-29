@@ -44,6 +44,7 @@ from typing import (
 
 from question_interpretation import lexical as _lexical
 
+from . import answer_standard as _standard
 from . import statistic as _statistic
 
 # --------------------------------------------------------------------------- #
@@ -1643,7 +1644,7 @@ class ExecutionReceipt:
         if self.comparison_period:
             parts.append(self.comparison_period)
         if self.group_count is not None:
-            parts.append(f"{self.group_count:,} groups")
+            parts.append(_standard.plural(self.group_count, "group"))
         if self.population is not None:
             if self.aggregation == "share" and self.population_total:
                 parts.append(f"{self.population:,} qualifying "

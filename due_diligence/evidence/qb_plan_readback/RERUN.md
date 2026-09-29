@@ -207,3 +207,21 @@ intents added beside the baseline's.
                 /home/qb_plan_rerun_20260929T212100Z.log — read back from
                 this START TIME and scored against the buckets (D13)
 
+    2026-09-29  the 21:21:00 full bank, read back by runs 36642581333 and
+                36642689706 (the reader now prints the interpreter's own
+                failure reason). 64/135 served NEW. From [68] pipeline_023
+                on, EVERY question (68) failed at the language step with the
+                provider's "Your credit balance is too low" (MODEL_UNAVAILABLE)
+                — the account ran out of credits mid-run; not a code
+                failure. Of the 67 questions asked before that: must answer
+                48/48 NEW, nice to have 15/15 NEW, fine to decline 1/4 NEW
+                (003 obligor region and 025 occupancy declined FIELD_NOT_IN_
+                BOOK, 022 age bucket on the pipeline declined DIMENSION_NOT_
+                SUPPORTED). One WRONG answer: [59] "How much pipeline is
+                current month?" read 'current month' as the reporting period
+                and answered with the whole live pipeline (£969.8m); it is
+                this month's completions. Fixed in vocabulary 2.11.0 (the
+                expected-completion timing definition). [44] "1 groups" in
+                the receipt line: fixed. Not answered: the 68 questions after
+                the credits ran out — re-ask exactly those, by id, once
+                2.11.0 is deployed (plus [59])
