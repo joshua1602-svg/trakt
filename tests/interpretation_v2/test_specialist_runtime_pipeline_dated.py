@@ -281,6 +281,26 @@ def test_a_monthly_stage_series_keeps_only_those_extracts(history):
     assert sorted({c["period"] for c in outcome.cells}) == _MONTHLY
 
 
+def test_the_weighted_series_is_the_evolution_charts_weighted_line(history):
+    """Catalogue batch 1: "weighted expected funded amount by month" is the
+    weekly owner's own weighted figure for each month's extract."""
+    by_date, _ = _owner(history)
+    outcome = _series(history, "monthly",
+                      measures=[{"concept": "weighted_expected_funded_amount"}])
+    assert outcome.ok, outcome.detail
+    assert [c["value"] for c in outcome.cells] == [
+        by_date[d]["metrics"]["weighted_expected_funded_amount"] for d in _MONTHLY]
+    assert all(c["value"] is not None for c in outcome.cells)
+
+
+def test_the_weighted_value_by_stage_over_time_is_refused(history):
+    plan = _plan(operation="breakdown", dimensions=["pipeline_stage"],
+                 measures=[{"concept": "weighted_expected_funded_amount"}],
+                 time={"form": "series", "grain": "weekly"})
+    ok, why, _ = pipeline_rt.check_eligibility(plan)
+    assert (ok, why) == (False, pipeline_rt.MEASURE_NOT_SUPPORTED)
+
+
 def test_a_grain_the_weekly_history_cannot_state_is_refused(history):
     plan = _plan(operation="series", time={"form": "series", "grain": "quarterly"})
     ok, why, _ = pipeline_rt.check_eligibility(plan)

@@ -847,35 +847,48 @@ def _expected_completion_summary(breakdown: List[Dict[str, Any]],
     as_of_month = (as_of or "")[:7]
     overdue_count = current_count = 0
     overdue_weighted = current_weighted = 0.0
+    overdue_amount = current_amount = 0.0
     next_month: Optional[str] = None
     next_count = 0
-    next_weighted = 0.0
+    next_weighted = next_amount = 0.0
 
     def _w(row: Dict[str, Any]) -> float:
         return float(row.get("weightedExpectedFundedAmount") or 0.0)
+
+    def _a(row: Dict[str, Any]) -> float:
+        return float(row.get("expectedFundedAmount") or 0.0)
 
     for row in breakdown:  # ascending by month
         month = row["month"]
         if as_of_month and month < as_of_month:
             overdue_count += row["caseCount"]
             overdue_weighted += _w(row)
+            overdue_amount += _a(row)
         elif as_of_month and month == as_of_month:
             current_count += row["caseCount"]
             current_weighted += _w(row)
+            current_amount += _a(row)
         else:  # future (or no as-of month known)
             if next_month is None:
                 next_month = month
                 next_count = row["caseCount"]
                 next_weighted = _w(row)
+                next_amount = _a(row)
     return {
         "asOfMonth": as_of_month or None,
         "overdueExpectedCompletionCount": overdue_count,
         "overdueExpectedCompletionWeightedAmount": round(overdue_weighted, 2),
+        # The amount (the expected funded amount, which for a pipeline case is
+        # its loan amount) beside the count and the weighted value, so "how
+        # much pipeline is overdue" has the tab's own figure to read.
+        "overdueExpectedCompletionAmount": round(overdue_amount, 2),
         "currentMonthExpectedCompletionCount": current_count,
         "currentMonthExpectedCompletionWeightedAmount": round(current_weighted, 2),
+        "currentMonthExpectedCompletionAmount": round(current_amount, 2),
         "nextExpectedCompletionMonth": next_month,
         "nextExpectedCompletionCount": next_count,
         "nextExpectedCompletionWeightedAmount": round(next_weighted, 2),
+        "nextExpectedCompletionAmount": round(next_amount, 2),
     }
 
 

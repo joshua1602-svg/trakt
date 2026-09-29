@@ -88,6 +88,9 @@
         rule publishes the gap still to go. The live service reads the
         ACTIVATED client configuration, so the stage reaches production through
         onboarding's standing field, not the repository file.
+        DEPRIORITISED (owner, 2026-09-29): the production stage is not being
+        set now; "scale" is not a priority question and remains an accepted
+        gap — a scale question refuses SCALE_NOT_CONFIGURED until it is.
 
     D10 WEIGHTED-AVERAGE VALUATION                           SETTLED 2026-09-29
         Answered where the book carries valuations: it is the dashboard's
@@ -97,14 +100,14 @@
         `current_outstanding_balance`; vocabulary 2.4.0. Pinned by
         `tests/test_weighted_average_valuation_is_the_dashboards.py`.
 
-    D11 WHAT "OVERDUE" MEANS                                 PROPOSED 2026-09-29
+    D11 WHAT "OVERDUE" MEANS                                  SETTLED 2026-09-29
         Two different questions share the word. About the PIPELINE, it is the
         Pipeline tab's own definition: live cases whose expected completion
         month is before the extract's month (`overdueExpectedCompletion*`).
         About LOANS, it is arrears — answered only where the tape carries the
         arrears fields the registry already defines, refused honestly where it
         does not. When the question does not say which, the agent asks.
-        Awaiting owner confirmation.
+        Owner agreed.
 
     D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
         P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
@@ -929,15 +932,20 @@ of which the dashboard already computes.
     answers, and a reason on every refusal — measured by the bank before
     anything is switched on.
 
+    PRIORITY (owner, 2026-09-29): narrow the gap as far as possible,
+    accepting some gaps. The backlog below is built in order of how many of
+    the 135 bank questions each item closes, largest first.
+
 ### 15.2 The catalogue backlog, from the run — each wired to an existing owner
 
     concept (what the model asked for)          the dashboard's existing owner
     ------------------------------------------  ----------------------------------------------
-    expected completion month; overdue /        pipeline_contract._expected_completion_breakdown
-      this month / next month (pipeline, D11)     and _expected_completion_summary
-    weighted expected pipeline, total and by    open_totals()["weighted"]; _dimension_breakdown
-      stage / broker / region / product            weightedExpectedFundedAmount
-    product on the pipeline                     productBreakdown (product_type)
+    expected completion month; overdue /        DONE — batch 1, vocabulary 2.6.0:
+      this month / next month (pipeline, D11)     _expected_completion_breakdown / _summary
+    weighted expected pipeline, total and by    DONE — batch 1: open_totals()["weighted"];
+      stage / broker / product / LTV band          _dimension_breakdown weightedExpectedFundedAmount
+    product and LTV band on the pipeline        DONE — batch 1: productBreakdownFull, ltvBreakdown
+    region on the pipeline                      OPEN QUESTION — see below
     what carries no forecast weight, and why    pipeline_prep.completion_probability_summary
       (withdrawn, lapsed, missing probability)     by_source
     the forecast's parts: funded, pipeline      forecast_bridge.compute_forecast_bridge
@@ -949,6 +957,24 @@ of which the dashboard already computes.
     KFI-to-completion conversion                cohort conversion (stage movement, D2a)
     scale threshold (D9)                        client / portfolio configuration (new field)
     weighted-average valuation (D10)            DONE — registry entry, vocabulary 2.4.0
+
+    Batch 1 (2026-09-29) reads every figure off the Pipeline tab's own
+    functions for the same live rows; nothing is grouped or summed in the
+    agent. Pinned by `tests/interpretation_v2/test_pipeline_catalogue_batch1.py`
+    against the tab's snapshot. Bank questions it gives a home include
+    pipeline_003, _007, _009, _010, _012, _013, _015, _016, _018–_021,
+    pipeline_strat_001–_003 and pipeline_evolution_007/_008 when read as
+    expected-completion months — whether the model reads each one this way is
+    what the spot check measures.
+
+    REGION ON THE PIPELINE is not wired, deliberately. "By region" governs to
+    the client's reporting taxonomy (`canonical_region_reporting`, the
+    compiler's default); the Pipeline tab groups the extract's raw obligor
+    region (`geographic_region_obligor`). Serving the tab's rows would answer a
+    different geography from the one the funded book answers to the same
+    words. It stays GEOGRAPHY_NOT_SUPPORTED (served by the legacy path) until
+    the pipeline is mapped through the same region taxonomy — an owner
+    question: should the Pipeline tab also show the reporting taxonomy?
 
     The forecast-balance hold (§14.6) is released by this backlog, not before
     it: once the curve, the scenarios and the forecast's parts each have their

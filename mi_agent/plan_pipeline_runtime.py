@@ -98,6 +98,8 @@ EXECUTION_FAILED = "EXECUTION_FAILED"
 PERIOD_LABEL_UNRESOLVED = "PERIOD_LABEL_UNRESOLVED"
 PERIOD_LABEL_AMBIGUOUS = "PERIOD_LABEL_AMBIGUOUS"
 PERIOD_NOT_AVAILABLE = "PERIOD_NOT_AVAILABLE"
+#: The extract carries no column for a breakdown the plan asked for.
+FIELD_UNAVAILABLE = "FIELD_UNAVAILABLE"
 
 #: GOVERNED MEASURE -> WHICH EXISTING PIPELINE FIGURE. The map is the whole of
 #: the measure translation, and it is a map rather than a computation on purpose:
@@ -107,17 +109,68 @@ PERIOD_NOT_AVAILABLE = "PERIOD_NOT_AVAILABLE"
 #: could not bind it.
 _AMOUNT = "amount"
 _COUNT = "count"
+#: The Pipeline tab's weighted expected funded amount (catalogue batch 1).
+_WEIGHTED = "weighted"
 SUPPORTED_MEASURES: Mapping[str, str] = {
     "pipeline_amount": _AMOUNT,
     "pipeline_case_count": _COUNT,
+    "weighted_expected_funded_amount": _WEIGHTED,
     # A bare row count. `loan` is the governed concept the compiler emits for
     # "how many cases", and on the pipeline tape a row IS a case.
     "loan": _COUNT,
     "loan_count": _COUNT,
 }
 
-#: The one dimension the existing Pipeline owners group by.
-SUPPORTED_DIMENSIONS: FrozenSet[str] = frozenset({"pipeline_stage"})
+#: The dimensions a CURRENT pipeline figure can be broken down by — each one a
+#: breakdown the Pipeline tab already publishes. The weekly and named-month
+#: owners break down by stage only.
+SUPPORTED_DIMENSIONS: FrozenSet[str] = frozenset({
+    "pipeline_stage", "broker_channel", "erm_product_type", "ltv_bucket",
+    "expected_completion_month"})
+HISTORY_DIMENSIONS: FrozenSet[str] = frozenset({"pipeline_stage"})
+
+#: GOVERNED DIMENSION -> THE COLUMN THE PIPELINE TAB'S BREAKDOWN GROUPS BY. The
+#: funded book's ERM product type is the pipeline extract's product
+#: (`config/mi/pipeline_field_contract.yaml`: product_type correlates to
+#: erm_product_type), so one concept names both. The LTV band is the shared
+#: bucket engine's, so the two books band alike.
+#:
+#: Region is deliberately absent: "by region" governs to the client's reporting
+#: taxonomy (`canonical_region_reporting`), while the tab groups the extract's
+#: raw obligor region. Serving the tab's rows would substitute one geography
+#: for the other, so the question stays GEOGRAPHY_NOT_SUPPORTED until the
+#: pipeline carries the reporting taxonomy.
+TAB_COLUMN: Mapping[str, str] = {
+    "pipeline_stage": "pipeline_stage",
+    "broker_channel": "broker_channel",
+    "erm_product_type": "product_type",
+    "ltv_bucket": "ltv_bucket",
+}
+
+#: D11: "overdue" about the pipeline is the tab's own expected-completion
+#: classification. The one filter this runtime takes, because the tab
+#: publishes the figure for each value — nothing is narrowed here.
+TIMING_DIMENSION = "expected_completion_timing"
+TIMING_VALUES: Tuple[str, ...] = ("overdue", "current_month", "next_month")
+
+#: Which of the tab's figures answers which measure, per breakdown owner.
+_TAB_BREAKDOWN_KEY: Mapping[str, str] = {
+    _AMOUNT: "pipelineAmount", _COUNT: "caseCount",
+    _WEIGHTED: "weightedExpectedFundedAmount"}
+_TAB_COMPLETION_KEY: Mapping[str, str] = {
+    _AMOUNT: "expectedFundedAmount", _COUNT: "caseCount",
+    _WEIGHTED: "weightedExpectedFundedAmount"}
+_TAB_TIMING_KEY: Mapping[Tuple[str, str], str] = {
+    ("overdue", _AMOUNT): "overdueExpectedCompletionAmount",
+    ("overdue", _COUNT): "overdueExpectedCompletionCount",
+    ("overdue", _WEIGHTED): "overdueExpectedCompletionWeightedAmount",
+    ("current_month", _AMOUNT): "currentMonthExpectedCompletionAmount",
+    ("current_month", _COUNT): "currentMonthExpectedCompletionCount",
+    ("current_month", _WEIGHTED): "currentMonthExpectedCompletionWeightedAmount",
+    ("next_month", _AMOUNT): "nextExpectedCompletionAmount",
+    ("next_month", _COUNT): "nextExpectedCompletionCount",
+    ("next_month", _WEIGHTED): "nextExpectedCompletionWeightedAmount",
+}
 
 #: Current-frame operations. `summary` is what a specialist capability emits for
 #: "what is in the pipeline"; the other two are the ordinary scalar and grouped
@@ -204,6 +257,27 @@ def requested_dimensions(plan: Any) -> List[str]:
             for d in (output.get("dimensions") or ())]
 
 
+def timing_of(plan: Any) -> Optional[str]:
+    """The expected-completion timing value a plan filters on, or None.
+
+    None also when the plan filters on anything else, or on more than one
+    thing: only the single timing filter is a figure the tab publishes.
+    """
+    body = _as_mapping(plan)
+    output = _single_output(body) or {}
+    filters = list(body.get("filters") or ()) + list(output.get("filters") or ())
+    if len(filters) != 1:
+        return None
+    only = filters[0] if isinstance(filters[0], Mapping) else {}
+    concept = str(only.get("canonical_field") or only.get("concept") or "")
+    if concept != TIMING_DIMENSION or str(only.get("comparator") or "eq") != "eq":
+        return None
+    value = only.get("value")
+    if isinstance(value, (list, tuple)):
+        value = value[0] if len(value) == 1 else None
+    return str(value).strip().lower() if value is not None else None
+
+
 def is_dated(plan: Any) -> bool:
     """Does this plan ask for the pipeline AT named points in time?"""
     period = _as_mapping(plan).get("period") or {}
@@ -255,12 +329,24 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
         return (False, NOT_SINGLE_OUTPUT,
                 "the pipeline runtime serves exactly one output")
 
-    if body.get("filters") or output.get("filters"):
-        return (False, FILTERS_NOT_SUPPORTED,
-                "the pipeline figures are read from the Pipeline owner's own "
-                "report, which cannot be narrowed without recomputing them "
-                "here; a filtered pipeline question is refused rather than "
-                "answered by a second implementation")
+    filters = list(body.get("filters") or ()) + list(output.get("filters") or ())
+    if filters:
+        # ONE FILTER IS SERVED: the expected-completion timing (D11), because
+        # the Pipeline tab publishes the figure for each of its values. Any
+        # other filter would narrow a figure the owner does not publish
+        # narrowed, and is refused rather than recomputed here.
+        timing = timing_of(body)
+        if timing is None:
+            return (False, FILTERS_NOT_SUPPORTED,
+                    "the pipeline figures are read from the Pipeline tab's own "
+                    "owners, which publish no narrowed figure except by "
+                    "expected-completion timing; a filtered pipeline question "
+                    "is refused rather than answered by a second "
+                    "implementation")
+        if timing not in TIMING_VALUES:
+            return (False, FILTERS_NOT_SUPPORTED,
+                    f"{TIMING_DIMENSION}={timing!r} is not a governed value "
+                    f"({', '.join(TIMING_VALUES)})")
     if output.get("geography") or (body.get("geography") or {}).get("requested"):
         return (False, GEOGRAPHY_NOT_SUPPORTED,
                 "the pipeline owners expose no geography breakdown")
@@ -290,6 +376,19 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     operation = str(body.get("operation") or "")
     period = body.get("period") or {}
     form = str(period.get("form") or "")
+
+    history = is_temporal(body) or is_dated(body)
+    if filters and (history or dimensions):
+        return (False, FILTERS_NOT_SUPPORTED,
+                "the tab publishes expected-completion timing for the current "
+                "extract as one figure per value, not over time or broken down")
+    if history and dimensions and dimensions[0] not in HISTORY_DIMENSIONS:
+        return (False, DIMENSION_NOT_SUPPORTED,
+                f"the weekly pipeline owner breaks down by "
+                f"{sorted(HISTORY_DIMENSIONS)} only, not {dimensions[0]!r}")
+    if history and dimensions and SUPPORTED_MEASURES[measures[0]] == _WEIGHTED:
+        return (False, MEASURE_NOT_SUPPORTED,
+                "the weekly pipeline owner publishes no weighted value by stage")
 
     if is_temporal(body):
         if operation not in TEMPORAL_OPERATIONS:
@@ -363,6 +462,17 @@ OWNER_EVOLUTION = "evolution.pipeline_evolution"
 OWNER_GENERIC_EXECUTOR = "mi_query_executor.execute_mi_query"
 #: The function that fills the Pipeline tab's amount and case-count tiles.
 OWNER_OPEN_TOTALS = "pipeline_contract.open_totals"
+#: The Pipeline tab's breakdowns (broker, product, and stage for the weighted
+#: value), its expected-completion chart, and its overdue / this month / next
+#: month figures (D11).
+OWNER_TAB_BREAKDOWN = "pipeline_contract._dimension_breakdown"
+OWNER_TAB_COMPLETION = "pipeline_contract._expected_completion_breakdown"
+OWNER_TAB_TIMING = "pipeline_contract._expected_completion_summary"
+
+#: The tab's expected-completion view counts the cases that carry a completion
+#: forecast; stated on every answer read from it.
+COMPLETION_BASIS = ("live cases carrying a completion forecast, as the "
+                    "Pipeline tab's expected-completion view counts them")
 
 
 def _receipt(plan: Mapping[str, Any], *, measure: str, kind: str,
@@ -540,6 +650,15 @@ def execute_current(plan: Any, *, source: Any,
         "extract_row_count": int(report.get("row_count", len(frame))),
     }
 
+    timing = timing_of(body)
+    if timing is not None:
+        return _execute_timing(body, measure=measure, kind=kind, timing=timing,
+                               live=live, live_scope=live_scope, dataset=dataset)
+    if dimensions and (kind == _WEIGHTED or dimensions[0] != "pipeline_stage"):
+        return _execute_tab_breakdown(body, measure=measure, kind=kind,
+                                      dimension=dimensions[0], live=live,
+                                      live_scope=live_scope, dataset=dataset)
+
     if dimensions and kind == _AMOUNT:
         # A CURRENT AMOUNT BY STAGE, through the GENERIC DETERMINISTIC ENGINE.
         #
@@ -591,7 +710,8 @@ def execute_current(plan: Any, *, source: Any,
     # the tab's `pipelineAmount` and `pipelineRowCount` tiles, called on the
     # same prepared frame, so the answer and the tile are one computation.
     totals = pipeline_mod.open_totals(frame)
-    value = totals["amount"] if kind == _AMOUNT else totals["cases"]
+    value = {_AMOUNT: totals["amount"], _COUNT: totals["cases"],
+             _WEIGHTED: totals["weighted"]}[kind]
     if value is None:
         return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
                                detail=f"the pipeline report carried no "
@@ -615,6 +735,85 @@ def _noted(scope: Mapping[str, Any]) -> Dict[str, Any]:
     row = dict(scope)
     row["note"] = live_pipeline_note(row)
     return row
+
+
+#: The weekly owner's per-extract metric for each measure.
+_SERIES_METRIC: Mapping[str, str] = {
+    _AMOUNT: "pipeline_amount", _COUNT: "pipeline_case_count",
+    _WEIGHTED: "weighted_expected_funded_amount"}
+
+
+def _execute_tab_breakdown(body: Mapping[str, Any], *, measure: str, kind: str,
+                           dimension: str, live: Any,
+                           live_scope: Mapping[str, Any],
+                           dataset: Mapping[str, Any]) -> PipelineOutcome:
+    """A current pipeline figure broken down, read off the Pipeline tab's own
+    breakdown for the same live rows — broker, product, stage (weighted) or
+    expected completion month. Nothing is grouped or summed here."""
+    from mi_agent_api import pipeline_contract as pipeline_mod
+
+    if dimension == "expected_completion_month":
+        rows = pipeline_mod._expected_completion_breakdown(live)
+        key_name, value_key = "month", _TAB_COMPLETION_KEY[kind]
+        owner = OWNER_TAB_COMPLETION
+    else:
+        column = TAB_COLUMN[dimension]
+        if column not in getattr(live, "columns", ()):
+            return PipelineOutcome(
+                ok=False, reason=FIELD_UNAVAILABLE,
+                detail=f"the pipeline extract carries no {column!r} column, so "
+                       f"there is no {dimension} breakdown to read")
+        rows = pipeline_mod._dimension_breakdown(live, column, key_name="key")
+        key_name, value_key = "key", _TAB_BREAKDOWN_KEY[kind]
+        owner = OWNER_TAB_BREAKDOWN
+    if not rows:
+        return PipelineOutcome(
+            ok=False, reason=FIELD_UNAVAILABLE,
+            detail=f"the live pipeline carries no {dimension} values")
+    cells = [{dimension: str(r[key_name]),
+              "value": (float(r[value_key]) if r.get(value_key) is not None
+                        else None)}
+             for r in rows]
+    receipt = _receipt(body, measure=measure, kind=kind, dimensions=[dimension],
+                       dataset=dataset, result_shape="grouped", owner=owner)
+    receipt["pipeline_scope"] = _noted(live_scope)
+    if owner == OWNER_TAB_COMPLETION:
+        receipt["completion_basis"] = COMPLETION_BASIS
+    return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
+
+
+def _execute_timing(body: Mapping[str, Any], *, measure: str, kind: str,
+                    timing: str, live: Any, live_scope: Mapping[str, Any],
+                    dataset: Mapping[str, Any]) -> PipelineOutcome:
+    """D11: the live pipeline overdue / due this month / due next month — the
+    Pipeline tab's own figure for that value, read, not narrowed here."""
+    from mi_agent_api import pipeline_contract as pipeline_mod
+
+    as_of = str(dataset.get("as_of_date") or "")
+    if not as_of:
+        return PipelineOutcome(
+            ok=False, reason=EXECUTION_FAILED,
+            detail="the pipeline extract states no as-of date, so no case can "
+                   "be placed before, in or after its month")
+    summary = pipeline_mod._expected_completion_summary(
+        pipeline_mod._expected_completion_breakdown(live), as_of)
+    value = summary.get(_TAB_TIMING_KEY[(timing, kind)])
+    if value is None:
+        return PipelineOutcome(
+            ok=False, reason=EXECUTION_FAILED,
+            detail=f"the tab's expected-completion summary carried no "
+                   f"{timing} figure")
+    receipt = _receipt(body, measure=measure, kind=kind, dimensions=[],
+                       dataset=dataset, result_shape="scalar",
+                       owner=OWNER_TAB_TIMING)
+    receipt["applied_predicates"] = [{"field": TIMING_DIMENSION, "op": "eq",
+                                      "values": [timing]}]
+    receipt["timing"] = {"value": timing, "as_of_month": summary.get("asOfMonth"),
+                         "next_month": summary.get("nextExpectedCompletionMonth")}
+    receipt["completion_basis"] = COMPLETION_BASIS
+    receipt["pipeline_scope"] = _noted(live_scope)
+    return PipelineOutcome(ok=True, value=float(value), cells=None,
+                           receipt=receipt)
 
 
 def _series_scope() -> Dict[str, Any]:
@@ -721,7 +920,7 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
             receipt["month_rule"] = MONTH_RULE
         return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
 
-    metric = "pipeline_amount" if kind == _AMOUNT else "pipeline_case_count"
+    metric = _SERIES_METRIC[kind]
     cells = [{"period": str(p.get("week") or p.get("extract_date") or ""),
               "value": ((float((p.get("metrics") or {}).get(metric))
                          if (p.get("metrics") or {}).get(metric) is not None
@@ -906,7 +1105,7 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
         shape = "grouped_dated"
     else:
         live_scope = _series_scope()
-        metric = "pipeline_amount" if kind == _AMOUNT else "pipeline_case_count"
+        metric = _SERIES_METRIC[kind]
         cells = [{"period": d,
                   "value": ((float((by_date[d].get("metrics") or {}).get(metric))
                              if (by_date[d].get("metrics") or {}).get(metric)

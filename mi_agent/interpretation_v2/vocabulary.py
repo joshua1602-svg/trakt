@@ -66,7 +66,11 @@ from .metadata import _slug
 #: 2.5.0 lets a milestone name `scale` instead of an amount (owner decision D9,
 #: 2026-09-29): the forecast_milestone_date definition says so, and the figure
 #: is the portfolio's, resolved after interpretation.
-VOCABULARY_VERSION = "2.5.0"
+#:
+#: 2.6.0 adds the Pipeline tab's weighted expected funded amount and its
+#: expected-completion view (month, and overdue / this month / next month, D11)
+#: as pipeline concepts — catalogue batch 1 (§15.2).
+VOCABULARY_VERSION = "2.6.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -522,7 +526,8 @@ SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
         "eligible_balance", "ineligible_balance", "ineligible_loan_count",
         "ineligible_loan_share", "ineligible_balance_share"),
     "funded_bridge": ("funded_balance_movement", "bridge_component"),
-    "pipeline": ("pipeline_amount", "pipeline_case_count"),
+    "pipeline": ("pipeline_amount", "pipeline_case_count",
+                 "weighted_expected_funded_amount"),
     "pipeline_stage_movement": (
         "cases_moved", "amount_moved", "cases_arrived", "cases_departed",
         "cases_stayed", "stayer_amount_change", "stage_opening", "stage_closing"),
@@ -577,6 +582,39 @@ SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
         "threshold is applied after interpretation — never write a number for "
         "it. It is NOT a balance, and NOT a table of dates for several "
         "amounts."),
+    # THE PIPELINE'S WEIGHTED VALUE (catalogue batch 1, 2026-09-29). The
+    # Pipeline tab has shown it for months; the model was told no such concept
+    # existed and asked to clarify every question about it.
+    "weighted_expected_funded_amount": (
+        "The LIVE pipeline weighted by each case's probability of completing — "
+        "the Pipeline tab's weighted expected funded figure, also called the "
+        "weighted pipeline or the expected completions from the pipeline. It is "
+        "the pipeline part of the forecast funded balance. It is NOT the "
+        "pipeline amount (unweighted), and NOT the forecast funded balance "
+        "(which adds the funded book). It can be broken down by stage, broker, "
+        "product, LTV band or expected completion month."),
+}
+
+#: WHAT A SPECIALIST DIMENSION IS, where its name does not say it, and the
+#: values a question may name for it. The Pipeline tab's expected-completion
+#: view (owner decision D11, 2026-09-29: "overdue" about the pipeline is the
+#: tab's own definition).
+SPECIALIST_DIMENSION_DEFINITIONS: Mapping[str, str] = {
+    "expected_completion_month": (
+        "The month a live pipeline case is expected to complete. Group by it "
+        "for 'by expected completion month or date' and 'when are cases "
+        "expected to complete'."),
+    "expected_completion_timing": (
+        "Where a live pipeline case's expected completion month falls against "
+        "the month of the pipeline extract: `overdue` (an earlier month — the "
+        "case is past its expected completion), `current_month` (this month) "
+        "or `next_month` (the first month after). Filter on ONE value for "
+        "'how much pipeline is overdue', 'expected to complete this month' or "
+        "'next month'. It is about the PIPELINE; overdue LOANS are arrears, "
+        "a different question."),
+}
+SPECIALIST_DIMENSION_VALUES: Mapping[str, Tuple[str, ...]] = {
+    "expected_completion_timing": ("overdue", "current_month", "next_month"),
 }
 
 #: THRESHOLDS A TARGET MAY NAME INSTEAD OF AN AMOUNT. The word is the model's;
@@ -592,6 +630,7 @@ SPECIALIST_DIMENSIONS: Mapping[str, Tuple[str, ...]] = {
     "limit_assessment": ("concentration_test",),
     "concentration": ("concentration_test",),
     "funded_bridge": ("bridge_component",),
+    "pipeline": ("expected_completion_month", "expected_completion_timing"),
 }
 
 #: The row itself. "How many loans?" counts rows and needs no field; without a
@@ -980,10 +1019,13 @@ def _specialist_concepts(capabilities: Iterable[str]) -> Dict[str, SemanticConce
             out[concept_id] = SemanticConcept(
                 concept_id=concept_id,
                 label=concept_id.replace("_", " ").title(),
-                description=f"A governed dimension of the {cap} capability.",
+                description=SPECIALIST_DIMENSION_DEFINITIONS.get(
+                    concept_id,
+                    f"A governed dimension of the {cap} capability."),
                 role="dimension", owning_capability=cap,
-                values=governed_values_for_field().get("pipeline_stage", ())
-                if concept_id.endswith("_stage") else ())
+                values=(SPECIALIST_DIMENSION_VALUES.get(concept_id)
+                        or (governed_values_for_field().get("pipeline_stage", ())
+                            if concept_id.endswith("_stage") else ())))
     return out
 
 

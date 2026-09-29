@@ -580,7 +580,8 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
 
     receipt = dict(outcome.receipt)
     measure = str(receipt.get("measure_concept") or "")
-    is_amount = receipt.get("measure_kind") == "amount"
+    # The weighted expected funded amount is money too.
+    is_amount = receipt.get("measure_kind") in ("amount", "weighted")
     axis = (receipt.get("group_field_keys") or [None])[0]
     spec_dict = {"capability": receipt.get("capability"),
                  "population": receipt.get("population_base"),
@@ -605,21 +606,36 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                  "rawValue": value}]
         artefacts = [_artefact("kpi", "Pipeline", kpis=kpis,
                                description="Governed pipeline extract.")]
-        answer = f"The {phrase} is {_shown(value)}."
+        timing = receipt.get("timing") or {}
+        if timing:
+            # D11: the bucket, stated against the extract's month.
+            answer = (f"The {phrase} {_timing_phrase(timing)} is "
+                      f"{_shown(value)}.")
+        else:
+            answer = f"The {phrase} is {_shown(value)}."
     elif shape == "grouped":
+        # Months read in date order; every other breakdown largest first, so
+        # "which is largest" is answered by the sentence itself.
         rows = sorted(({str(axis): c[axis], "value": c["value"]}
                        for c in outcome.cells),
-                      key=lambda r: -(r["value"] or 0.0))
+                      key=(lambda r: r[str(axis)])
+                      if axis == "expected_completion_month"
+                      else (lambda r: -(r["value"] or 0.0)))
+        axis_label = _PIPELINE_AXES.get(str(axis), str(axis).replace("_", " "))
         artefacts = [_artefact(
-            "table", "Pipeline by stage", rows=rows,
-            columns=[{"key": str(axis), "label": "Stage"},
+            "table", f"Pipeline by {axis_label}", rows=rows,
+            columns=[{"key": str(axis), "label": axis_label.capitalize()},
                      {"key": "value", "label": label}],
             description=f"{len(rows)} rows.")]
-        # Largest first, so "which stage holds the most" is answered by the
-        # sentence and not only by the table.
-        answer = (f"The {phrase} by stage: "
-                  + ", ".join(f"{_stage_name(r[str(axis)])} {_shown(r['value'])}"
-                              for r in rows) + ".")
+        # The sentence names the leaders; a long breakdown (hundreds of
+        # brokers) is capped in the sentence and complete in the table.
+        named = (_stage_name if axis == "pipeline_stage" else str)
+        shown = rows[:_SENTENCE_ROWS]
+        answer = (f"The {phrase} by {axis_label}: "
+                  + ", ".join(f"{named(r[str(axis)])} {_shown(r['value'])}"
+                              for r in shown)
+                  + (f", and {len(rows) - len(shown):,} more"
+                     if len(rows) > len(shown) else "") + ".")
     elif shape in ("dated", "grouped_dated"):
         # THE PIPELINE AT NAMED DATES. D4: the measure and every extract date
         # are in the sentence; the rule that chose each extract (D7 for a
@@ -700,6 +716,11 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     if scope.get("note"):
         answer = f"{answer} {scope['note']}."
         source_notes.append({"field": "population", "note": scope["note"]})
+    # The expected-completion view counts the cases carrying a forecast; say so.
+    if receipt.get("completion_basis"):
+        answer = f"{answer} Counted over {receipt['completion_basis']}."
+        source_notes.append({"field": "expected completion",
+                             "note": str(receipt["completion_basis"])})
     payload: Dict[str, Any] = {
         "ok": True, "error": None, "question": question, "answer": answer,
         "interpreted": "", "spec": spec_dict,
@@ -1080,9 +1101,34 @@ def _stage_name(stage: Any) -> str:
     return text if text == "KFI" else text.title()
 
 
+#: How a pipeline breakdown's axis reads in a sentence.
+_PIPELINE_AXES = {
+    "pipeline_stage": "stage", "broker_channel": "broker",
+    "erm_product_type": "product", "ltv_bucket": "LTV band",
+    "expected_completion_month": "expected completion month"}
+
+#: At most this many groups are named in a sentence; the table has them all.
+_SENTENCE_ROWS = 10
+
+
+def _timing_phrase(timing: Mapping[str, Any]) -> str:
+    """D11's bucket in words, against the extract's month."""
+    as_of = timing.get("as_of_month")
+    value = timing.get("value")
+    if value == "overdue":
+        return f"overdue (expected to complete before {as_of})"
+    if value == "current_month":
+        return f"expected to complete this month ({as_of})"
+    nxt = timing.get("next_month")
+    return (f"expected to complete next month ({nxt})" if nxt
+            else "expected to complete after this month (no later month "
+                 "carries a completion)")
+
+
 _PIPELINE_LABELS = {
     "pipeline_amount": "Pipeline amount",
     "pipeline_case_count": "Pipeline case count",
+    "weighted_expected_funded_amount": "Pipeline weighted expected funded amount",
     "loan": "Pipeline case count",
     "loan_count": "Pipeline case count",
 }
