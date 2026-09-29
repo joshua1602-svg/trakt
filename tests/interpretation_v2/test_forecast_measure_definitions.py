@@ -46,7 +46,9 @@ def tools(vocabulary):
 
 
 def test_the_version_records_what_the_model_is_shown():
-    assert VOCABULARY_VERSION == "2.3.0"
+    # 2.3.0 introduced these definitions; later versions keep them.
+    major, minor, _ = (int(x) for x in VOCABULARY_VERSION.split("."))
+    assert (major, minor) >= (2, 3)
 
 
 def test_exactly_the_forecast_measures_are_defined():

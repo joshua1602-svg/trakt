@@ -56,7 +56,13 @@ from .metadata import _slug
 #: different questions into one forecast measure because it was shown a name and
 #: no definition; the orientation block is unchanged, and what moved is what
 #: `search_concepts` and `get_concept_metadata` return for those three concepts.
-VOCABULARY_VERSION = "2.3.0"
+#:
+#: 2.4.0 permits the balance-weighted average of current valuation (owner
+#: decision D10, 2026-09-29): the dashboard's "Weighted avg property value" tile
+#: and the LTV denominator, which the model was told it could not ask for. The
+#: registry entry now carries `weighted_avg` weighted by current balance — the
+#: tile's own definition — so the model is shown one more permitted statistic.
+VOCABULARY_VERSION = "2.4.0"
 
 
 # --------------------------------------------------------------------------- #

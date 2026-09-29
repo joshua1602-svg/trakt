@@ -996,6 +996,7 @@ fields:
     allowed_aggregations:
     - sum
     - avg
+    - weighted_avg
     - median
     - min
     - max
@@ -1008,7 +1009,7 @@ fields:
     - filter
     - color
     default_chart_role: y
-    weight_field: null
+    weight_field: current_outstanding_balance
     bucket_field: null
     notes: ''
   current_valuation_date:

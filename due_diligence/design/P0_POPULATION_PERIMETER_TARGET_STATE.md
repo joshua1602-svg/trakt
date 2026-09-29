@@ -67,6 +67,33 @@
         question that names a stage itself is answered over the whole extract.
         Pinned by `tests/test_the_agent_and_the_dashboard_share_one_pipeline.py`.
 
+    D9  WHAT "SCALE" MEANS                                   SETTLED 2026-09-29
+        Specific to the portfolio / SPV, never a figure the model invents. A
+        client whose total assets under management exceed £200MM is AT SCALE,
+        and the answer says so. For a new SPV before securitisation, scale is
+        £100MM (at £80MM, scale is £100MM, £20MM away). A question naming
+        "scale" or "securitisation scale" resolves to the portfolio's configured
+        threshold; with none configured the agent asks. Owner decision.
+        Open for the build: AUM proposed as the funded balance across the
+        client's portfolios, and the SPV's stage recorded in client config.
+
+    D10 WEIGHTED-AVERAGE VALUATION                           SETTLED 2026-09-29
+        Answered where the book carries valuations: it is the dashboard's
+        "Weighted avg property value" tile and the LTV denominator. Defined as
+        the tile defines it — balance-weighted current valuation. Registry entry
+        `current_valuation_amount` permits `weighted_avg`, weight
+        `current_outstanding_balance`; vocabulary 2.4.0. Pinned by
+        `tests/test_weighted_average_valuation_is_the_dashboards.py`.
+
+    D11 WHAT "OVERDUE" MEANS                                 PROPOSED 2026-09-29
+        Two different questions share the word. About the PIPELINE, it is the
+        Pipeline tab's own definition: live cases whose expected completion
+        month is before the extract's month (`overdueExpectedCompletion*`).
+        About LOANS, it is arrears — answered only where the tape carries the
+        arrears fields the registry already defines, refused honestly where it
+        does not. When the question does not say which, the agent asks.
+        Awaiting owner confirmation.
+
     D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
         P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
         any vintage today, so "state both vintages" cannot be satisfied until the
@@ -849,3 +876,71 @@ number, which readings separated.
 `generic_analysis` metric delta over the pipeline for named months; [84] a
 stage movement transition by origin and destination (the full matrix); [74],
 [75], [79] never became plans (AMBIGUOUS_PERIOD: "over time" with no grain).
+
+## 15. Direction of travel — owner-approved 2026-09-29
+
+The 2026-09-29 production bank (135 questions, build ce5d1276, vocabulary 2.3.0)
+was the first measured against the dashboard's NUMBERS rather than only against
+the reading. Of 135 answers: 45 right and clear, 23 right but weakly presented,
+13 wrong and already fixed (D8, the live pipeline), 9 wrong and not yet fixed,
+5 that did not answer, 5 honest refusals, and 35 refusals of questions the
+dashboard already answers. The new engine gave 51 answers (41 on 2026-09-28);
+the old engine gave 84, including 6 of the 9 open wrong answers and all 5
+non-answers. The model's own clarification notes name the cause of most of the
+rest: "the registry carries no governed concept for …" — weighted expected
+pipeline, overdue, scenarios, the forecast's parts, the projection curve — all
+of which the dashboard already computes.
+
+### 15.1 The direction — market-standard practice only
+
+    1  ONE CATALOGUE for the dashboard and the agent (a semantic layer). Every
+       figure defined once — name, meaning, one calculation — and read by both.
+       The agent can only ask for catalogue items. Nothing is invented: each
+       new item is wired to the calculation the dashboard already uses. D8 and
+       D10 are its first two instances.
+    2  ONE ENGINE. The new engine answers or explains why not; the old engine
+       is retired area by area, running only as a comparison until switched
+       off. An area switches when the new engine matches the old engine's
+       right answers with zero wrong numbers.
+    3  ASK WHEN GENUINELY UNCLEAR. Clarifications the model writes are served
+       to the reader with options, not discarded.
+    4  ONE ANSWER STANDARD (P1, §13): the figure, what it is, as-at date(s),
+       what is included and excluded, how it was calculated; breakdowns name
+       their leaders.
+    5  GOLDEN ANSWERS WITH NUMBERS, checked on every release, reconciled to the
+       dashboard; verified readings reused at runtime.
+    6  SPEED: one interpretation per question, history loaded at start, caching.
+
+    GUARDRAILS. No per-question patches or keyword rules; the model's refusal
+    discipline is not loosened; the model never calculates. Every release must
+    show zero numbers that differ from the dashboard, no area losing right
+    answers, and a reason on every refusal — measured by the bank before
+    anything is switched on.
+
+### 15.2 The catalogue backlog, from the run — each wired to an existing owner
+
+    concept (what the model asked for)          the dashboard's existing owner
+    ------------------------------------------  ----------------------------------------------
+    expected completion month; overdue /        pipeline_contract._expected_completion_breakdown
+      this month / next month (pipeline, D11)     and _expected_completion_summary
+    weighted expected pipeline, total and by    open_totals()["weighted"]; _dimension_breakdown
+      stage / broker / region / product            weightedExpectedFundedAmount
+    product on the pipeline                     productBreakdown (product_type)
+    what carries no forecast weight, and why    pipeline_prep.completion_probability_summary
+      (withdrawn, lapsed, missing probability)     by_source
+    the forecast's parts: funded, pipeline      forecast_bridge.compute_forecast_bridge
+                                                   fundedBalance / weightedExpectedFundedAmount
+    base / downside / upside scenario           forecast_extrapolation.run_rate_model scenarios
+    the month-by-month projection curve         forecast_extrapolation._project_series
+    conversion basis; which stages use          pipeline_history.historical_model_evidence
+      historical or fallback rates
+    KFI-to-completion conversion                cohort conversion (stage movement, D2a)
+    scale threshold (D9)                        client / portfolio configuration (new field)
+    weighted-average valuation (D10)            DONE — registry entry, vocabulary 2.4.0
+
+    The forecast-balance hold (§14.6) is released by this backlog, not before
+    it: once the curve, the scenarios and the forecast's parts each have their
+    own concept, the questions that were misread into the balance have a home
+    of their own. Re-run evidence (2026-09-29): lifting it today admits none of
+    the 135 questions and would remove the only guard on the 2.2.0 misreads,
+    because a forward-looking balance is a permitted period form.
