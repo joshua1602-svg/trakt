@@ -200,4 +200,6 @@ intents added beside the baseline's.
                 stage-movement model; the pipeline's change between two
                 dated extracts. Vocabulary 2.10.0. Next: the full bank,
                 scored with score_against_buckets.py
+    2026-09-29  21:11 UTC b1ef994f deploying (run 36631547906; vocabulary
+                2.10.0: the semantic engine, conversion, pipeline change)
 
