@@ -42,6 +42,12 @@ ADMITTED = {
     85: "forecast",   # the forecast funded balance (D6, the composer)
     107: "forecast", 108: "forecast", 109: "forecast", 110: "forecast",
     111: "forecast",  # when do we reach £25m ... £150m
+    # Catalogue batch 1: the Pipeline tab's own breakdowns, each read correctly
+    # by the recorded model output (checked one by one, 2026-09-29).
+    52: "pipeline", 55: "pipeline",     # pipeline amount by broker; the largest
+    65: "pipeline", 129: "pipeline",    # pipeline amount by product
+    131: "pipeline",                    # pipeline case count by product
+    66: "pipeline", 130: "pipeline",    # pipeline amount by LTV bucket / band
 }
 
 #: Plans the runtime would answer with a figure the question did not ask for.

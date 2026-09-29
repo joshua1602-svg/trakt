@@ -619,7 +619,8 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
         sys.modules[spec.name] = module
         try:
             spec.loader.exec_module(module)
-            was = module.load_governed_vocabulary().orientation_payload()
+            was_vocabulary = module.load_governed_vocabulary()
+            was = was_vocabulary.orientation_payload()
         finally:
             sys.modules.pop(spec.name, None)
 
@@ -645,9 +646,28 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: added operation, a removed one, or any other reworded key still fails.
     AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"}}
 
+    #: THE CATALOGUE, WIDENED BY NAME. Catalogue batch 1 (vocabulary 2.6.0,
+    #: owner direction 2026-09-29: "narrow the gap") gave the Pipeline tab's
+    #: weighted value and its expected-completion view a concept each, so the
+    #: model stops refusing or misreading them. The concept counts move by
+    #: exactly these three; any other added or removed concept still fails.
+    AUTHORISED_CONCEPT_ADDITIONS = {"weighted_expected_funded_amount",
+                                    "expected_completion_month",
+                                    "expected_completion_timing"}
+
     for key in sorted(set(was) & set(now)):
         if key == "vocabulary_version":
             continue                       # moves with the block, by design
+        if key == "concept_counts":
+            before_ids = set(was_vocabulary.concepts)
+            after_ids = set(vocabulary.concepts)
+            assert after_ids - before_ids == AUTHORISED_CONCEPT_ADDITIONS, (
+                f"the model was shown new concepts "
+                f"{sorted(after_ids - before_ids - AUTHORISED_CONCEPT_ADDITIONS)}"
+                f"; only {sorted(AUTHORISED_CONCEPT_ADDITIONS)} were authorised")
+            assert before_ids - after_ids == set(), (
+                f"the model lost concepts {sorted(before_ids - after_ids)}")
+            continue
         if key == "capability_operations":
             for capability in sorted(set(was[key]) | set(now[key])):
                 before_ops = set(was[key].get(capability, ()))
