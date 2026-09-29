@@ -56,6 +56,17 @@
         year-aware: a bare month the catalogue holds in two different years
         still clarifies, exactly as it does for funded snapshots.
 
+    D8  WHICH PIPELINE "THE PIPELINE" MEANS                  SETTLED 2026-09-29
+        The live cases — KFI, Application, Offer — by default, and the dashboard
+        and the query agent use the same pipeline. Owner decision. The 2026-09-29
+        production run found the agent summing the whole weekly extract
+        (£1.18bn, completed and withdrawn included) while the Pipeline tab showed
+        the live pipeline (#505). Both answer paths now call the tab's own
+        functions (`pipeline_contract.live_pipeline_scope`, `open_totals`,
+        `excluded_from_open`) and state the exclusion in the tab's words; a
+        question that names a stage itself is answered over the whole extract.
+        Pinned by `tests/test_the_agent_and_the_dashboard_share_one_pipeline.py`.
+
     D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
         P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
         any vintage today, so "state both vintages" cannot be satisfied until the

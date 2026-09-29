@@ -586,43 +586,52 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                  "population": receipt.get("population_base"),
                  "measure": measure, "dimensions": receipt.get("group_field_keys")}
     shape = str(receipt.get("result_shape") or "")
+    # WHICH PIPELINE. The runtime answers over the live pipeline by the
+    # dashboard's own rule and states it on the receipt, with the sentence the
+    # Pipeline owner writes about it; this only prints what it was handed.
+    scope = receipt.get("pipeline_scope") or {}
+    label = _PIPELINE_LABELS.get(measure, measure)
+    phrase = ("live " if scope.get("population") == "open" else "") + label.lower()
+
+    def _shown(value: Any) -> str:
+        if value is None:
+            return "n/a"
+        return _money(value) if is_amount else f"{float(value):,.0f}"
 
     if shape == "scalar":
         value = float(outcome.value)
-        kpis = [{"field": measure, "label": _PIPELINE_LABELS.get(measure, measure),
+        kpis = [{"field": measure, "label": label,
                  "value": (f"£{value:,.0f}" if is_amount else f"{value:,.0f}"),
                  "rawValue": value}]
         artefacts = [_artefact("kpi", "Pipeline", kpis=kpis,
                                description="Governed pipeline extract.")]
-        answer = (f"Pipeline {_PIPELINE_LABELS.get(measure, measure).lower()} is "
-                  f"{kpis[0]['value']}.")
+        answer = f"The {phrase} is {_shown(value)}."
     elif shape == "grouped":
-        rows = [{str(axis): c[axis], "value": c["value"]} for c in outcome.cells]
+        rows = sorted(({str(axis): c[axis], "value": c["value"]}
+                       for c in outcome.cells),
+                      key=lambda r: -(r["value"] or 0.0))
         artefacts = [_artefact(
             "table", "Pipeline by stage", rows=rows,
             columns=[{"key": str(axis), "label": "Stage"},
-                     {"key": "value",
-                      "label": _PIPELINE_LABELS.get(measure, measure)}],
+                     {"key": "value", "label": label}],
             description=f"{len(rows)} rows.")]
-        answer = f"Pipeline by {axis} across {len(rows)} governed stage(s)."
+        # Largest first, so "which stage holds the most" is answered by the
+        # sentence and not only by the table.
+        answer = (f"The {phrase} by stage: "
+                  + ", ".join(f"{_stage_name(r[str(axis)])} {_shown(r['value'])}"
+                              for r in rows) + ".")
     elif shape in ("dated", "grouped_dated"):
         # THE PIPELINE AT NAMED DATES. D4: the measure and every extract date
         # are in the sentence; the rule that chose each extract (D7 for a
         # month) is in the source notes. No change between them is stated,
         # because none was computed — the plan asked for the dates' figures.
-        label = _PIPELINE_LABELS.get(measure, measure)
         dates = [str(r.get("extract_date"))
                  for r in (receipt.get("period_resolution") or ())]
         if shape == "dated":
             rows = [{"period": str(c["period"]), "value": c["value"]}
                     for c in outcome.cells]
-            def _shown(value: Any) -> str:
-                if value is None:
-                    return "n/a"
-                return f"£{float(value):,.0f}" if is_amount else f"{float(value):,.0f}"
-
             values = "; ".join(f"{r['period']} {_shown(r['value'])}" for r in rows)
-            answer = f"{label} at each weekly extract — {values}."
+            answer = f"The {phrase} at each weekly extract — {values}."
             columns = [{"key": "period", "label": "Weekly extract"},
                        {"key": "value", "label": label}]
         else:
@@ -632,8 +641,9 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                 by_period.setdefault(str(c["period"]), {"period": str(c["period"])})[
                     str(c[axis])] = c["value"]
             rows = [by_period[d] for d in sorted(by_period)]
-            answer = (f"{label} by {axis} at the weekly extracts of "
-                      f"{' and '.join(dates)}: {', '.join(stages)}.")
+            answer = (f"The {phrase} by stage at the weekly extracts of "
+                      f"{' and '.join(dates)}: "
+                      f"{', '.join(_stage_name(st) for st in stages)}.")
             columns = ([{"key": "period", "label": "Weekly extract"}]
                        + [{"key": st, "label": st} for st in stages])
         artefacts = [_artefact("table", "Pipeline at the named dates",
@@ -652,15 +662,17 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                         for st in stages}}
                     for per in periods]
             series = [{"key": st, "label": st} for st in stages]
-            answer = (f"Pipeline by {axis} across {len(periods)} governed weekly "
-                      f"extract(s): {', '.join(stages)}.")
+            answer = (f"The {phrase} by stage across {len(periods)} weekly "
+                      f"extract(s): {', '.join(_stage_name(st) for st in stages)}.")
         else:
-            rows = [{"period": str(c["period"]), "value": c["value"]}
-                    for c in outcome.cells]
-            series = [{"key": "value",
-                       "label": _PIPELINE_LABELS.get(measure, measure)}]
-            answer = (f"Pipeline {_PIPELINE_LABELS.get(measure, measure).lower()} "
-                      f"across {len(periods)} governed weekly extract(s).")
+            rows = sorted(({"period": str(c["period"]), "value": c["value"]}
+                           for c in outcome.cells), key=lambda r: r["period"])
+            series = [{"key": "value", "label": label}]
+            answer = f"The {phrase} across {len(periods)} weekly extract(s)"
+            if rows:
+                answer += (f", from {_shown(rows[0]['value'])} at {rows[0]['period']} "
+                           f"to {_shown(rows[-1]['value'])} at {rows[-1]['period']}")
+            answer += "."
         artefacts = [_artefact(
             "chart", "Pipeline over time", chartType="line", xKey="period",
             rows=rows, series=series,
@@ -674,6 +686,11 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     source_notes = [{"field": f"period: {row.get('requested')}",
                      "note": f"{row.get('extract_date')} — {row.get('rule')}"}
                     for row in (receipt.get("period_resolution") or ())]
+    # WHAT THE FIGURE LEAVES OUT, on the sentence and in the notes — the same
+    # disclosure the Pipeline tab makes, in the Pipeline owner's words.
+    if scope.get("note"):
+        answer = f"{answer} {scope['note']}."
+        source_notes.append({"field": "population", "note": scope["note"]})
     payload: Dict[str, Any] = {
         "ok": True, "error": None, "question": question, "answer": answer,
         "interpreted": "", "spec": spec_dict,
@@ -1035,6 +1052,12 @@ def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
 
 
 #: Reader-facing names for the governed pipeline measures. Presentation only.
+def _stage_name(stage: Any) -> str:
+    """A stage as a reader writes it: KFI, Application, Offer."""
+    text = str(stage or "").strip().upper()
+    return text if text == "KFI" else text.title()
+
+
 _PIPELINE_LABELS = {
     "pipeline_amount": "Pipeline amount",
     "pipeline_case_count": "Pipeline case count",

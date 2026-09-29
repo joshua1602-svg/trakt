@@ -316,9 +316,17 @@ def _forecast_sentences(result: AnalyticalResult,
         # what has already happened.
         exclusion = ""
         if excluded_cases and excluded_amount:
+            # WHAT THE EXCLUSION IS. `excludedFromWeightingAmount` counts every
+            # case that carries no forecast weight — completed and withdrawn,
+            # but also KFI cases not yet forecast, lapsed cases and cases with
+            # no stage (`pipeline_prep.completion_probability_summary`). On the
+            # 2026-09-29 production run it was 6,084 cases / £1.17bn, of which
+            # completed and withdrawn were ~£213m; calling all of it "completed
+            # or withdrawn" was false.
             exclusion = (f" This excludes {_count(excluded_cases)} case(s) worth "
-                         f"{money(excluded_amount)} the extract already shows as "
-                         "completed or withdrawn.")
+                         f"{money(excluded_amount)} that carry no forecast "
+                         "weight: completed or withdrawn, KFI not yet forecast, "
+                         "lapsed, or without a stage.")
         out.append(f"{finding.label}: "
                    f"{value_text(finding, finding.forecast_value)}"
                    + (f", expected {finding.forecast_date}."

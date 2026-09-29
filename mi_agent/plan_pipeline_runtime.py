@@ -349,6 +349,8 @@ class PipelineOutcome:
 OWNER_REPORT = "pipeline_contract.load_prepared_pipeline"
 OWNER_EVOLUTION = "evolution.pipeline_evolution"
 OWNER_GENERIC_EXECUTOR = "mi_query_executor.execute_mi_query"
+#: The function that fills the Pipeline tab's amount and case-count tiles.
+OWNER_OPEN_TOTALS = "pipeline_contract.open_totals"
 
 
 def _receipt(plan: Mapping[str, Any], *, measure: str, kind: str,
@@ -509,13 +511,20 @@ def execute_current(plan: Any, *, source: Any,
         return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
                                detail=f"{type(exc).__name__}: {exc}"[:200])
 
+    # THE LIVE PIPELINE, by the dashboard's own rule. Completed and withdrawn
+    # cases stay in ERE's weekly extract with their balance; the Pipeline tab
+    # counts KFI / Application / Offer only and discloses the rest, and so does
+    # every figure below. Governed pipeline plans carry no stage filter (they
+    # are refused above), so no plan here names a stage itself.
+    live, live_scope = pipeline_mod.live_pipeline_scope(frame)
     scope = source if isinstance(source, Mapping) else {}
     dataset = {
         "identity": "governed_pipeline_extract",
         "source_file": str(scope.get("source_file") or ""),
         "as_of_date": str(scope.get("pipeline_as_of_date")
                           or report.get("pipeline_as_of_date") or ""),
-        "row_count": int(report.get("row_count", len(frame))),
+        "row_count": int(len(live)),
+        "extract_row_count": int(report.get("row_count", len(frame))),
     }
 
     if dimensions and kind == _AMOUNT:
@@ -538,9 +547,12 @@ def execute_current(plan: Any, *, source: Any,
         # `pipeline_prep.PIPELINE_AMOUNT_FIELD`, which is the column the Pipeline
         # owner's own `total_pipeline_amount` sums. The capability states the
         # field; the engine does the arithmetic; neither is invented here.
-        return _execute_current_grouped_amount(
-            plan, body=body, frame=frame, semantics=semantics,
+        outcome = _execute_current_grouped_amount(
+            plan, body=body, frame=live, semantics=semantics,
             measure=measure, kind=kind, dimensions=dimensions, dataset=dataset)
+        if outcome.ok:
+            outcome.receipt["pipeline_scope"] = _noted(live_scope)
+        return outcome
 
     if dimensions:
         # COUNTS BY STAGE, read off the preparation report. `stage_counts` is
@@ -550,28 +562,72 @@ def execute_current(plan: Any, *, source: Any,
             return PipelineOutcome(
                 ok=False, reason=EXECUTION_FAILED,
                 detail="the pipeline report carried no stage counts")
+        # The live stages only, as the Pipeline tab's stage breakdown shows
+        # them; the closed and unmapped stages are disclosed, not charted.
         cells = [{dimensions[0]: str(stage), "value": float(count)}
-                 for stage, count in sorted(counts.items())]
-        return PipelineOutcome(
-            ok=True, cells=cells, value=None,
-            receipt=_receipt(body, measure=measure, kind=kind,
-                             dimensions=dimensions, dataset=dataset,
-                             result_shape="grouped",
-                             owner=OWNER_REPORT))
+                 for stage, count in sorted(counts.items())
+                 if str(stage).strip().upper() in live_scope["open_stages"]]
+        receipt = _receipt(body, measure=measure, kind=kind,
+                           dimensions=dimensions, dataset=dataset,
+                           result_shape="grouped", owner=OWNER_REPORT)
+        receipt["pipeline_scope"] = _noted(live_scope)
+        return PipelineOutcome(ok=True, cells=cells, value=None,
+                               receipt=receipt)
 
-    if kind == _AMOUNT:
-        value = report.get("total_pipeline_amount")
-    else:
-        value = report.get("row_count", len(frame))
+    # THE PIPELINE TAB'S OWN TOTALS. `open_totals` is the function that fills
+    # the tab's `pipelineAmount` and `pipelineRowCount` tiles, called on the
+    # same prepared frame, so the answer and the tile are one computation.
+    totals = pipeline_mod.open_totals(frame)
+    value = totals["amount"] if kind == _AMOUNT else totals["cases"]
     if value is None:
         return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
                                detail=f"the pipeline report carried no "
                                       f"{measure!r} figure")
-    return PipelineOutcome(
-        ok=True, value=float(value), cells=None,
-        receipt=_receipt(body, measure=measure, kind=kind, dimensions=[],
-                         dataset=dataset, result_shape="scalar",
-                         owner=OWNER_REPORT))
+    receipt = _receipt(body, measure=measure, kind=kind, dimensions=[],
+                       dataset=dataset, result_shape="scalar",
+                       owner=OWNER_OPEN_TOTALS)
+    receipt["pipeline_scope"] = _noted(live_scope)
+    return PipelineOutcome(ok=True, value=float(value), cells=None,
+                           receipt=receipt)
+
+
+#: The weekly series' totals are already the live pipeline: `pipeline_evolution`
+#: sums the open stages of each extract (the Pipeline tab's weekly chart reads
+#: the same figures). Stated on the receipt so the answer can say so.
+def _noted(scope: Mapping[str, Any]) -> Dict[str, Any]:
+    """The scope with the sentence the answer prints about it — written by the
+    Pipeline owner, so both answer paths word the exclusion alike."""
+    from mi_agent_api.pipeline_contract import live_pipeline_note
+
+    row = dict(scope)
+    row["note"] = live_pipeline_note(row)
+    return row
+
+
+def _series_scope() -> Dict[str, Any]:
+    from mi_agent_api.pipeline_prep import OPEN_STAGES
+
+    return {"population": "open", "basis": OWNER_EVOLUTION,
+            "open_stages": list(OPEN_STAGES)}
+
+
+def _live_stage_rows(rows: Sequence[Mapping[str, Any]]
+                     ) -> Tuple[List[Mapping[str, Any]], Dict[str, Any]]:
+    """The live stages of a weekly stage breakdown, and which were left out.
+
+    `pipeline_evolution` publishes EVERY stage per extract, because the funnel
+    and conversion views need completions and withdrawals. A pipeline answer is
+    the live pipeline, so the closed and unmapped stages are dropped here — by
+    the Pipeline owner's own `OPEN_STAGES` — and named, never silently lost.
+    """
+    from mi_agent_api.pipeline_prep import OPEN_STAGES
+
+    kept = [r for r in rows
+            if str(r.get("stage") or "").strip().upper() in OPEN_STAGES]
+    left = sorted({str(r.get("stage") or "") for r in rows} -
+                  {str(r.get("stage") or "") for r in kept})
+    return kept, {"population": "open", "basis": OWNER_EVOLUTION,
+                  "open_stages": list(OPEN_STAGES), "excluded_stages": left}
 
 
 def execute_temporal(plan: Any, *, root: Any, client_id: str,
@@ -625,16 +681,17 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
                 ok=False, reason=HISTORY_UNAVAILABLE,
                 detail="no weekly pipeline extracts carry a stage breakdown")
         key = "value" if kind == _AMOUNT else "count"
+        live_rows, live_scope = _live_stage_rows(by_stage)
         cells = [{"period": str(r.get("period") or ""),
                   dimensions[0]: str(r.get("stage") or ""),
                   "value": (float(r.get(key)) if r.get(key) is not None else None)}
-                 for r in by_stage]
-        return PipelineOutcome(
-            ok=True, cells=cells, value=None,
-            receipt=_receipt(body, measure=measure, kind=kind,
-                             dimensions=dimensions, dataset=dataset,
-                             result_shape="grouped_series", owner=OWNER_EVOLUTION,
-                             periods=sorted({c["period"] for c in cells})))
+                 for r in live_rows]
+        receipt = _receipt(body, measure=measure, kind=kind,
+                           dimensions=dimensions, dataset=dataset,
+                           result_shape="grouped_series", owner=OWNER_EVOLUTION,
+                           periods=sorted({c["period"] for c in cells}))
+        receipt["pipeline_scope"] = _noted(live_scope)
+        return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
 
     metric = "pipeline_amount" if kind == _AMOUNT else "pipeline_case_count"
     cells = [{"period": str(p.get("week") or p.get("extract_date") or ""),
@@ -642,11 +699,11 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
                          if (p.get("metrics") or {}).get(metric) is not None
                          else None))}
              for p in periods]
-    return PipelineOutcome(
-        ok=True, cells=cells, value=None,
-        receipt=_receipt(body, measure=measure, kind=kind, dimensions=[],
-                         dataset=dataset, result_shape="series",
-                         owner=OWNER_EVOLUTION, periods=weeks))
+    receipt = _receipt(body, measure=measure, kind=kind, dimensions=[],
+                       dataset=dataset, result_shape="series",
+                       owner=OWNER_EVOLUTION, periods=weeks)
+    receipt["pipeline_scope"] = _noted(_series_scope())
+    return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
 
 
 # --------------------------------------------------------------------------- #
@@ -794,8 +851,9 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
 
     if dimensions:
         key = "value" if kind == _AMOUNT else "count"
-        rows = [r for r in (series.get("byStage") or ())
-                if str(r.get("period") or "") in set(chosen)]
+        rows, live_scope = _live_stage_rows(
+            [r for r in (series.get("byStage") or ())
+             if str(r.get("period") or "") in set(chosen)])
         if not rows:
             return PipelineOutcome(
                 ok=False, reason=HISTORY_UNAVAILABLE,
@@ -806,6 +864,7 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
                  for r in rows]
         shape = "grouped_dated"
     else:
+        live_scope = _series_scope()
         metric = "pipeline_amount" if kind == _AMOUNT else "pipeline_case_count"
         cells = [{"period": d,
                   "value": ((float((by_date[d].get("metrics") or {}).get(metric))
@@ -817,5 +876,6 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
                        dataset=dataset, result_shape=shape,
                        owner=OWNER_EVOLUTION, periods=chosen)
     receipt["period_resolution"] = resolution
+    receipt["pipeline_scope"] = _noted(live_scope)
     return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
 

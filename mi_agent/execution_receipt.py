@@ -1585,6 +1585,11 @@ class ExecutionReceipt:
     #: cannot be reconciled with a limit evaluated on another of them. None when
     #: the query never touched geography. See `mi_agent/region_basis.py`.
     region_basis: Optional[Any] = None
+    #: WHICH PIPELINE a pipeline figure was measured on — the live pipeline by
+    #: default, or the whole extract when the question named a stage — with the
+    #: Pipeline owner's own sentence about what it leaves out. None off the
+    #: pipeline dataset. See `pipeline_contract.live_pipeline_scope`.
+    pipeline_scope: Optional[Dict[str, Any]] = None
     #: WHICH GOVERNED DATASET the figure came from. The unfiltered-population
     #: phrase used to be the literal "entire funded portfolio" whatever had been
     #: computed, so "what is the pipeline balance?" returned the right number —
@@ -1622,8 +1627,12 @@ class ExecutionReceipt:
             # State the population explicitly so an unfiltered answer can never
             # be mistaken for a filtered one — and name the DATASET it came
             # from, because "unfiltered" is a different fact from "funded".
-            parts.append("entire pipeline" if (self.dataset or "") == "pipeline"
-                         else "entire funded portfolio")
+            if (self.dataset or "") == "pipeline":
+                parts.append("live pipeline"
+                             if (self.pipeline_scope or {}).get("population") == "open"
+                             else "entire pipeline")
+            else:
+                parts.append("entire funded portfolio")
         if self.dimensions:
             parts.append(("ranked by " if self.ranking else "grouped by ")
                          + _join(self.dimensions))
@@ -1654,6 +1663,10 @@ class ExecutionReceipt:
         _said = _region() if callable(_region) else None
         if _said:
             line += " " + _said + "."
+        # What a pipeline figure leaves out, in the words the Pipeline tab uses.
+        _pipeline_note = (self.pipeline_scope or {}).get("note")
+        if _pipeline_note:
+            line += " " + _pipeline_note + "."
         # Surface low parser confidence only when the question actually carried a
         # material facet — i.e. when there was something scope-related to get
         # wrong. The confidence heuristic scores plain KPI questions ("what is
@@ -1696,6 +1709,7 @@ class ExecutionReceipt:
             "facets": [f.to_dict() for f in self.facets],
             "regionBasis": (self.region_basis.to_dict()
                             if self.region_basis is not None else None),
+            "pipelineScope": self.pipeline_scope,
             "notApplied": [f.disclosure() for f in self.not_applied()],
             "receipt": self.render(),
         }
@@ -2953,6 +2967,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         parser_confidence=parser_confidence,
         facets=list(facets),
         region_basis=region,
+        pipeline_scope=meta.get("pipeline_scope"),
     )
 
 

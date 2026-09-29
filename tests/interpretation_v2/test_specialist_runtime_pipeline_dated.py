@@ -166,11 +166,24 @@ def test_by_stage_at_named_months(history):
     assert outcome.ok, outcome.detail
     assert outcome.receipt["group_field_keys"] == ["pipeline_stage"]
     assert {c["period"] for c in outcome.cells} == {"2025-10-30", "2025-11-27"}
+    # THE LIVE STAGES ONLY (owner decision 2026-09-29): the owner's figures,
+    # untouched, for KFI / Application / Offer; the closed stages are named on
+    # the receipt, not charted as pipeline.
+    from mi_agent_api.pipeline_prep import OPEN_STAGES
     expected = {(str(r["period"]), str(r["stage"])): r["value"]
                 for r in series["byStage"]
-                if r["period"] in ("2025-10-30", "2025-11-27")}
+                if r["period"] in ("2025-10-30", "2025-11-27")
+                and str(r["stage"]).upper() in OPEN_STAGES}
     assert {(c["period"], c["pipeline_stage"]): c["value"]
             for c in outcome.cells} == expected
+    closed = {str(r["stage"]) for r in series["byStage"]
+              if r["period"] in ("2025-10-30", "2025-11-27")
+              and str(r["stage"]).upper() not in OPEN_STAGES}
+    assert closed, "the fixture must carry a closed stage for this to prove anything"
+    scope = outcome.receipt["pipeline_scope"]
+    assert scope["population"] == "open"
+    assert set(scope["excluded_stages"]) == closed
+    assert "not counted" in scope["note"]
 
 
 # --------------------------------------------------------------------------- #
@@ -208,7 +221,9 @@ def test_serve_answers_the_pipeline_at_two_named_months(monkeypatch, history):
     assert payload is not None, record.get("execution")
     assert record["execution"]["runtime"] == "pipeline_dated"
     answer = payload["answer"]
-    assert answer.startswith("Pipeline amount")
+    # D4: the measure, and which pipeline it is, lead the sentence.
+    assert answer.startswith("The live pipeline amount")
+    assert any(n["field"] == "population" for n in payload["sourceNotes"])
     assert "2025-10-30" in answer and "2025-11-27" in answer
     assert any(pipeline_rt.MONTH_RULE in n["note"] for n in payload["sourceNotes"])
     assert _governed_plan_coverage(payload)["unaccounted"] == []

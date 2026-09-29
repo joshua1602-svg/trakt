@@ -759,7 +759,7 @@ def compute_prior_week_aggregates(
         return None
     # Same open-pipeline population as the current snapshot's tiles, so the
     # week-on-week delta is like-for-like.
-    totals = _open_totals(df)
+    totals = open_totals(df)
     return {
         "snapshotDate": extract_date or prior.get("pipeline_source_folder_date"),
         "sourceFile": Path(prior.get("source_file", "")).name or None,
@@ -943,7 +943,7 @@ def _col_sum(df: pd.DataFrame, col: str) -> Optional[float]:
     return round(float(coerce_numeric(df[col]).sum()), 2)
 
 
-def _open_totals(df: pd.DataFrame) -> Dict[str, Any]:
+def open_totals(df: pd.DataFrame) -> Dict[str, Any]:
     """Case count, amount and weighted expected funded of the OPEN pipeline."""
     odf = open_pipeline(df)
     return {
@@ -954,7 +954,72 @@ def _open_totals(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def _excluded_from_open(df: pd.DataFrame) -> Dict[str, Any]:
+#: The columns through which a question names a pipeline STAGE itself. A query
+#: filtered on one of these asked about stages explicitly — "withdrawn cases",
+#: "completions at offer" — and is answered over the whole extract; every other
+#: pipeline query is answered over the live pipeline (owner decision,
+#: 2026-09-29: live cases are the default, and the dashboard and the query agent
+#: use the same pipeline).
+STAGE_COLUMNS = frozenset({"pipeline_stage", "pipeline_stage_bucket",
+                           "pipeline_status"})
+
+
+def live_pipeline_scope(df: pd.DataFrame, *, names_a_stage: bool = False
+                        ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """The rows a pipeline query is answered over, and what that leaves out.
+
+    THE ONE RULE both the dashboard's figures and the query agent's follow: the
+    live pipeline (``OPEN_STAGES``) unless the question named a stage itself.
+    The disclosure is the dashboard's own ``excluded_from_open``, so an answer
+    and a tile describe the same exclusion with the same numbers.
+    """
+    if names_a_stage or "pipeline_stage" not in df.columns:
+        return df, {"population": "extract", "open_stages": list(OPEN_STAGES),
+                    "extract_row_count": int(len(df)),
+                    "excluded": {"stages": [], "cases": 0, "amount": 0.0}}
+    return open_pipeline(df), {"population": "open",
+                               "open_stages": list(OPEN_STAGES),
+                               "extract_row_count": int(len(df)),
+                               "excluded": excluded_from_open(df)}
+
+
+def _gbp(value: Optional[float]) -> str:
+    amount = float(value or 0.0)
+    for size, unit in ((1e9, "bn"), (1e6, "m"), (1e3, "k")):
+        if abs(amount) >= size:
+            return f"£{amount / size:,.1f}{unit}"
+    return f"£{amount:,.0f}"
+
+
+def _stage_label(stage: Any) -> str:
+    text = str(stage or "").strip().upper()
+    return text if text == "KFI" else text.title()
+
+
+def live_pipeline_note(scope: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The sentence every pipeline answer carries about its population.
+
+    One wording for both answer paths, built from `live_pipeline_scope`, so a
+    reader reconciling an answer against the Pipeline tab sees the same
+    exclusion the tab discloses. None when the answer is not the live pipeline.
+    """
+    if not scope or scope.get("population") != "open":
+        return None
+    stages = ", ".join(_stage_label(s) for s in scope.get("open_stages") or ())
+    excluded = scope.get("excluded") or {}
+    if excluded.get("cases"):
+        parts = [f"{_stage_label(r['stage'])} {int(r['caseCount']):,} "
+                 f"({_gbp(r.get('amount'))})"
+                 for r in excluded.get("stages") or ()]
+        return (f"Live pipeline ({stages}); excludes {int(excluded['cases']):,} "
+                f"closed or unmapped case(s): " + ", ".join(parts))
+    left = [_stage_label(s) for s in scope.get("excluded_stages") or ()]
+    if left:
+        return f"Live pipeline ({stages}); {', '.join(left)} not counted"
+    return f"Live pipeline ({stages})"
+
+
+def excluded_from_open(df: pd.DataFrame) -> Dict[str, Any]:
     """What the open-pipeline figures leave out, by stage — disclosed, never
     silently dropped: completed and withdrawn cases stay in the weekly extract,
     and an unmapped stage is not evidence of a live case."""
@@ -1047,8 +1112,8 @@ def compute_pipeline_snapshot(
     # Every figure below is the OPEN pipeline (KFI / Application / Offer).
     # Completed and withdrawn cases stay in the weekly extract with their
     # balance; they are disclosed in ``excludedFromOpenPipeline``, not counted.
-    excluded = _excluded_from_open(df)
-    totals = _open_totals(df)
+    excluded = excluded_from_open(df)
+    totals = open_totals(df)
     full_df, df = df, open_pipeline(df)
     weighted = totals["weighted"]
     as_of = src.get("pipeline_as_of_date") or report.get("pipeline_as_of_date")
