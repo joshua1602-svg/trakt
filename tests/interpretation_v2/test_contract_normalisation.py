@@ -649,10 +649,13 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: exclusion by reason and the milestone ladder by threshold, so a forecast
     #: may be broken down.
     #: D2a conversion (2.10.0, §20): a measured rate is one figure, so the
-    #: stage-movement capability may be asked for a point in time.
+    #: stage-movement capability may be asked for a point in time. D13 (2.10.0):
+    #: the pipeline's change between two dated extracts, as a movement or as
+    #: the two levels compared.
     AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"},
                                       "forecast": {"breakdown"},
-                                      "pipeline_stage_movement": {"point_in_time"}}
+                                      "pipeline_stage_movement": {"point_in_time"},
+                                      "pipeline": {"movement", "compare"}}
 
     #: THE CATALOGUE, WIDENED BY NAME. Catalogue batch 1 (vocabulary 2.6.0,
     #: owner direction 2026-09-29: "narrow the gap") gave the Pipeline tab's

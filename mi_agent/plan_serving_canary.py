@@ -701,6 +701,63 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                 [(named(r[str(axis)]), _shown(r["value"])) for r in rows],
                 total=len(rows))
             answer = f"{lead}{as_at}."
+    elif shape in ("dated_change", "grouped_dated_change"):
+        # THE CHANGE BETWEEN TWO DATED EXTRACTS (D13, §20): both figures, both
+        # extracts and the rule that chose each, and the change the semantic
+        # engine computed — never a change stated without what it is from.
+        resolution = list(receipt.get("period_resolution") or ())
+        dates = [str(r.get("extract_date")) for r in resolution]
+
+        def _at(i: int) -> str:
+            row = resolution[i] if i < len(resolution) else {}
+            asked = str(row.get("requested") or "")
+            named = f" ({asked})" if asked and asked != row.get("extract_date") else ""
+            return f"the weekly extract of {row.get('extract_date')}{named}"
+
+        def _signed(value: Any) -> str:
+            return (_standard.signed_money(value) if is_amount
+                    else f"{float(value or 0):+,.0f}")
+
+        if shape == "dated_change":
+            moved = receipt.get("change") or {}
+            delta = moved.get("change")
+            pct = moved.get("change_pct")
+            if delta is None:
+                answer = (f"The {phrase} could not be compared: the owner "
+                          f"published no figure at one of the two extracts.")
+            elif delta == 0:
+                answer = (f"The {phrase} was unchanged at {_shown(moved['to'])} "
+                          f"between {_at(0)} and {_at(1)}.")
+            else:
+                verb = "rose" if delta > 0 else "fell"
+                size = _signed(delta).lstrip("+-")
+                answer = (f"The {phrase} {verb} by {size}"
+                          + (f" ({_standard.signed_percent(pct)})" if pct is not None
+                             else "")
+                          + f", from {_shown(moved['from'])} at {_at(0)} to "
+                            f"{_shown(moved['to'])} at {_at(1)}.")
+            rows = [dict(r) for r in outcome.cells]
+            columns = [{"key": "period", "label": "Weekly extract"},
+                       {"key": "value", "label": label}]
+        else:
+            axis_label = _PIPELINE_AXES.get(str(axis), str(axis).replace("_", " "))
+            named = (_stage_name if axis == "pipeline_stage" else str)
+            ranked = sorted(outcome.cells,
+                            key=lambda r: -abs(float(r.get("change") or 0.0)))
+            lead = _standard.breakdown_lead(
+                f"Change in the {phrase}", axis_label,
+                [(named(r[str(axis)]), _signed(r.get("change"))) for r in ranked],
+                total=len(ranked), word="largest moves")
+            answer = f"{lead}, from {_at(0)} to {_at(1)}."
+            rows = [dict(r) for r in outcome.cells]
+            columns = ([{"key": str(axis), "label": axis_label.capitalize()},
+                        {"key": "from", "label": dates[0] if dates else "from"},
+                        {"key": "to", "label": dates[-1] if dates else "to"},
+                        {"key": "change", "label": "Change"},
+                        {"key": "change_pct", "label": "Change %"}])
+        artefacts = [_artefact("table", "Pipeline change between two extracts",
+                               rows=rows, columns=columns,
+                               description=f"{_standard.plural(len(rows), 'row')}.")]
     elif shape in ("dated", "grouped_dated"):
         # THE PIPELINE AT NAMED DATES. D4: the measure and every extract date
         # are in the sentence; the rule that chose each extract (D7 for a

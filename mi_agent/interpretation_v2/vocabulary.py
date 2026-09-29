@@ -95,7 +95,10 @@ from mi_agent import semantic_model as _semantic_model
 #: must-answer): the stage-movement capability's measured rates — cohort
 #: conversion, stage pull-through, the historical completion rate by stage —
 #: read from its semantic model (`config/mi/semantic_model/
-#: pipeline_stage_movement.yaml`) by the one semantic engine (§20).
+#: pipeline_stage_movement.yaml`) by the one semantic engine (§20); and the
+#: pipeline's change between two dated extracts (`movement` / `compare`,
+#: `CAPABILITY_CHANGE_FORMS`), so a metric delta on a pipeline measure stays
+#: with the pipeline instead of reaching a funded-book runtime.
 VOCABULARY_VERSION = "2.10.0"
 
 
@@ -145,7 +148,12 @@ CAPABILITY_OPERATIONS: Mapping[str, FrozenSet[str]] = {
                                  "eligibility", "breakdown", "movement",
                                  "bridge", "series"}),
     "funded_bridge": frozenset({"bridge", "movement"}),
-    "pipeline": frozenset({"summary", "breakdown", "point_in_time", "series"}),
+    # `movement` and `compare` since 2.10.0 (owner decision D13): the
+    # pipeline's change between two dated extracts, as a movement or as the two
+    # levels side by side (§20). A comparison of two POPULATIONS or two
+    # dimension values is still refused by the pipeline runtime.
+    "pipeline": frozenset({"summary", "breakdown", "point_in_time", "series",
+                           "movement", "compare"}),
     # `point_in_time` since 2.10.0: a measured rate is one figure (§20).
     "pipeline_stage_movement": frozenset({
         "transition", "arrivals", "departures", "stayers", "reconciliation",
@@ -387,6 +395,18 @@ CHANGE_FORM_CAPABILITY: Mapping[str, Optional[str]] = {
 #: THE MODE EACH FORM RUNS THE SHARED OWNER IN, where the capability alone does
 #: not separate two forms. Only `period_change` has such a pair today.
 #: A form absent from this table states no mode and the owner's default applies.
+#: CAPABILITIES THAT IMPLEMENT A CHANGE FORM FOR THEIR OWN MEASURES (§20).
+#:
+#: `CHANGE_FORM_CAPABILITY` names the owner of each form for the FUNDED book's
+#: generic measures. A capability that owns its measures and serves the same
+#: analytical form over them — the pipeline's change between two dated
+#: extracts, computed by the semantic engine's one `period_change` — is listed
+#: here, so normalisation keeps the measure's owner rather than sending a
+#: pipeline change to a funded-book runtime that would refuse its population.
+CAPABILITY_CHANGE_FORMS: Mapping[str, FrozenSet[str]] = {
+    "pipeline": frozenset({"metric_delta", "level_comparison"}),
+}
+
 CHANGE_FORM_MODE: Mapping[str, str] = {
     "metric_delta": "requested_metric",
     "material_summary": "portfolio_overview",

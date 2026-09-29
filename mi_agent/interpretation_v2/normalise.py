@@ -51,7 +51,8 @@ from typing import List, Mapping, Optional, Sequence, Tuple
 
 from .intent import CandidateIntent, SemanticTime
 from .plan import LABELS_ARE_WORDING_ONLY, identity_labels
-from .vocabulary import (CHANGE_FORM_CANONICAL_OPERATION,
+from .vocabulary import (CAPABILITY_CHANGE_FORMS,
+                         CHANGE_FORM_CANONICAL_OPERATION,
                          CHANGE_FORM_CAPABILITY,
                          CHANGE_FORM_OPERATION_VARIANTS,
                          GovernedVocabulary)
@@ -291,7 +292,12 @@ def canonical_intent(intent: CandidateIntent,
     # is the substitution this slot exists to end.
     form = getattr(intent, "change_form", None)
     form_conflict = False
-    if form:
+    # The measure's owner may implement this form over its own measures (the
+    # pipeline's change between two dated extracts): then the owner stands and
+    # there is nothing to reconcile — the form still decides the operation.
+    owner_implements = bool(form and owner is not None
+                            and form in CAPABILITY_CHANGE_FORMS.get(owner, ()))
+    if form and not owner_implements:
         implied = CHANGE_FORM_CAPABILITY.get(form)
         form_conflict = (owner is not None and implied is not None
                          and owner != implied)

@@ -28,8 +28,9 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Optional, Sequence, Tuple
 
-__all__ = ["LEAD_GROUPS", "CHAT_SUFFIXES", "money", "percent", "plural",
-           "breakdown_lead", "ordered", "region_note"]
+__all__ = ["LEAD_GROUPS", "CHAT_SUFFIXES", "money", "signed_money", "percent",
+           "signed_percent", "plural", "breakdown_lead", "ordered",
+           "region_note"]
 
 #: How many groups a breakdown's sentence names. The table has them all.
 LEAD_GROUPS = 3
@@ -46,6 +47,21 @@ def money(value: Any) -> str:
     if value is None:
         return "n/a"
     return currency_mod.format_money(float(value), suffixes=CHAT_SUFFIXES)
+
+
+def signed_money(value: Any) -> str:
+    """A change in money with its sign: "+£5.4m", "-£1.5m"."""
+    from mi_agent_api import currency as currency_mod
+
+    if value is None:
+        return "n/a"
+    return currency_mod.format_money(float(value), signed=True,
+                                     suffixes=CHAT_SUFFIXES)
+
+
+def signed_percent(value: Any) -> str:
+    """A relative change with its sign, one decimal place: "+3.1%"."""
+    return "n/a" if value is None else f"{float(value):+.1f}%"
 
 
 def percent(value: Any, *, fraction: bool = False) -> str:

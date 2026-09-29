@@ -67,6 +67,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
+from mi_agent.answer_standard import plural as _plural
+
 from mi_agent import plan_reading as _plan_reading
 
 CAPABILITY = "pipeline"
@@ -196,6 +198,16 @@ DATED_PERIOD_FORMS: FrozenSet[str] = frozenset({"explicit_period",
 DATED_OPERATIONS: FrozenSet[str] = frozenset({"point_in_time", "summary",
                                               "breakdown", "series"})
 DATED_GRAINS: FrozenSet[str] = frozenset({"weekly", "monthly"})
+
+#: THE CHANGE BETWEEN TWO DATED EXTRACTS (owner decision D13, 2026-09-29:
+#: "latest against prior" and "growth from October to November" are
+#: must-answer; P0 design §20). The two figures are read exactly as the dated
+#: shape reads them — the weekly owner's, at the extracts D7 or the extract
+#: order names — and the change between them is the semantic engine's one
+#: `period_change`, never an arithmetic of this module's. `compare` states the
+#: two levels side by side; `movement` leads with the change; both need exactly
+#: two dates.
+CHANGE_OPERATIONS: FrozenSet[str] = frozenset({"movement", "compare"})
 
 #: D7, the owner's decision (2026-09-28): a named month means the LAST weekly
 #: extract dated within it. Year-aware — a bare month the history holds in two
@@ -414,13 +426,22 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                     f"by D7, monthly; a {grain!r} series has no owner")
         return True, "", ""
 
+    if operation in CHANGE_OPERATIONS and not is_dated(body):
+        return (False, PERIOD_NOT_SUPPORTED,
+                f"a {operation} of the pipeline is between two dated extracts; "
+                f"period.form={form!r} names no pair of dates")
     if is_dated(body):
-        if operation not in DATED_OPERATIONS:
+        if operation not in DATED_OPERATIONS | CHANGE_OPERATIONS:
             return (False, OPERATION_NOT_SUPPORTED,
                     f"operation={operation!r} has no dated pipeline owner")
         if form == "explicit_period" and not (period.get("labels") or ()):
             return (False, PERIOD_NOT_SUPPORTED,
                     "an explicit period with no label names no point in time")
+        if (operation in CHANGE_OPERATIONS and form == "explicit_period"
+                and len(period.get("labels") or ()) != 2):
+            return (False, PERIOD_NOT_SUPPORTED,
+                    f"a change is between two dates; this plan names "
+                    f"{len(period.get('labels') or ())}")
         if form == "relative_pair":
             grain = str(period.get("grain") or "")
             back = period.get("periods_back")
@@ -1041,11 +1062,11 @@ def _dated_selection(plan: Mapping[str, Any], dates: Sequence[str]
     if grain == "weekly":
         if len(ordered) <= back:
             return ([], PERIOD_NOT_AVAILABLE,
-                    f"{back} week(s) back needs {back + 1} weekly extracts; the "
+                    f"{_plural(back, 'week')} back needs {back + 1} weekly extracts; the "
                     f"history holds {len(ordered)}")
-        rule = (f"the latest weekly extract, and the one {back} extract(s) "
+        rule = (f"the latest weekly extract, and the one {_plural(back, 'extract')} "
                 f"before it")
-        return ([{"requested": f"{back} week(s) before the latest",
+        return ([{"requested": f"{_plural(back, 'week')} before the latest",
                   "extract_date": ordered[-1 - back], "rule": rule},
                  {"requested": "latest", "extract_date": ordered[-1],
                   "rule": rule}], "", "")
@@ -1055,7 +1076,7 @@ def _dated_selection(plan: Mapping[str, Any], dates: Sequence[str]
     index = latest[0] * 12 + (latest[1] - 1) - back
     earlier = (index // 12, index % 12 + 1)
     out = []
-    for requested, (year, month) in ((f"{back} month(s) before the latest",
+    for requested, (year, month) in ((f"{_plural(back, 'month')} before the latest",
                                       earlier), ("latest month", latest)):
         chosen, why, detail = last_extract_in_month(ordered, month=month,
                                                     year=year)
@@ -1139,5 +1160,47 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
                        owner=OWNER_EVOLUTION, periods=chosen)
     receipt["period_resolution"] = resolution
     receipt["pipeline_scope"] = _noted(live_scope)
+    if str(body.get("operation") or "") in CHANGE_OPERATIONS:
+        return _dated_change(body, cells=cells, chosen=chosen, receipt=receipt,
+                             axis=dimensions[0] if dimensions else None)
     return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
+
+
+def _dated_change(body: Mapping[str, Any], *, cells: List[Dict[str, Any]],
+                  chosen: Sequence[str], receipt: Dict[str, Any],
+                  axis: Optional[str]) -> PipelineOutcome:
+    """The two dated figures and the change between them — per group for a
+    breakdown — by the semantic engine's `period_change`."""
+    from mi_agent import semantic_engine as engine
+
+    if len(chosen) != 2:
+        return PipelineOutcome(
+            ok=False, reason=PERIOD_NOT_SUPPORTED,
+            detail=f"a change is between two weekly extracts; the plan's dates "
+                   f"resolved to {len(chosen)}")
+    earlier, later = chosen
+    if axis is None:
+        by_date = {c["period"]: c["value"] for c in cells}
+        change = engine.period_change(by_date.get(earlier), by_date.get(later))
+        rows = [{"period": earlier, "value": change["from"]},
+                {"period": later, "value": change["to"]}]
+        shape = "dated_change"
+    else:
+        groups = sorted({c[axis] for c in cells})
+        at = {(c["period"], c[axis]): c["value"] for c in cells}
+        rows = []
+        for group in groups:
+            moved = engine.period_change(at.get((earlier, group)),
+                                         at.get((later, group)))
+            rows.append({axis: group, "from": moved["from"], "to": moved["to"],
+                         "change": moved["change"],
+                         "change_pct": moved["change_pct"]})
+        change = None
+        shape = "grouped_dated_change"
+    receipt["result_shape"] = shape
+    receipt["change"] = change
+    receipt["change_owner"] = "semantic_engine.period_change"
+    return PipelineOutcome(ok=True, cells=rows,
+                           value=None if change is None else change["change"],
+                           receipt=receipt)
 
