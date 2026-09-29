@@ -29,6 +29,9 @@ FORECAST = tuple(semantic_model.load("forecast").measures)
 #: Defined since 2.6.0 (catalogue batch 1): the Pipeline tab's weighted figure,
 #: which the model otherwise confused with the pipeline amount.
 PIPELINE = ("weighted_expected_funded_amount",)
+#: Since 2.10.0 (D2a, §20.2): the stage-movement capability's measured rates,
+#: declared with their definitions in its semantic model.
+STAGE = tuple(semantic_model.load("pipeline_stage_movement").measures)
 
 #: For each measure, the phrases that rule out a reading the production run
 #: made. Weakening a definition until one of these is gone fails here.
@@ -65,11 +68,12 @@ def test_the_version_records_what_the_model_is_shown():
 
 
 def test_exactly_the_forecast_measures_and_the_weighted_pipeline_are_defined():
-    assert set(SPECIALIST_MEASURE_DEFINITIONS) == set(FORECAST) | set(PIPELINE)
+    assert set(SPECIALIST_MEASURE_DEFINITIONS) == \
+        set(FORECAST) | set(PIPELINE) | set(STAGE)
     assert set(FORECAST) == set(SPECIALIST_MEASURES["forecast"])
 
 
-@pytest.mark.parametrize("concept", FORECAST + PIPELINE)
+@pytest.mark.parametrize("concept", FORECAST + PIPELINE + STAGE)
 def test_the_definition_reaches_the_model_through_both_lookups(concept, tools):
     shown = tools.call("get_concept_metadata", {"concept_id": concept})
     assert shown["found"] and shown["definition"] == \

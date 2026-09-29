@@ -50,6 +50,9 @@ ADMITTED = {
     66: "pipeline", 130: "pipeline",    # pipeline amount by LTV bucket / band
     # The Pipeline tab's region chart is the reporting region (owner, same day).
     53: "pipeline",                     # pipeline amount by region
+    # D13 (§20.3): the pipeline's change between two dated extracts — read
+    # correctly as a metric delta on the pipeline amount, October to November.
+    83: "pipeline",                     # pipeline growth October to November
 }
 
 #: Plans the runtime would answer with a figure the question did not ask for.
@@ -113,8 +116,10 @@ def test_todays_compiler_reproduces_the_recorded_plans(replay):
             moved[n] = row["plan"]["population"]["base"]
     # 43 ("balance by borrower structure") now binds the governed
     # borrower_type: the legacy concept is folded into it (`superseded_by`).
+    # 83 ("pipeline growth October to November"): normalisation keeps the
+    # measure's owner, the pipeline, which implements the metric delta (§20.3).
     assert moved == {112: "forecast", 113: "forecast", 125: "forecast",
-                     43: "funded"}
+                     43: "funded", 83: "pipeline"}
 
 
 def test_exactly_the_pinned_questions_are_newly_admitted(replay):
