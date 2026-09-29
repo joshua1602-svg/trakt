@@ -286,7 +286,12 @@ def _cohort_progression(timelines: Dict[str, Dict[str, Any]],
                       and str(reached[cid][milestone]) <= w)
             series[milestone].append(round(hit / n * 100.0, 2))
     return {"weeks": list(weeks), "stages": list(order), "series": series,
-            "cohortSize": n}
+            "cohortSize": n,
+            # The funnel as it stands at the latest week — the figure the
+            # Pipeline tab's conversion card shows per milestone — published
+            # by name so a reader looks it up rather than indexes a series.
+            "asOfWeek": weeks[-1],
+            "latest": {m: (series[m][-1] if series[m] else None) for m in order}}
 
 
 def _identifier_used(df: pd.DataFrame) -> Optional[str]:

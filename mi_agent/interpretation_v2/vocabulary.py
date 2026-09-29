@@ -90,7 +90,13 @@ from mi_agent import semantic_model as _semantic_model
 #: past its stage's validity window). The 2026-09-29 spot check read the three
 #: exclusion questions correctly and asked to clarify "lapsed past its stage
 #: window", having been told no such concept existed.
-VOCABULARY_VERSION = "2.9.0"
+#:
+#: 2.10.0 (owner decision D13, 2026-09-29: conversion and pipeline change are
+#: must-answer): the stage-movement capability's measured rates — cohort
+#: conversion, stage pull-through, the historical completion rate by stage —
+#: read from its semantic model (`config/mi/semantic_model/
+#: pipeline_stage_movement.yaml`) by the one semantic engine (§20).
+VOCABULARY_VERSION = "2.10.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -140,9 +146,10 @@ CAPABILITY_OPERATIONS: Mapping[str, FrozenSet[str]] = {
                                  "bridge", "series"}),
     "funded_bridge": frozenset({"bridge", "movement"}),
     "pipeline": frozenset({"summary", "breakdown", "point_in_time", "series"}),
+    # `point_in_time` since 2.10.0: a measured rate is one figure (§20).
     "pipeline_stage_movement": frozenset({
         "transition", "arrivals", "departures", "stayers", "reconciliation",
-        "movement", "breakdown"}),
+        "movement", "breakdown", "point_in_time"}),
     # `breakdown` since 2.7.0: the Forecast tab publishes the forecast by
     # component, region and LTV band, the weighting exclusion by reason, and
     # the milestone ladder by threshold (§16.3).
@@ -543,6 +550,9 @@ CAPABILITY_BOUNDARIES: Tuple[Dict[str, Any], ...] = (
 #: THE FORECAST CAPABILITY'S SEMANTIC MODEL (§16): its measures, dimensions and
 #: definitions are declared once, beside where the owner publishes each figure.
 _FORECAST_MODEL = _semantic_model.load("forecast")
+#: D2a: the stage-movement capability's measured rates — cohort conversion,
+#: stage pull-through, the historical completion rate (§20).
+_STAGE_MODEL = _semantic_model.load("pipeline_stage_movement")
 
 #: Specialist measures OWNED by a capability, not composed from fields. Opus may
 #: name them; it is never shown how they are built.
@@ -557,7 +567,8 @@ SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
                  "weighted_expected_funded_amount"),
     "pipeline_stage_movement": (
         "cases_moved", "amount_moved", "cases_arrived", "cases_departed",
-        "cases_stayed", "stayer_amount_change", "stage_opening", "stage_closing"),
+        "cases_stayed", "stayer_amount_change", "stage_opening", "stage_closing",
+        *_STAGE_MODEL.measures),
     # Read from the capability's semantic model (§16): one declaration of
     # what each forecast figure is and where the owner publishes it.
     "forecast": tuple(_FORECAST_MODEL.measures),
@@ -587,6 +598,7 @@ SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
     # The forecast definitions (2.3.0, amended 2.7.0) live in the semantic
     # model, beside the path each figure is read from.
     **{name: m.definition for name, m in _FORECAST_MODEL.measures.items()},
+    **{name: m.definition for name, m in _STAGE_MODEL.measures.items()},
     # THE PIPELINE'S WEIGHTED VALUE (catalogue batch 1, 2026-09-29). The
     # Pipeline tab has shown it for months; the model was told no such concept
     # existed and asked to clarify every question about it.
@@ -618,10 +630,13 @@ SPECIALIST_DIMENSION_DEFINITIONS: Mapping[str, str] = {
         "'next month'. It is about the PIPELINE; overdue LOANS are arrears, "
         "a different question."),
     **{name: d.definition for name, d in _FORECAST_MODEL.dimensions.items()},
+    **{name: d.definition for name, d in _STAGE_MODEL.dimensions.items()},
 }
 SPECIALIST_DIMENSION_VALUES: Mapping[str, Tuple[str, ...]] = {
     "expected_completion_timing": ("overdue", "current_month", "next_month"),
     **{name: d.values for name, d in _FORECAST_MODEL.dimensions.items()
+       if d.values},
+    **{name: d.values for name, d in _STAGE_MODEL.dimensions.items()
        if d.values},
 }
 

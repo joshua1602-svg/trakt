@@ -28,8 +28,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Optional, Sequence, Tuple
 
-__all__ = ["LEAD_GROUPS", "CHAT_SUFFIXES", "money", "plural", "breakdown_lead",
-           "ordered", "region_note"]
+__all__ = ["LEAD_GROUPS", "CHAT_SUFFIXES", "money", "percent", "plural",
+           "breakdown_lead", "ordered", "region_note"]
 
 #: How many groups a breakdown's sentence names. The table has them all.
 LEAD_GROUPS = 3
@@ -46,6 +46,15 @@ def money(value: Any) -> str:
     if value is None:
         return "n/a"
     return currency_mod.format_money(float(value), suffixes=CHAT_SUFFIXES)
+
+
+def percent(value: Any, *, fraction: bool = False) -> str:
+    """A percentage to one decimal place, as the dashboard shows one. `fraction`
+    says the owner published a share (0.7) rather than points (70.0)."""
+    if value is None:
+        return "n/a"
+    points = float(value) * 100.0 if fraction else float(value)
+    return f"{points:.1f}%"
 
 
 def plural(count: Any, noun: str, many: Optional[str] = None) -> str:

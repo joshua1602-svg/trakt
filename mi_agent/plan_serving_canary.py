@@ -879,15 +879,102 @@ def _attempt_stage_movement(body: Dict[str, Any], *, plan: Mapping[str, Any],
     body["execution"].update({"receipt": dict(outcome.receipt),
                               "grouped_cells": outcome.rows,
                               "row_count": len(outcome.rows)})
+    if outcome.value is not None:
+        body["execution"]["value"] = outcome.value
     body["disposition"] = evidence.EXECUTED
+    renderer = (render_catalogue
+                if stage_rt.kind_of(plan) == stage_rt.KIND_CATALOGUE
+                else render_stage_movement)
     try:
-        payload = render_stage_movement(plan, outcome, question=question,
-                                        portfolio_id=render_portfolio_id,
-                                        as_of=as_of)
+        payload = renderer(plan, outcome, question=question,
+                           portfolio_id=render_portfolio_id, as_of=as_of)
     except Exception as exc:                                         # noqa: BLE001
         body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
         return None, RENDER_FAILED
     return dict(payload), ""
+
+
+def render_catalogue(plan: Mapping[str, Any], outcome: Any, *, question: str,
+                     portfolio_id: Optional[str], as_of: Optional[str]
+                     ) -> Dict[str, Any]:
+    """A figure a capability's semantic model declares, in the envelope every
+    channel renders — the one wording for every declared figure: the measure,
+    its member or breakdown, its value in its unit, and the date of every
+    input it used (D4). The forecast's figures take the same sentence through
+    `render_forecast`, which adds what only a forecast has."""
+    import uuid
+    from datetime import datetime, timezone
+
+    receipt = dict(outcome.receipt)
+    inputs = dict(receipt.get("inputs") or {})
+    as_at = _as_at_clause(inputs)
+    spec_dict = {"capability": receipt.get("capability"),
+                 "population": receipt.get("population_base"),
+                 "measure": receipt.get("measure_concept"),
+                 "operation": receipt.get("operation"),
+                 "dimensions": receipt.get("group_field_keys") or []}
+
+    def _artefact(kind_: str, title: str, **rest: Any) -> Dict[str, Any]:
+        return {"id": f"art_{uuid.uuid4().hex[:8]}", "type": kind_,
+                "title": title,
+                "source": {"engine": "mi_agent.governed_plan",
+                           "label": f"MI Agent · {kind_}", "spec": spec_dict,
+                           "asOf": as_of, "portfolio": portfolio_id},
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "mock": False, **rest}
+
+    answer, artefacts, _ = _catalogue_answer(receipt, outcome, as_at, _artefact)
+    answer = f"{answer}{_provisional_clause(receipt)}"
+    notes = _catalogue_notes(receipt)
+    for name, row in sorted(inputs.items()):
+        notes.append({"field": f"input:{name}",
+                      "note": f"{row.get('owner')} as at {row.get('as_of')}"})
+    reconciliation = {"dataset": str(receipt.get("population_base") or ""),
+                      "inputs": sorted(inputs), "coverage_by_balance_pct": 100.0}
+    for artefact in artefacts:
+        artefact["reconciliation"] = reconciliation
+    return {
+        "ok": True, "error": None, "question": question, "answer": answer,
+        "interpreted": "", "spec": spec_dict,
+        "validation": {"ok": True, "errors": [], "warnings": [],
+                       "resolved_fields": {}},
+        "artifacts": artefacts, "reconciliation": reconciliation,
+        "sourceNotes": notes, "warnings": [], "diagnostics": [],
+        "assumptions": [],
+        "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
+                     "route": f"governed_plan_{receipt.get('capability')}",
+                     "lensApplied": None, "parserMode": "governed_plan",
+                     "governedPlan": {
+                         "requested": dict(adapter.requested_semantics(plan)),
+                         "executed": receipt}},
+    }
+
+
+def _provisional_clause(receipt: Mapping[str, Any]) -> str:
+    """The owner's own flag for a figure measured on too few cases, stated with
+    the figure — with the counts it rests on — rather than dropped."""
+    evidence_words = ", ".join(
+        f"{_camel_words(name)} {count}"
+        for name, count in (receipt.get("member_evidence") or {}).items())
+    if receipt.get("provisional"):
+        return (" Provisional: the owner measured it on too few cases to rely "
+                "on" + (f" ({evidence_words})" if evidence_words else "") + ".")
+    flagged = receipt.get("provisional_members") or ()
+    if flagged:
+        axis = (receipt.get("group_field_keys") or [None])[0]
+        names = ", ".join(_value_words(axis, v) for v in flagged)
+        return (f" Provisional for {names}: the owner measured "
+                f"{'it' if len(flagged) == 1 else 'them'} on too few cases to "
+                f"rely on.")
+    return (f" Measured on: {evidence_words}." if evidence_words else "")
+
+
+def _camel_words(name: Any) -> str:
+    """`fellOut` -> 'fell out': an owner's key as words. Presentation only."""
+    out = []
+    for ch in str(name):
+        out.append(f" {ch.lower()}" if ch.isupper() else ch)
+    return "".join(out).replace("_", " ").strip()
 
 
 def render_stage_movement(plan: Mapping[str, Any], outcome: Any, *,
@@ -1178,7 +1265,8 @@ def _milestone_sentence(receipt: Mapping[str, Any], outcome: Any, as_at: str
 
 #: Axes whose order is the owner's and is itself the answer: a breakdown by
 #: them names every row in that order rather than leading with the largest.
-_OWNER_ORDERED_AXES = frozenset({"forecast_scenario", "funding_threshold"})
+_OWNER_ORDERED_AXES = frozenset({"forecast_scenario", "funding_threshold",
+                                 "origin_stage", "destination_stage"})
 
 #: Reader-facing names for the axes a forecast figure is broken down by.
 #: Presentation only.
@@ -1187,7 +1275,12 @@ _FORECAST_AXES = {
     "funding_threshold": "funding threshold",
     "weighting_exclusion_reason": "reason",
     "canonical_region_reporting": "region", "ltv_bucket": "LTV band",
+    # The stage-movement capability's rates (D2a).
+    "origin_stage": "from stage", "destination_stage": "milestone reached",
 }
+
+#: Axes whose values are pipeline stages, named as a reader writes them.
+_STAGE_AXES = frozenset({"origin_stage", "destination_stage"})
 
 
 def _shown_in(unit: str, value: Any) -> str:
@@ -1202,6 +1295,10 @@ def _shown_in(unit: str, value: Any) -> str:
         return f"{_money(value)}/year"
     if unit == "count":
         return f"{float(value):,.0f}"
+    if unit == "pct":
+        return _standard.percent(value)
+    if unit == "ratio":
+        return _standard.percent(value, fraction=True)
     return str(value)
 
 
@@ -1226,6 +1323,12 @@ def _explained(receipt: Mapping[str, Any]) -> str:
 
 def _words(value: Any) -> str:
     return str(value).replace("_", " ")
+
+
+def _value_words(axis: Any, value: Any) -> str:
+    """A governed value as a reader writes it: a pipeline stage as KFI,
+    Application, Offer, Completed — anything else with its underscores gone."""
+    return _stage_name(value) if axis in _STAGE_AXES else _words(value)
 
 
 def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
@@ -1270,15 +1373,15 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
         rows = [dict(c) for c in (outcome.cells or ())]
         if str(axis) in _OWNER_ORDERED_AXES:
             # The owner's order IS the answer (downside → upside, the ladder
-            # low to high): every row, as published.
-            parts = ", ".join(f"{_words(r.get(axis))} {_shown_in(unit, r.get('value'))}"
-                              for r in rows)
+            # low to high, the funnel KFI → Completed): every row, as published.
+            parts = ", ".join(f"{_value_words(axis, r.get(axis))} "
+                              f"{_shown_in(unit, r.get('value'))}" for r in rows)
             answer = f"{label} by {axis_label}: {parts}."
         else:
             ranked = sorted(rows, key=lambda r: -float(r.get("value") or 0.0))
             answer = _standard.breakdown_lead(
                 label, axis_label,
-                [(_words(r.get(axis)), _shown_in(unit, r.get("value")))
+                [(_value_words(axis, r.get(axis)), _shown_in(unit, r.get("value")))
                  for r in ranked], total=len(rows)) + "."
         basis = receipt.get("axis_basis") or {}
         if basis.get("field"):
@@ -1302,7 +1405,8 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
     value = outcome.value
     if member:
         answer = (f"{label} ({_FORECAST_AXES.get(member['dimension'], _words(member['dimension']))}: "
-                  f"{_words(member['value'])}): {_shown_in(unit, value)}. {as_at}")
+                  f"{_value_words(member['dimension'], member['value'])}): "
+                  f"{_shown_in(unit, value)}. {as_at}")
         banded = member.get("dimension") == "forecast_scenario"
     else:
         explained = _explained(receipt)

@@ -24,7 +24,10 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[1].joinpath("config", "mi", "semantic_model")
 
 #: Units a figure may be stated in. Presentation reads these; nothing converts.
-UNITS = frozenset({"gbp", "count", "gbp_per_month", "gbp_per_year", "month"})
+#: `pct` is a percentage the owner publishes in points (9.4 is 9.4%); `ratio` is
+#: a share it publishes as a fraction (0.7 is 70%).
+UNITS = frozenset({"gbp", "count", "gbp_per_month", "gbp_per_year", "month",
+                   "pct", "ratio"})
 
 #: Dimensions a measure may be broken down by without declaring them in its own
 #: file: the governed registry dimensions and region, which every capability

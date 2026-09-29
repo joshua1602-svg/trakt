@@ -1,0 +1,131 @@
+# =========================================================================
+# The PIPELINE STAGE MOVEMENT capability's semantic model (P0 design §6.1 D2a,
+# §20).
+# =========================================================================
+#
+# D2a: conversion is a stage-movement measurement. The stage-movement owner —
+# the pipeline's case history, tracked case by case across the weekly extracts
+# (`pipeline_history.build_historical_completion_model`) — computes it once;
+# the Pipeline tab's conversion card and funnel, the forecast's stage rates and
+# this agent all read that one computation. This file declares those figures:
+# what each one is (the definition the model is shown) and where the owner
+# publishes it (the path the engine reads). Nothing here is arithmetic.
+#
+# The capability's other operations — transitions, arrivals, departures,
+# stayers, reconciliations — are the movement between the latest pair of
+# extracts and are served by the stage-movement owner's own wording
+# (`stage_movement_query.compose`); the figures below are its measured rates.
+#
+# Rules this file is held to (`tests/interpretation_v2/test_stage_conversion.py`):
+#   - every path it declares resolves in the owner's real output;
+#   - every figure it serves equals the owner's own figure — the one the
+#     Pipeline tab's conversion card shows;
+#   - a definition says what the figure is and what it is NOT.
+# =========================================================================
+
+version: 1
+capability: pipeline_stage_movement
+population: pipeline
+
+views:
+  case_history:
+    label: the pipeline's case history
+    owner: mi_agent_api.pipeline_history.build_historical_completion_model
+    # The one dated input: the last weekly extract the history reaches. The
+    # history exists when it reaches one; whether a given rate had enough cases
+    # is the owner's per-figure flag (`provisional_unless` below), not this.
+    inputs:
+      case_history: {as_of: observationWindowEnd, label: pipeline history}
+    available_when: {case_history: observationWindowEnd}
+
+dimensions:
+  origin_stage:
+    definition: >-
+      The pipeline stage a case moves FROM: KFI, APPLICATION or OFFER (and,
+      for a movement between two extracts, COMPLETED or WITHDRAWN). For a
+      pull-through or a completion rate it is the stage the rate is measured
+      from — OFFER for 'offer to completion', KFI for 'KFI to completion'.
+    values: [APPLICATION, COMPLETED, KFI, OFFER, WITHDRAWN]
+  destination_stage:
+    definition: >-
+      The pipeline stage a case moves TO. For the cohort conversion it is the
+      milestone the KFI cohort has reached — APPLICATION, OFFER, or COMPLETED
+      (funded).
+    values: [APPLICATION, COMPLETED, KFI, OFFER, WITHDRAWN]
+
+measures:
+
+  cohort_conversion:
+    label: Cumulative cohort conversion
+    unit: pct
+    view: case_history
+    operations: [point_in_time, breakdown]
+    periods: [current]
+    value: cumulativeCohortConversion
+    inputs: [case_history]
+    context:
+      cohort_count: cohortProgression.cohortSize
+    explain: of the {cohort_count} KFI cases tracked, the share that has funded to date
+    by:
+      destination_stage:
+        members:
+          APPLICATION: {value: cohortProgression.latest.APPLICATION}
+          OFFER: {value: cohortProgression.latest.OFFER}
+          COMPLETED: {value: cohortProgression.latest.COMPLETED}
+    definition: >-
+      THE pipeline conversion rate: of the original KFI cohort — every case
+      seen in the pipeline's weekly extracts — the percentage that has reached
+      funding (completion) to date, tracked case by case. The Pipeline tab's
+      canonical conversion (its conversion card and funnel). Filter on ONE
+      destination_stage for the share of the cohort that has reached
+      Application or Offer; break it down by destination_stage for the whole
+      funnel. It is NOT a single stage's pull-through (stage_pull_through), NOT
+      the forecast's completion run-rate in £ per month, and NOT a rate over a
+      period.
+
+  stage_pull_through:
+    label: Stage pull-through
+    unit: ratio
+    view: case_history
+    operations: [point_in_time, breakdown]
+    periods: [current]
+    inputs: [case_history]
+    by:
+      origin_stage:
+        map: runoff.stages
+        value: pullThrough
+        # The owner's evidence for each stage, and its own flag for a rate
+        # measured on too few cases: stated with the figure, never dropped.
+        also: [advanced, fellOut]
+        provisional_unless: sufficient
+    definition: >-
+      Of the cases that LEFT a stage, the share that advanced to the next
+      stage rather than falling out (withdrawn or lapsed): KFI to Application,
+      Application to Offer, Offer to Completion — 'offer to completion
+      pull-through' is origin_stage OFFER. Measured from the weekly extracts by
+      the pipeline run-off model. Filter on ONE origin_stage; break it down by
+      origin_stage for every stage. It is NOT the cohort conversion (which
+      follows the KFI cohort all the way to funding) and NOT the forecast's
+      completion run-rate.
+
+  stage_completion_rate:
+    label: Historical completion rate
+    unit: ratio
+    view: case_history
+    operations: [point_in_time, breakdown]
+    periods: [current]
+    inputs: [case_history]
+    by:
+      origin_stage:
+        map: historicalCompletionRateByStage
+        value: rate
+        also: [observed, completed]
+        provisional_unless: sufficient
+    definition: >-
+      Of the cases observed at a stage, the share that went on to complete —
+      the historical rate the forecast weights a live case at that stage with,
+      so 'what completion rate is assumed from KFI to completion' is
+      origin_stage KFI. Filter on ONE origin_stage; break it down by
+      origin_stage for every stage. It is NOT the pull-through to the NEXT
+      stage, NOT the cohort conversion, and NOT the completion run-rate in £
+      per month.

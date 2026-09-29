@@ -648,8 +648,11 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: publishes the forecast by component, region and LTV band, the weighting
     #: exclusion by reason and the milestone ladder by threshold, so a forecast
     #: may be broken down.
+    #: D2a conversion (2.10.0, §20): a measured rate is one figure, so the
+    #: stage-movement capability may be asked for a point in time.
     AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"},
-                                      "forecast": {"breakdown"}}
+                                      "forecast": {"breakdown"},
+                                      "pipeline_stage_movement": {"point_in_time"}}
 
     #: THE CATALOGUE, WIDENED BY NAME. Catalogue batch 1 (vocabulary 2.6.0,
     #: owner direction 2026-09-29: "narrow the gap") gave the Pipeline tab's
@@ -668,7 +671,11 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
                                     "annualised_completion_run_rate",
                                     "forecast_component", "forecast_scenario",
                                     "funding_threshold",
-                                    "weighting_exclusion_reason"}
+                                    "weighting_exclusion_reason",
+                                    # D2a (2.10.0): the stage-movement
+                                    # capability's measured rates.
+                                    "cohort_conversion", "stage_pull_through",
+                                    "stage_completion_rate"}
 
     for key in sorted(set(was) & set(now)):
         if key == "vocabulary_version":

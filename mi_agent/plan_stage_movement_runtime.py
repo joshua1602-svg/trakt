@@ -41,7 +41,19 @@ from __future__ import annotations
 
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
+from mi_agent import semantic_engine as _engine
+from mi_agent import semantic_model as _semantic_model
+
 CAPABILITY = "pipeline_stage_movement"
+
+#: THE CAPABILITY'S MEASURED RATES (D2a, P0 design §20): cohort conversion,
+#: stage pull-through and the historical completion rate, declared once in its
+#: semantic model and served by the one engine every declared figure uses.
+#: The movement between the latest pair of extracts stays with the owner's own
+#: wording below.
+MODEL = _semantic_model.load(CAPABILITY)
+KIND_MOVEMENT = "movement"
+KIND_CATALOGUE = "semantic_model"
 
 #: WHICH POPULATION THIS RUNTIME EXECUTES: the weekly pipeline extracts, the
 #: same population the pipeline runtime declares, under its own declaration.
@@ -125,6 +137,18 @@ def claims(plan: Any) -> bool:
     return str(_as_mapping(plan).get("capability") or "") == CAPABILITY
 
 
+def _measures(body: Mapping[str, Any]) -> List[str]:
+    output = _single_output(body) or {}
+    return [str(m.get("concept") or "") for m in (output.get("measures") or ())]
+
+
+def kind_of(plan: Any) -> str:
+    """A declared rate (the semantic model's) or a movement (the owner's)."""
+    measures = _measures(_as_mapping(plan))
+    return (KIND_CATALOGUE if len(measures) == 1 and MODEL.measure(measures[0])
+            else KIND_MOVEMENT)
+
+
 def _single_output(plan: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
     outputs = plan.get("outputs") or ()
     return outputs[0] if len(outputs) == 1 else None
@@ -198,6 +222,8 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 "the stage movement runtime serves no population comparison")
 
     operation = str(body.get("operation") or "")
+    if kind_of(body) == KIND_CATALOGUE:
+        return _engine.check(MODEL, body, _measures(body)[0], operation)
     spec = OPERATIONS.get(operation)
     if spec is None:
         return (False, OPERATION_NOT_SUPPORTED,
@@ -270,13 +296,16 @@ def reading_for(plan: Any) -> Dict[str, Any]:
 class StageMovementOutcome:
     """What ran, what it produced, and the evidence that proves both."""
 
-    __slots__ = ("ok", "reason", "detail", "answer", "rows", "columns", "receipt")
+    __slots__ = ("ok", "reason", "detail", "answer", "rows", "columns", "receipt",
+                 "value", "cells")
 
     def __init__(self, *, ok: bool, reason: str = "", detail: str = "",
                  answer: Optional[str] = None,
                  rows: Optional[List[Dict[str, Any]]] = None,
                  columns: Optional[List[Dict[str, Any]]] = None,
-                 receipt: Optional[Dict[str, Any]] = None) -> None:
+                 receipt: Optional[Dict[str, Any]] = None,
+                 value: Any = None,
+                 cells: Optional[List[Dict[str, Any]]] = None) -> None:
         self.ok = ok
         self.reason = reason
         self.detail = detail
@@ -284,6 +313,36 @@ class StageMovementOutcome:
         self.rows = rows or []
         self.columns = columns or []
         self.receipt = receipt or {}
+        self.value = value
+        self.cells = cells
+
+
+def _execute_catalogue(body: Mapping[str, Any],
+                       history_model: Optional[Mapping[str, Any]]
+                       ) -> StageMovementOutcome:
+    """A declared rate, read by the engine from the owner's published model —
+    the case history the production request already built. Nothing computed."""
+    m = MODEL.measure(_measures(body)[0])
+    if not isinstance(history_model, Mapping) or not history_model:
+        return StageMovementOutcome(
+            ok=False, reason=SOURCE_UNAVAILABLE,
+            detail=f"no pipeline case history was supplied, so "
+                   f"{m.label.lower()} cannot be stated")
+    try:
+        _engine.inputs_available(MODEL, m, history_model)
+        axis, member, binding = _engine.binding_for(m, body)
+        _engine.requires_met(binding, history_model, axis or member)
+        shape, value, cells, paths, extra = _engine.serve_figure(
+            m, history_model, axis=axis, member=member, binding=binding,
+            period=body.get("period") or {})
+    except _engine.Refusal as refusal:
+        return StageMovementOutcome(ok=False, reason=refusal.reason,
+                                    detail=refusal.detail[:300])
+    receipt = _engine.receipt(MODEL, m, body, payload=history_model,
+                              shape=shape, paths=paths, axis=axis,
+                              member=member, extra=extra)
+    return StageMovementOutcome(ok=True, receipt=receipt, value=value,
+                                cells=cells, rows=cells or [])
 
 
 def execute(plan: Any, *, root: Any, client_id: str,
@@ -295,6 +354,8 @@ def execute(plan: Any, *, root: Any, client_id: str,
     production request already resolved — the ones the legacy route hands this
     same owner. Nothing is discovered here.
     """
+    if kind_of(plan) == KIND_CATALOGUE:
+        return _execute_catalogue(_as_mapping(plan), history_model)
     from mi_agent_api import currency as currency_mod
     from mi_agent_api import movement_detail as detail_mod
     from mi_agent_api import stage_movement_query as owner_words

@@ -87,6 +87,7 @@ from datetime import date
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
 from mi_agent import plan_reading as _plan
+from mi_agent import semantic_engine as _engine
 from mi_agent import semantic_model as _semantic_model
 from mi_agent.interpretation_v2.vocabulary import NAMED_THRESHOLDS
 
@@ -141,23 +142,23 @@ POPULATION_NOT_FORECAST = "POPULATION_NOT_FORECAST"
 POPULATION_NOT_MEASURED = "POPULATION_NOT_MEASURED"
 NOT_SINGLE_OUTPUT = "NOT_SINGLE_OUTPUT"
 SCOPE_NOT_SUPPORTED = "SCOPE_NOT_SUPPORTED"
-FILTERS_NOT_SUPPORTED = "FILTERS_NOT_SUPPORTED"
-DIMENSION_NOT_SUPPORTED = "DIMENSION_NOT_SUPPORTED"
-GEOGRAPHY_NOT_SUPPORTED = "GEOGRAPHY_NOT_SUPPORTED"
+FILTERS_NOT_SUPPORTED = _engine.FILTERS_NOT_SUPPORTED
+DIMENSION_NOT_SUPPORTED = _engine.DIMENSION_NOT_SUPPORTED
+GEOGRAPHY_NOT_SUPPORTED = _engine.GEOGRAPHY_NOT_SUPPORTED
 COMPARISON_NOT_SUPPORTED = "COMPARISON_NOT_SUPPORTED"
-MEASURE_NOT_SUPPORTED = "MEASURE_NOT_SUPPORTED"
-OPERATION_NOT_SUPPORTED = "OPERATION_NOT_SUPPORTED"
-PERIOD_NOT_SUPPORTED = "PERIOD_NOT_SUPPORTED"
-TARGET_NOT_SUPPORTED = "TARGET_NOT_SUPPORTED"
+MEASURE_NOT_SUPPORTED = _engine.MEASURE_NOT_SUPPORTED
+OPERATION_NOT_SUPPORTED = _engine.OPERATION_NOT_SUPPORTED
+PERIOD_NOT_SUPPORTED = _engine.PERIOD_NOT_SUPPORTED
+TARGET_NOT_SUPPORTED = _engine.TARGET_NOT_SUPPORTED
 #: The owner computes this shape, but the production bank shows the model
 #: using it for questions that want different figures. Held, not served.
-AMBIGUOUS_READING = "AMBIGUOUS_READING"
+AMBIGUOUS_READING = _engine.AMBIGUOUS_READING
 INPUTS_UNAVAILABLE = "INPUTS_UNAVAILABLE"
 FORECAST_UNAVAILABLE = "FORECAST_UNAVAILABLE"
 EXECUTION_FAILED = "EXECUTION_FAILED"
 #: The owner's output carries no figure for what the plan asked (a member it
 #: did not publish, a breakdown on another basis). Refused, never substituted.
-FIELD_UNAVAILABLE = "FIELD_UNAVAILABLE"
+FIELD_UNAVAILABLE = _engine.FIELD_UNAVAILABLE
 #: P0 §9 — the two reasons a derived population adds.
 POPULATION_INPUT_UNRESOLVED = "POPULATION_INPUT_UNRESOLVED"
 POPULATION_VINTAGE_SKEW = "POPULATION_VINTAGE_SKEW"
@@ -286,10 +287,8 @@ def target_of(plan: Any) -> Optional[Mapping[str, Any]]:
 
 
 def _member(plan: Any) -> Optional[Tuple[str, str]]:
-    """The one governed member a plan filters on, e.g. `(forecast_component,
-    funded_book)`; None when it filters on nothing."""
-    filters = _plan.plan_filters(plan)
-    return _plan.member_filter(filters[0]) if len(filters) == 1 else None
+    """The one governed member a plan filters on (the engine's reading)."""
+    return _engine.member_of(plan)
 
 
 # --------------------------------------------------------------------------- #
@@ -389,91 +388,18 @@ def _check_milestone(body: Mapping[str, Any],
 
 def _check_catalogue(body: Mapping[str, Any], measure: str,
                      operation: str) -> Tuple[bool, str, str]:
-    """A figure the semantic model declares: can its owner's output answer
-    THIS plan by lookup — one figure, one governed member, one breakdown the
-    owner publishes, or the owner's own curve?"""
+    """A figure the semantic model declares: the engine's perimeter, with this
+    capability's held readings — and one refusal worded for the forecast."""
     m = MODEL.measure(measure)
-    if m is None:
-        return (False, MEASURE_NOT_SUPPORTED,
-                f"measure {measure!r} is not in the forecast semantic model "
-                f"(served: {sorted(MODEL.measures)})")
-    if operation not in m.operations:
-        if measure == "forecast_funded_balance" and operation == "series":
-            return (False, OPERATION_NOT_SUPPORTED,
-                    f"the forecast funded balance is the tab's point figure "
-                    f"over the latest extract ({BALANCE_DECISION}); a series "
-                    f"of it would pair each funded month with that month's last "
-                    f"extract — a different definition. The month-by-month "
-                    f"curve is projected_funded_balance")
+    if (m is not None and operation not in m.operations
+            and measure == "forecast_funded_balance" and operation == "series"):
         return (False, OPERATION_NOT_SUPPORTED,
-                f"operation={operation!r} is not how {measure} is served "
-                f"({sorted(m.operations)})")
-    period = body.get("period") or {}
-    # THE GRAIN FIRST: it is the durable refusal. "By month" asks for a figure
-    # per period whatever the measure turns out to mean, so a point figure
-    # refuses it before the hold below is even consulted.
-    grain = period.get("grain")
-    if grain and grain not in m.grains:
-        return (False, PERIOD_NOT_SUPPORTED,
-                f"a {grain} grain asks for a figure per period; {measure} is "
-                f"not published per {grain}")
-    held = HELD_READINGS.get((operation, measure))
-    if held:
-        return (False, AMBIGUOUS_READING,
-                f"{operation}/{measure} is held until a live run shows the "
-                f"readings have moved to their own concepts: {held}")
-    if target_of(body):
-        return (False, TARGET_NOT_SUPPORTED,
-                f"{measure} takes no threshold; a milestone for one amount is "
-                f"forecast_milestone_date with a target")
-    if _plan.asks_geography(body) and _plan.region_axis(body) is None:
-        return (False, GEOGRAPHY_NOT_SUPPORTED,
-                "the Forecast tab publishes the forecast by the client's "
-                "reporting region only; a region filter or another level is "
-                "not a figure it publishes")
-    axes = _plan.grouping_axes(body)
-    if len(axes) > 1:
-        return (False, DIMENSION_NOT_SUPPORTED,
-                f"the owner publishes one breakdown at a time; this plan "
-                f"groups by {axes}")
-    if axes and axes[0] not in m.by:
-        return (False, DIMENSION_NOT_SUPPORTED,
-                f"the owner publishes {measure} by {sorted(m.by) or 'nothing'}, "
-                f"not by {axes[0]!r}")
-    filters = _plan.plan_filters(body)
-    member = _member(body)
-    if filters:
-        if member is None or axes:
-            return (False, FILTERS_NOT_SUPPORTED,
-                    "one equality on one governed value is served, and not "
-                    "together with a breakdown")
-        dim, value = member
-        if dim not in m.by:
-            return (False, FILTERS_NOT_SUPPORTED,
-                    f"the owner publishes {measure} per {sorted(m.by) or 'nothing'}, "
-                    f"not per {dim!r}")
-        governed = MODEL.dimensions[dim].values if dim in MODEL.dimensions else ()
-        if governed and value not in governed:
-            return (False, FILTERS_NOT_SUPPORTED,
-                    f"{dim}={value!r} is not a governed value "
-                    f"({', '.join(governed)})")
-    if not (axes or filters or m.value or m.series):
-        return (False, DIMENSION_NOT_SUPPORTED,
-                f"{measure} is published per {sorted(m.by)}; break it down")
-    form = str(period.get("form") or "")
-    if form not in m.periods:
-        return (False, PERIOD_NOT_SUPPORTED,
-                f"period.form={form!r} is not how {measure} is stated "
-                f"({sorted(m.periods)})")
-    ahead = period.get("periods_ahead")
-    if ahead is not None and not m.series:
-        return (False, PERIOD_NOT_SUPPORTED,
-                f"{measure} is one figure, not a projection over a horizon")
-    if m.series and period.get("labels") and ahead is None:
-        return (False, PERIOD_NOT_SUPPORTED,
-                "the horizon was stated only in words; a curve is selected "
-                "to a stated number of periods ahead, never to a label")
-    return True, "", ""
+                f"the forecast funded balance is the tab's point figure "
+                f"over the latest extract ({BALANCE_DECISION}); a series "
+                f"of it would pair each funded month with that month's last "
+                f"extract — a different definition. The month-by-month "
+                f"curve is projected_funded_balance")
+    return _engine.check(MODEL, body, measure, operation, held=HELD_READINGS)
 
 
 # --------------------------------------------------------------------------- #
@@ -496,13 +422,9 @@ class ForecastOutcome:
         self.receipt = receipt or {}
 
 
-class _Refusal(Exception):
-    """An owner, or the plan against the owner's output, cannot answer."""
-
-    def __init__(self, reason: str, detail: str) -> None:
-        super().__init__(detail)
-        self.reason = reason
-        self.detail = detail
+#: An owner, or the plan against the owner's output, cannot answer — the
+#: engine's refusal, so one `except` catches both.
+_Refusal = _engine.Refusal
 
 
 def _refuse(reason: str, detail: str) -> ForecastOutcome:
@@ -737,20 +659,10 @@ def _execute_catalogue(body: Mapping[str, Any], *, request: Mapping[str, Any],
     view = MODEL.views[m.view]
     payload, inputs, notes = _OPEN_VIEW[m.view](request)
 
-    axes = _plan.grouping_axes(body)
-    axis = axes[0] if axes else None
-    member = _member(body)
-    binding = m.by.get(axis or (member[0] if member else ""), {})
-
+    axis, member, binding = _engine.binding_for(m, body)
     # A breakdown served only on a governed basis (the forecast by region is
     # the reporting taxonomy on both books) is refused, never substituted.
-    for path, expected in (binding.get("requires") or {}).items():
-        got = _semantic_model.read(payload, path)
-        if got != expected:
-            raise _Refusal(FIELD_UNAVAILABLE,
-                           f"the owner published {axis or member} on "
-                           f"{got!r}, not {expected!r}; it is not served on "
-                           f"another basis")
+    _engine.requires_met(binding, payload, axis or member)
 
     names = m.inputs
     if member and "members" in binding:
@@ -765,9 +677,9 @@ def _execute_catalogue(body: Mapping[str, Any], *, request: Mapping[str, Any],
     used = _used_inputs(names, inputs)
     skew, ceiling = _vintage(used, policy)
 
-    shape, value, cells, paths, extra = _read_figure(
+    shape, value, cells, paths, extra = _engine.serve_figure(
         m, payload, axis=axis, member=member, binding=binding,
-        period=body.get("period") or {})
+        period=body.get("period") or {}, unavailable=FORECAST_UNAVAILABLE)
 
     context = {key: _semantic_model.read(payload, path)
                for key, path in m.context.items()}
@@ -805,101 +717,6 @@ def _execute_catalogue(body: Mapping[str, Any], *, request: Mapping[str, Any],
         **notes,
     }
     return ForecastOutcome(ok=True, value=value, cells=cells, receipt=receipt)
-
-
-def _read_figure(m: Any, payload: Mapping[str, Any], *, axis: Optional[str],
-                 member: Optional[Tuple[str, str]],
-                 binding: Mapping[str, Any], period: Mapping[str, Any]
-                 ) -> Tuple[str, Any, Optional[List[Dict[str, Any]]], Any, Dict[str, Any]]:
-    """`(shape, value, cells, paths read, extra receipt facts)` — lookups only."""
-    read = _semantic_model.read
-    if m.series:
-        return _read_series(m, payload, member=member, period=period)
-    if axis:
-        cells = _read_breakdown(axis, payload, binding)
-        if not cells:
-            raise _Refusal(FIELD_UNAVAILABLE,
-                           f"the owner published no {m.name} by {axis}")
-        extra = ({"axis_basis": read(payload, binding["basis"])}
-                 if binding.get("basis") else {})
-        path = binding.get("rows") or binding.get("map") or {
-            k: spec.get("value") for k, spec in (binding.get("members") or {}).items()}
-        return "grouped", None, cells, path, extra
-    if member:
-        value, path = _read_member(member, payload, binding)
-        if value is None:
-            raise _Refusal(FIELD_UNAVAILABLE,
-                           f"the owner published no {m.name} for "
-                           f"{member[0]}={member[1]!r}")
-        return "scalar", value, None, path, {}
-    value = read(payload, m.value)
-    if value is None:
-        raise _Refusal(FORECAST_UNAVAILABLE,
-                       f"the owner published no {m.name} ({m.value})")
-    return "scalar", value, None, m.value, {}
-
-
-def _read_member(member: Tuple[str, str], payload: Mapping[str, Any],
-                 binding: Mapping[str, Any]) -> Tuple[Any, str]:
-    read = _semantic_model.read
-    value = member[1]
-    if "members" in binding:
-        path = binding["members"][value]["value"]
-        return read(payload, path), path
-    if "map" in binding:
-        row = (read(payload, binding["map"]) or {}).get(value)
-        path = f"{binding['map']}.{value}.{binding['value']}"
-        return (row or {}).get(binding["value"]), path
-    rows = read(payload, binding.get("rows", "")) or []
-    found = next((r for r in rows if str(r.get(binding["key"])) == value), None)
-    path = f"{binding.get('rows')}[{binding.get('key')}={value}].{binding.get('value')}"
-    return (found or {}).get(binding.get("value")), path
-
-
-def _read_breakdown(axis: str, payload: Mapping[str, Any],
-                    binding: Mapping[str, Any]) -> List[Dict[str, Any]]:
-    read = _semantic_model.read
-    if "members" in binding:
-        return [{axis: key, "value": read(payload, spec["value"])}
-                for key, spec in binding["members"].items()]
-    if "map" in binding:
-        return [{axis: str(key), "value": (row or {}).get(binding["value"])}
-                for key, row in (read(payload, binding["map"]) or {}).items()]
-    also = tuple(binding.get("also") or ())
-    return [{axis: str(row.get(binding["key"])), "value": row.get(binding["value"]),
-             **{name: row.get(name) for name in also}}
-            for row in (read(payload, binding["rows"]) or [])]
-
-
-def _read_series(m: Any, payload: Mapping[str, Any], *,
-                 member: Optional[Tuple[str, str]], period: Mapping[str, Any]
-                 ) -> Tuple[str, Any, List[Dict[str, Any]], Any, Dict[str, Any]]:
-    """The owner's curve: its rows, SELECTED to the stated horizon — never
-    re-projected, extended or interpolated. A horizon beyond the owner's
-    published one is refused, because nothing here can see past it."""
-    read = _semantic_model.read
-    series = m.series
-    rows = read(payload, series["rows"]) or []
-    published = read(payload, series["horizon"])
-    ahead = period.get("periods_ahead")
-    if ahead is not None:
-        if published is None or ahead > published:
-            raise _Refusal(PERIOD_NOT_SUPPORTED,
-                           f"the owner projects {published} month(s) ahead; "
-                           f"{ahead} were asked for, and a curve is not "
-                           f"extended past its owner's horizon")
-        rows = [r for r in rows if 1 <= (r.get(series["step"]) or 0) <= ahead]
-    columns = tuple((m.by.get("forecast_scenario") or {}).get("columns") or ())
-    if member:
-        columns = (member[1],)
-    cells = [{"period": r.get(series["period"]), "offset": r.get(series["step"]),
-              **{c: r.get(c) for c in columns}} for r in rows]
-    if not cells:
-        raise _Refusal(FORECAST_UNAVAILABLE,
-                       f"the owner published no {m.name} rows")
-    extra = {"series_columns": list(columns),
-             "horizon": {"published_months": published, "periods_ahead": ahead}}
-    return "series", None, cells, series["rows"], extra
 
 
 # --------------------------------------------------------------------------- #

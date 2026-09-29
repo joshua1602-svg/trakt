@@ -40,10 +40,10 @@ IDS=""
 [[ "${SELECTION}" != "all" ]] && IDS="${SELECTION}"
 CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,forecast_scale"
 EXPECTED_QUESTIONS=135
-# The oldest vocabulary the next measurement is for (2.9.0: the weighting
-# exclusions' population and the `lapsed` definition; catalogue batches 1 and
-# 2 before it): an older build is not the one being measured.
-MINIMUM_VOCABULARY="2.9.0"
+# The oldest vocabulary the next measurement is for (2.10.0: conversion and
+# pipeline change, §20; 2.9.0 and the catalogue batches before it): an older
+# build is not the one being measured.
+MINIMUM_VOCABULARY="2.10.0"
 
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${APP_ROOT}"
