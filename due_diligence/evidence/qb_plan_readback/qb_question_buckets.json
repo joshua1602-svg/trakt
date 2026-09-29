@@ -1,6 +1,6 @@
 {
  "what_this_is": "The owner's 135-question bank sorted into what the agent MUST answer correctly, what is NICE TO HAVE, and what it is FINE TO DECLINE or ask back. The pass mark for the proof stage. DRAFT — owner review pending.",
- "status": "draft",
+ "status": "decided (D13, 2026-09-29): conversion/pull-through and pipeline change must answer; the strat split as drafted",
  "buckets": {
   "must_answer": [
    "funded_kpi_001",
@@ -533,7 +533,7 @@
    "n": 49,
    "question": "What is the pipeline conversion rate?",
    "bucket": "must_answer",
-   "why": "Conversion is a core pipeline KPI — NOT BUILT yet (D2a)",
+   "why": "Conversion — the Pipeline tab's cohort conversion (D2a, §20.2)",
    "served_by_at_last_check": "old path / declined",
    "last_checked": "this morning's full run (ce5d1276)"
   },
@@ -797,7 +797,7 @@
    "n": 82,
    "question": "Compare latest pipeline with prior pipeline.",
    "bucket": "must_answer",
-   "why": "Week-on-week change — a routine management question",
+   "why": "Week-on-week pipeline change (D13, §20.3)",
    "served_by_at_last_check": "old path / declined",
    "last_checked": "this morning's full run (ce5d1276)"
   },
@@ -805,7 +805,7 @@
    "n": 83,
    "question": "Show pipeline growth from October to November.",
    "bucket": "must_answer",
-   "why": "Month-on-month growth — a routine management question",
+   "why": "Month-on-month pipeline change (D13, §20.3)",
    "served_by_at_last_check": "old path / declined",
    "last_checked": "this morning's full run (ce5d1276)"
   },
@@ -1109,7 +1109,7 @@
    "n": 121,
    "question": "What completion rate is assumed from KFI to completion?",
    "bucket": "nice_to_have",
-   "why": "The forecast's assumed conversion — NOT BUILT (D2a)",
+   "why": "The forecast's assumed stage completion rate — its own concept now (§20.2)",
    "served_by_at_last_check": "old path / declined",
    "last_checked": "this morning's full run (ce5d1276)"
   },
@@ -1213,7 +1213,7 @@
    "n": 134,
    "question": "What is the offer to completion pull-through rate?",
    "bucket": "must_answer",
-   "why": "Pull-through is the standard mortgage pipeline KPI — NOT BUILT yet (D2a)",
+   "why": "Pull-through — the run-off model's Offer pull-through (D2a, §20.2)",
    "served_by_at_last_check": "old path / declined",
    "last_checked": "this morning's full run (ce5d1276)"
   },

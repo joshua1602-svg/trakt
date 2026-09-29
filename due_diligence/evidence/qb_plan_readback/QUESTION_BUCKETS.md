@@ -1,4 +1,4 @@
-# The question bank in three buckets — DRAFT for owner review
+# The question bank in three buckets — DECIDED (D13, 2026-09-29)
 
 The pass mark for the proof stage is **every *must answer* question answered correctly, and no question answered wrongly** — not 135 out of 135. A clear "I can't answer that" or "did you mean…?" is a correct outcome for a question in the third bucket.
 
@@ -16,14 +16,20 @@ Machine-readable copy: `qb_question_buckets.json` (the full-bank run is scored a
 
 | # | question | what it needs |
 |---|---|---|
-| 49, 134 | pipeline conversion rate; offer-to-completion pull-through | **Not built.** Conversion is owned by stage movement (D2a); the one real build item in this bucket |
-| 82, 83 | latest vs prior pipeline; pipeline growth October to November | **A gap.** The pipeline path gives the figure at each date but not the change between them |
+| 49, 134 | pipeline conversion rate; offer-to-completion pull-through | **Built (§20.2)** — the stage-movement model's cohort conversion and stage pull-through; confirmed by the next live run |
+| 82, 83 | latest vs prior pipeline; pipeline growth October to November | **Built (§20.3)** — the change between two dated extracts; confirmed by the next live run |
 | 112 | current completion run rate | Answered correctly today by the old path; the new path's hold is settled before the old path is switched off |
 | 122, 128 | time to (securitisation) scale | **Your configuration, not code:** the portfolio's stage must be set (D9) before 'scale' has a number |
 | 62 | pipeline stage distribution | The model asks back 'by amount or by number of cases?' — acceptable, or default to amount |
 | 69, 76, 132, 135 | this month's completions; expected completions by month; weighted pipeline; when cases complete | Last checked **before** batch 1 added these concepts — expected to be answered now; the full run confirms |
 
-## Where I'd most like your view
+## Owner decision (D13, 2026-09-29)
+
+"Execute 1-3": conversion / pull-through and week-on-week / month-on-month
+pipeline change are **must answer** (built, design §20); the strat split stands
+as drafted.
+
+## The questions put to the owner
 
 - **Conversion / pull-through (49, 134): must answer?** It is the standard mortgage-pipeline KPI, and the only item here that needs new build (D2a). If it can wait, it moves to nice to have.
 - **Week-on-week and month-on-month pipeline change (82, 83): must answer?** I think yes — it is a routine management question.

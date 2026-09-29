@@ -1305,3 +1305,80 @@ record of what they rest on is now true.
 
 Pinned by `test_forecast_semantic_model.py`, `test_answer_standard.py`,
 `test_funded_breadth.py` and `test_the_pipeline_region_is_the_reporting_region.py`.
+
+## 20. The pass mark, conversion, pipeline change — on one semantic engine (2026-09-29)
+
+**D13 — owner decision, 2026-09-29** ("execute 1-3 on target state cortex
+architecture"). The proof stage's pass mark is the question bank in three
+buckets (`due_diligence/evidence/qb_plan_readback/qb_question_buckets.json`):
+every MUST ANSWER question answered correctly and no question answered
+wrongly — not 135/135. Decided on the three points put to the owner:
+
+1. the pipeline conversion rate and the offer-to-completion pull-through
+   ([49], [134]) are must answer;
+2. week-on-week and month-on-month pipeline change ([82], [83]) are must
+   answer;
+3. the strat split stands as drafted (balance and risk cuts must, secondary
+   measures of each cut nice to have).
+
+### 20.1 One semantic engine
+
+`mi_agent.semantic_engine` is the ONE reader every capability's semantic
+model is served by — the Cortex shape: the model file declares what a figure
+is and where its owner publishes it; the engine resolves a plan against that
+declaration and reads the figure; a new figure is a new entry in a file.
+
+    check(...)            the catalogue perimeter every declared figure shares
+    serve_figure(...)     value / member / breakdown / curve, by lookup
+    inputs_* / receipt    the view's dated inputs and the receipt core
+    period_change(...)    THE one place a change between two governed
+                          figures is computed (pinned: no other arithmetic
+                          in the engine)
+
+The forecast runtime's own copy of the reader is gone; it keeps only what is
+the forecast's (its held readings, the milestone rule, the input vintage
+ceiling). Two capabilities now declare their figures in files: forecast and
+pipeline stage movement.
+
+### 20.2 Conversion (D2a) as data
+
+`config/mi/semantic_model/pipeline_stage_movement.yaml`, over the owner D2a
+names — the pipeline's case history (`pipeline_history.build_historical_
+completion_model`), which the Pipeline tab's conversion card and the
+forecast's stage rates already read:
+
+    cohort_conversion       the % of the original KFI cohort funded to date;
+                            by destination_stage, the funnel at the latest week
+    stage_pull_through      of the cases that left a stage, the share that
+                            advanced (Offer → Completion is origin_stage OFFER)
+    stage_completion_rate   the forecast's per-stage completion rate — [121]
+                            'what completion rate is assumed from KFI to
+                            completion' now has its own concept
+
+The capability's origin/destination stage dimensions are defined in that file.
+The owner's per-figure sufficiency flag and counts travel with the figure: a
+rate measured on too few cases is answered as provisional, with its evidence —
+never a bare 100%. Units gain `pct` and `ratio`.
+
+### 20.3 Pipeline change between two dated extracts
+
+The pipeline capability takes `movement` and `compare`, and
+`CAPABILITY_CHANGE_FORMS` declares that it implements `metric_delta` and
+`level_comparison` over its own measures, so normalisation keeps the
+measure's owner (a funded metric delta still goes to `period_movement`). The
+two figures are read exactly as the dated shape reads them — the weekly
+owner's, at D7's or the extract order's extracts — and the change is the
+engine's `period_change`, overall or per stage:
+
+    The live pipeline amount fell by £400k (-14.3%), from £2.8m at the weekly
+    extract of 2025-10-30 (October 2025) to £2.4m at the weekly extract of
+    2025-11-27 (November 2025).
+
+### 20.4 The run-rate hold
+
+Its two misreads now have their own concepts ([121] → stage_completion_rate,
+[134] → stage_pull_through), and [98] had already left the shape. The hold on
+`point_in_time/forecast_completion_rate` is released on the next live run's
+evidence that they read there, not before.
+
+Pinned by `test_stage_conversion.py` and `test_pipeline_change.py`.

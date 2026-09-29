@@ -87,8 +87,24 @@ states its as-at date. The funded region questions answer only where the
 production book carries the reporting region; otherwise the evidence records
 FIELD_NOT_IN_BOOK and the old path answers.
 
+**The full bank, scored against the buckets (vocabulary 2.10.0, design §20) —
+the one to run next.** The proof stage's baseline: every question, once.
+
+    bash mi_agent_api/run_production_bank.sh <your Entra object id> all
+
+Read it back as below, then score it against the pass mark (D13):
+
+    python due_diligence/evidence/qb_plan_readback/score_against_buckets.py --rerun qb_plan_readback.json
+
+What good looks like: every MUST ANSWER question served by the new path except
+the two that wait on configuration (time to scale, D9: the portfolio's stage)
+and the run-rate [112] until the hold is released on this run's evidence; the
+conversion rate [49], the pull-through [134] and the assumed KFI-to-completion
+rate [121] read into the stage-movement model's own concepts; the pipeline's
+change [82], [83] served with both extracts named.
+
 **Follow-up spot check (vocabulary 2.9.0: the exclusions' population, `lapsed`,
-the answer standard, region basis) — the one to run next.** The six the
+the answer standard, region basis) — run 2026-09-29 19:37:49 UTC, 8/13.** The six the
 combined check did not serve for a fixable reason, one question per changed
 wording, and the three hold readings the combined check did not ask — 13
 model interpretations:
@@ -178,4 +194,10 @@ intents added beside the baseline's.
                 Hold: [98] has left the shape, [113] reads its own concept;
                 [121] and [134] (the conversion-rate misreads) not yet
                 re-asked — the hold stays until they are
+    2026-09-29  D13 (owner): the question buckets are the pass mark;
+                conversion/pull-through and pipeline change must answer.
+                Built (design §20): one semantic engine; conversion as the
+                stage-movement model; the pipeline's change between two
+                dated extracts. Vocabulary 2.10.0. Next: the full bank,
+                scored with score_against_buckets.py
 
