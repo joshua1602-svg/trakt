@@ -202,4 +202,8 @@ intents added beside the baseline's.
                 scored with score_against_buckets.py
     2026-09-29  21:11 UTC b1ef994f deployed (run 36631547906, success; vocabulary
                 2.10.0: the semantic engine, conversion, pipeline change)
+    2026-09-29  21:21:00 UTC full bank on b1ef994f (vocabulary 2.10.0),
+                135 selected with `all`; log
+                /home/qb_plan_rerun_20260929T212100Z.log — read back from
+                this START TIME and scored against the buckets (D13)
 
