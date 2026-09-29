@@ -928,7 +928,7 @@ def _attempt_forecast(body: Dict[str, Any], *, plan: Mapping[str, Any],
         return None, f"{INELIGIBLE}:{why}"
 
     base_ok, base_why, base_detail = adapter.check_population_base(
-        plan, forecast_rt.EXECUTION_POPULATION,
+        plan, forecast_rt.execution_population(plan),
         executable=forecast_rt.EXECUTABLE_POPULATIONS)
     if not base_ok:
         body["eligibility"] = {"eligible": False, "reason": base_why,

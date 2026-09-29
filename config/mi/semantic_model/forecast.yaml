@@ -30,6 +30,12 @@
 
 version: 1
 capability: forecast
+# The population a forecast figure is measured over unless a measure says
+# otherwise. A measure that describes ONE of the view's inputs on its own (the
+# pipeline's exclusions from weighting) names that input as its `population`
+# and reads it alone; a plan asking for it names that population, and its
+# receipt proves it.
+population: forecast
 
 views:
   forecast_view:
@@ -82,10 +88,13 @@ dimensions:
     definition: >-
       Why a pipeline case carries no forecast weight: `completed` or
       `withdrawn` (the extract already shows it closed), `not_forecast` (an
-      open stage the forecast does not weight, such as KFI), `lapsed` (past its
-      stage's validity window), `missing_stage` or `missing_probability`.
-      Filter on ONE value for 'excluded because of …'; break down by it for why
-      pipeline is excluded from weighting.
+      open stage the forecast does not weight, such as KFI), `lapsed` (an open
+      case that has sat in its current stage longer than that stage's validity
+      window, measured from the book's own history — 'lapsed', 'expired' or
+      'past its stage window'), `missing_stage` or `missing_probability`.
+      Filter on ONE value for 'excluded because of …' or 'how much pipeline has
+      lapsed past its stage window'; break down by it for why pipeline is
+      excluded from weighting.
     values: [completed, withdrawn, not_forecast, lapsed, missing_stage, missing_probability]
 
 measures:
@@ -167,6 +176,7 @@ measures:
     periods: [current]
     value: forecastBridge.excludedFromWeightingAmount
     inputs: [pipeline]
+    population: pipeline
     by:
       weighting_exclusion_reason:
         map: forecastBridge.excludedByReason
@@ -176,8 +186,11 @@ measures:
       Forecast tab's 'excluded from weighting': cases the extract shows as
       completed or withdrawn, open stages the forecast does not weight, cases
       that have lapsed past their stage's window, and cases missing a stage or
-      a probability. Filter or break it down by `weighting_exclusion_reason`
-      for why. It is NOT the pipeline amount, and NOT the weighted pipeline.
+      a probability. Measured over the PIPELINE population: a question about
+      how much pipeline is excluded, withdrawn from the forecast, or lapsed
+      past its stage window names the pipeline. Filter or break it down by
+      `weighting_exclusion_reason` for why. It is NOT the pipeline amount, and
+      NOT the weighted pipeline.
 
   weighting_excluded_case_count:
     label: Pipeline cases excluded from forecast weighting
@@ -187,6 +200,7 @@ measures:
     periods: [current]
     value: forecastBridge.excludedCaseCount
     inputs: [pipeline]
+    population: pipeline
     by:
       weighting_exclusion_reason:
         map: forecastBridge.excludedByReason

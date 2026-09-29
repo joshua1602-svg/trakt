@@ -18,7 +18,7 @@
 #
 # It asks each question once through the path POST /mi/query uses, so it costs
 # ~135 model interpretations. It REFUSES before asking anything when the build
-# is not the one being measured (vocabulary older than 2.7.0, catalogue batch 2),
+# is not the one being measured (vocabulary older than MINIMUM_VOCABULARY below),
 # when the canary is not on for the principal, or when the evidence sink is not
 # set — any of those would spend the run and record nothing to read back.
 #
@@ -40,10 +40,10 @@ IDS=""
 [[ "${SELECTION}" != "all" ]] && IDS="${SELECTION}"
 CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,forecast_scale"
 EXPECTED_QUESTIONS=135
-# The oldest vocabulary with catalogue batch 2 (the forecast semantic model;
-# batch 1's pipeline concepts before it): an older build is not the one being
-# measured.
-MINIMUM_VOCABULARY="2.7.0"
+# The oldest vocabulary the next measurement is for (2.9.0: the weighting
+# exclusions' population and the `lapsed` definition; catalogue batches 1 and
+# 2 before it): an older build is not the one being measured.
+MINIMUM_VOCABULARY="2.9.0"
 
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${APP_ROOT}"

@@ -92,14 +92,9 @@ from mi_agent.interpretation_v2.vocabulary import NAMED_THRESHOLDS
 
 CAPABILITY = "forecast"
 
-#: WHICH POPULATION THIS RUNTIME EXECUTES. Its own declaration, and never
-#: `funded`: a runtime dispatched above the funded gate that also claimed funded
-#: would take funded plans past the gate that guards them. Normalisation rule 6
-#: is what lets a forecast plan spelled with a `funded` base reach this set.
-EXECUTABLE_POPULATIONS: FrozenSet[str] = frozenset({"forecast"})
-
-#: The population this runtime declares to the population gate.
-EXECUTION_POPULATION = "forecast"
+# WHICH POPULATIONS THIS RUNTIME EXECUTES — `EXECUTABLE_POPULATIONS` and
+# `EXECUTION_POPULATION`, below `MODEL`: they are read from the semantic model,
+# where each figure declares the population it is measured over.
 
 #: THE INPUTS A FORECAST IS DERIVED FROM (P0 design §4.1, §6.1). Declared so a
 #: reader — and a test — can see the lineage without reading the owner.
@@ -141,6 +136,9 @@ CEILING_OWNER = "period_change.selection.SelectionPolicy.max_snapshot_gap_days"
 NOT_A_PLAN = "NOT_A_PLAN"
 CAPABILITY_NOT_FORECAST = "CAPABILITY_NOT_FORECAST"
 POPULATION_NOT_FORECAST = "POPULATION_NOT_FORECAST"
+#: The plan's base is one this runtime executes, but not the one its figure is
+#: measured over (the semantic model's `population`).
+POPULATION_NOT_MEASURED = "POPULATION_NOT_MEASURED"
 NOT_SINGLE_OUTPUT = "NOT_SINGLE_OUTPUT"
 SCOPE_NOT_SUPPORTED = "SCOPE_NOT_SUPPORTED"
 FILTERS_NOT_SUPPORTED = "FILTERS_NOT_SUPPORTED"
@@ -174,6 +172,24 @@ SCALE_NOT_CONFIGURED = "SCALE_NOT_CONFIGURED"
 #: tab, not a branch in this module.
 MODEL = _semantic_model.load(CAPABILITY)
 SEMANTIC_MODEL_FILE = "config/mi/semantic_model/forecast.yaml"
+
+#: The capability's own population: what a forecast figure is measured over
+#: unless its entry says otherwise, and the view the analytical context composes.
+EXECUTION_POPULATION = MODEL.population
+
+#: WHICH POPULATIONS THIS RUNTIME EXECUTES: `forecast`, and `pipeline` for the
+#: figures that describe the pipeline input alone (its exclusions from
+#: weighting). Read from the model, so a figure and the population it may be
+#: asked about are declared in one place. Never `funded`: a runtime dispatched
+#: above the funded gate that also claimed funded would take funded plans past
+#: the gate that guards them. Normalisation rule 6 is what lets a forecast plan
+#: spelled with a `funded` base reach this set.
+EXECUTABLE_POPULATIONS: FrozenSet[str] = frozenset(MODEL.populations())
+if "funded" in EXECUTABLE_POPULATIONS:
+    raise _semantic_model.SemanticModelError(
+        f"{SEMANTIC_MODEL_FILE} declares a figure measured over the funded book; "
+        f"the forecast runtime is dispatched above the funded gate and must not "
+        f"execute it")
 
 #: THE ONE FIGURE THAT IS NOT A LOOKUP: the milestone for a threshold the
 #: question names. The owner answers it only when asked about that amount (the
@@ -248,6 +264,14 @@ def _measure(plan: Mapping[str, Any]) -> str:
     return str(measures[0].get("concept") or "") if len(measures) == 1 else ""
 
 
+def execution_population(plan: Any) -> str:
+    """The population THIS plan's figure is measured over: its measure's entry
+    in the semantic model. What the population gate proves against the plan's
+    base and what the receipt states — never inferred from the answer."""
+    measure = MODEL.measure(_measure(_as_mapping(plan)))
+    return measure.population if measure is not None else EXECUTION_POPULATION
+
+
 def kind_of(plan: Any) -> str:
     """Which path an ELIGIBLE plan takes. Empty for anything else."""
     body = _as_mapping(plan)
@@ -287,9 +311,7 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     if base not in EXECUTABLE_POPULATIONS:
         return (False, POPULATION_NOT_FORECAST,
                 f"population.base={base!r} is not executed by the forecast "
-                f"runtime (it executes {sorted(EXECUTABLE_POPULATIONS)}); a "
-                f"forecast of the pipeline alone is a different figure from the "
-                f"funded book projected forward")
+                f"runtime (it executes {sorted(EXECUTABLE_POPULATIONS)})")
     scoped = [slot for slot, whole in (("lens", "all"), ("seasoning", "any"))
               if str(population.get(slot) or whole) != whole]
     if population.get("source_reference") or population.get("scope_predicates"):
@@ -311,6 +333,13 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     if len(measures) != 1:
         return (False, MEASURE_NOT_SUPPORTED,
                 f"exactly one measure is served; this plan names {measures}")
+    measured_over = execution_population(body)
+    if base != measured_over:
+        return (False, POPULATION_NOT_MEASURED,
+                f"{measures[0]!r} is measured over the {measured_over!r} "
+                f"population, and this plan asks about {base!r}: a forecast of "
+                f"the pipeline alone is a different figure from the funded book "
+                f"projected forward, and neither is answered for the other")
     operation = str(body.get("operation") or "")
     if (operation, measures[0]) == MILESTONE:
         return _check_milestone(body, output)
@@ -741,7 +770,7 @@ def _execute_catalogue(body: Mapping[str, Any], *, request: Mapping[str, Any],
                for key, path in m.context.items()}
     receipt: Dict[str, Any] = {
         "capability": CAPABILITY,
-        "population_base": EXECUTION_POPULATION,
+        "population_base": execution_population(body),
         "operation": str(body.get("operation") or ""),
         "measure_concept": m.name,
         "measure_kind": KIND_CATALOGUE,
@@ -912,7 +941,7 @@ def _execute_milestone(body: Mapping[str, Any], *, request: Mapping[str, Any],
     milestone = dict(decided.get("milestone") or {})
     receipt: Dict[str, Any] = {
         "capability": CAPABILITY,
-        "population_base": EXECUTION_POPULATION,
+        "population_base": execution_population(body),
         "operation": str(body.get("operation") or ""),
         "measure_concept": _measure(body),
         "measure_kind": KIND_MILESTONE,

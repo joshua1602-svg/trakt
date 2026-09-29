@@ -2,8 +2,9 @@
 is, and where the owner publishes it (P0 design §16.2).
 
 `config/mi/semantic_model/<capability>.yaml` holds, per measure, the definition
-the interpreter reads and the path of the figure in the owner's published
-output; per dimension, its definition and governed values. The vocabulary reads
+the interpreter reads, the path of the figure in the owner's published output
+and the POPULATION the figure is measured over; per dimension, its definition
+and governed values. The vocabulary reads
 the first half, the capability's runtime the second — one entry, so what the
 model is told a figure is and what executes for it cannot drift apart.
 
@@ -68,17 +69,29 @@ class Measure:
     series: Mapping[str, str] = field(default_factory=dict)
     by: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     decision: str = ""
+    #: The population the figure is measured over — the one a plan asking for
+    #: it must name, and the one its receipt proves. The capability's own
+    #: population unless the file says otherwise (see `_validate`).
+    population: str = ""
 
 
 @dataclass(frozen=True)
 class SemanticModel:
     capability: str
+    population: str
     views: Mapping[str, View]
     dimensions: Mapping[str, Dimension]
     measures: Mapping[str, Measure]
 
     def measure(self, name: str) -> Optional[Measure]:
         return self.measures.get(name)
+
+    def populations(self) -> Tuple[str, ...]:
+        """Every population a figure in this model is measured over, the
+        capability's own first."""
+        others = sorted({m.population for m in self.measures.values()}
+                        .difference({self.population}))
+        return (self.population, *others)
 
 
 # --------------------------------------------------------------------------- #
@@ -127,6 +140,9 @@ def _validate(doc: Mapping[str, Any], capability: str) -> SemanticModel:
     if str(doc.get("capability") or "") != capability:
         raise SemanticModelError(
             f"{capability}: the file declares capability {doc.get('capability')!r}")
+    home = str(doc.get("population") or "")
+    if not home:
+        raise SemanticModelError(f"{capability}: the file declares no population")
 
     views: Dict[str, View] = {}
     for name, row in (doc.get("views") or {}).items():
@@ -178,6 +194,17 @@ def _validate(doc: Mapping[str, Any], capability: str) -> SemanticModel:
                     f"governed values {sorted(governed)}")
         if not (row.get("value") or row.get("series") or by):
             raise SemanticModelError(f"{where} publishes no value, series or breakdown")
+        # A figure measured over ANOTHER population than the capability's is one
+        # of the view's dated inputs, read alone: the pipeline's exclusions from
+        # forecast weighting are a property of the pipeline extract, not of the
+        # forecast that composes it. Anything else would let a receipt claim a
+        # population the figure was not measured on.
+        population = str(row.get("population") or home)
+        if population != home and (population not in views[view].inputs
+                                   or inputs != (population,)):
+            raise SemanticModelError(
+                f"{where} is measured over {population!r}, so it must be one of "
+                f"its view's inputs and read that input alone (inputs: {list(inputs)})")
         measures[name] = Measure(
             name=name, label=_text(row.get("label")) or name, unit=unit, view=view,
             definition=definition, operations=_tuple(row.get("operations")),
@@ -185,8 +212,8 @@ def _validate(doc: Mapping[str, Any], capability: str) -> SemanticModel:
             value=row.get("value"), inputs=inputs,
             context=dict(row.get("context") or {}), explain=_text(row.get("explain")),
             series=dict(row.get("series") or {}), by=by,
-            decision=str(row.get("decision") or ""))
-    return SemanticModel(capability=capability, views=views,
+            decision=str(row.get("decision") or ""), population=population)
+    return SemanticModel(capability=capability, population=home, views=views,
                          dimensions=dimensions, measures=measures)
 
 

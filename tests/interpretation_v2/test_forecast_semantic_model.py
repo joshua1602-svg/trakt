@@ -17,6 +17,7 @@ import ast
 import inspect
 
 import pytest
+import yaml
 
 from mi_agent import plan_forecast_runtime as forecast_rt
 from mi_agent import semantic_model
@@ -113,7 +114,7 @@ def test_every_declared_path_resolves_in_the_owners_real_output(funded_root, est
 
 
 def test_an_invalid_model_is_refused_before_the_model_sees_it():
-    good = {"version": 1, "capability": "forecast",
+    good = {"version": 1, "capability": "forecast", "population": "forecast",
             "views": {"v": {"owner": "x"}},
             "dimensions": {"d": {"definition": "a d", "values": ["a"]}},
             "measures": {"m": {"definition": "an m", "unit": "gbp", "view": "v",
@@ -183,21 +184,80 @@ def test_the_forecast_by_ltv_band_is_the_tabs(funded_root, estate):
         r["key"]: r["forecastAmount"] for r in tab}
 
 
+_PIPELINE = {"base": "pipeline"}
+
+
 def test_the_weighting_exclusion_is_the_tabs_by_reason(funded_root, estate):
-    total = _run(_plan(measures=[{"concept": "weighting_excluded_amount"}]),
+    total = _run(_plan(population=_PIPELINE,
+                       measures=[{"concept": "weighting_excluded_amount"}]),
                  funded_root, estate)
     tab = _tab()
     assert total.value == tab["excludedFromWeightingAmount"]
-    by = _run(_plan(operation="breakdown",
+    by = _run(_plan(operation="breakdown", population=_PIPELINE,
                     measures=[{"concept": "weighting_excluded_amount"}],
                     dimensions=["weighting_exclusion_reason"]), funded_root, estate)
     assert {c["weighting_exclusion_reason"]: c["value"] for c in by.cells} == {
         k: v["amount"] for k, v in tab["excludedByReason"].items()}
-    withdrawn = _run(_plan(measures=[{"concept": "weighting_excluded_case_count"}],
+    withdrawn = _run(_plan(population=_PIPELINE,
+                           measures=[{"concept": "weighting_excluded_case_count"}],
                            filters=_member("weighting_exclusion_reason", "not_forecast")),
                      funded_root, estate)
     assert withdrawn.value == tab["excludedByReason"]["not_forecast"]["count"]
     assert set(total.receipt["inputs"]) == {"pipeline"}
+    # The receipt proves the population the figure is measured over.
+    assert total.receipt["population_base"] == "pipeline"
+
+
+def test_each_figure_is_asked_about_the_population_it_is_measured_over():
+    """The 2026-09-29 spot check: 'how much pipeline is excluded because of
+    missing probability' was read, correctly, as the pipeline's exclusion —
+    and refused because the runtime executed `forecast` alone. The population
+    is now each figure's own declaration; a plan naming another is refused,
+    never answered from it."""
+    assert _MODEL.measure("weighting_excluded_amount").population == "pipeline"
+    assert _MODEL.measure("forecast_funded_balance").population == "forecast"
+    assert forecast_rt.EXECUTABLE_POPULATIONS == {"forecast", "pipeline"}
+    exclusion = _plan(population=_PIPELINE,
+                      measures=[{"concept": "weighting_excluded_amount"}],
+                      filters=_member("weighting_exclusion_reason",
+                                      "missing_probability"))
+    assert forecast_rt.check_eligibility(exclusion) == (True, "", "")
+    assert forecast_rt.execution_population(exclusion) == "pipeline"
+    on_the_forecast = _plan(measures=[{"concept": "weighting_excluded_amount"}])
+    assert forecast_rt.check_eligibility(on_the_forecast)[1] == \
+        forecast_rt.POPULATION_NOT_MEASURED
+    pipeline_forecast = _plan(population=_PIPELINE)
+    assert forecast_rt.check_eligibility(pipeline_forecast)[1] == \
+        forecast_rt.POPULATION_NOT_MEASURED
+
+
+def test_a_figure_measured_over_an_input_reads_that_input_alone():
+    doc = yaml.safe_load(semantic_model._ROOT.joinpath("forecast.yaml").read_text())
+    doc["measures"]["weighting_excluded_amount"]["inputs"] = ["funded", "pipeline"]
+    with pytest.raises(semantic_model.SemanticModelError, match="measured over"):
+        semantic_model._validate(doc, "forecast")
+    doc["measures"]["weighting_excluded_amount"]["inputs"] = ["pipeline"]
+    doc["measures"]["weighting_excluded_amount"]["population"] = "funded"
+    with pytest.raises(semantic_model.SemanticModelError, match="measured over"):
+        semantic_model._validate(doc, "forecast")
+    del doc["population"]
+    with pytest.raises(semantic_model.SemanticModelError, match="no population"):
+        semantic_model._validate(doc, "forecast")
+
+
+def test_the_excluded_pipeline_is_served_as_the_pipelines(monkeypatch, funded_root,
+                                                         estate):
+    payload = _served_forecast(
+        _intent(population=_PIPELINE,
+                measures=[{"concept": "weighting_excluded_amount"}],
+                filters=_member("weighting_exclusion_reason", "not_forecast")),
+        monkeypatch, funded_root, estate)
+    tab = _tab()
+    assert payload["metadata"]["governedPlan"]["executed"]["population_base"] == \
+        "pipeline"
+    assert payload["artifacts"][0]["kpis"][0]["rawValue"] == \
+        tab["excludedByReason"]["not_forecast"]["amount"]
+    assert tab["pipelineAsOfDate"] in payload["answer"]
 
 
 def test_the_owner_publishes_every_reason_and_they_add_up():

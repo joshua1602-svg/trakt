@@ -93,9 +93,15 @@ def _owner(funded_root, pipeline_root, threshold=None):
 # the declaration
 # --------------------------------------------------------------------------- #
 
-def test_the_runtime_declares_forecast_and_only_forecast():
+def test_the_runtime_declares_forecast_and_the_pipeline_input_never_funded():
+    """`forecast` is the capability's population; `pipeline` is declared by
+    the figures that describe the pipeline input alone (its exclusions from
+    weighting). Both are read from the semantic model; `funded` never is."""
     assert forecast_rt.CAPABILITY == "forecast"
-    assert forecast_rt.EXECUTABLE_POPULATIONS == frozenset({"forecast"})
+    assert forecast_rt.EXECUTABLE_POPULATIONS == frozenset({"forecast", "pipeline"})
+    assert forecast_rt.EXECUTABLE_POPULATIONS == frozenset(
+        forecast_rt.MODEL.populations())
+    assert "funded" not in forecast_rt.EXECUTABLE_POPULATIONS
     assert forecast_rt.EXECUTION_POPULATION == "forecast"
 
 
@@ -161,7 +167,8 @@ _PROJECTION = {"operation": "forecast_projection", "target": None,
       "measures": [{"concept": "forecast_funded_balance"}],
       "time": {"form": "series", "grain": "monthly"}},
      forecast_rt.OPERATION_NOT_SUPPORTED),
-    ({"population": {"base": "pipeline"}}, forecast_rt.POPULATION_NOT_FORECAST),
+    ({"population": {"base": "pipeline"}}, forecast_rt.POPULATION_NOT_MEASURED),
+    ({"population": {"base": "whole_book"}}, forecast_rt.POPULATION_NOT_FORECAST),
     ({"population": {"base": "funded", "lens": "direct"}},
      forecast_rt.SCOPE_NOT_SUPPORTED),
     ({"target": {"concept": "forecast_funded_balance", "comparator": "gt",

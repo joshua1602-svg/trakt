@@ -84,7 +84,13 @@ from mi_agent import semantic_model as _semantic_model
 #: another is folded into it as an alias. `borrower_structure` (a legacy band
 #: no book materialises) is now `borrower_type`, which funded preparation
 #: builds — "balance by borrower structure" used to fail on every book.
-VOCABULARY_VERSION = "2.8.0"
+#:
+#: 2.9.0 says which POPULATION the weighting exclusions are measured over (the
+#: pipeline), and what `lapsed` means in the pipeline's own words (an open case
+#: past its stage's validity window). The 2026-09-29 spot check read the three
+#: exclusion questions correctly and asked to clarify "lapsed past its stage
+#: window", having been told no such concept existed.
+VOCABULARY_VERSION = "2.9.0"
 
 
 # --------------------------------------------------------------------------- #
