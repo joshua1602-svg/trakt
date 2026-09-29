@@ -1142,11 +1142,11 @@ def _explained(receipt: Mapping[str, Any]) -> str:
     template = str(receipt.get("explain") or "")
     if not template:
         return ""
-    context = receipt.get("context") or {}
+    companions = receipt.get("context") or {}
     values = {}
     for _, key, _, _ in string.Formatter().parse(template):
         if key:
-            raw = context.get(key)
+            raw = companions.get(key)
             values[key] = ("n/a" if raw is None
                            else f"{float(raw):,.0f}" if key.endswith("_count")
                            else _money(raw))
