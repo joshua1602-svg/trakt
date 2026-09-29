@@ -9,6 +9,10 @@
 #
 #     for d in $(ls -td /tmp/*/ ); do [ -f "$d/mi_agent_api/app.py" ] && cd "$d" && break; done
 #     bash mi_agent_api/run_production_bank.sh <principal object id>
+#     bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...>
+#
+# The optional second argument asks only the named bank questions — a spot
+# check of particular changes rather than the whole bank.
 #
 # It asks each question once through the path POST /mi/query uses, so it costs
 # ~135 model interpretations. It REFUSES before asking anything when the build
@@ -22,13 +26,16 @@
 set -euo pipefail
 
 PRINCIPAL="${1:-}"
+IDS="${2:-}"
 if [[ -z "${PRINCIPAL}" ]]; then
-  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id>" >&2
+  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> [id,id,...]" >&2
   exit 2
 fi
 CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,forecast_scale"
 EXPECTED_QUESTIONS=135
-EXPECTED_VOCABULARY="2.3.0"
+# The oldest vocabulary with the forecast definitions: an older build is not
+# the one being measured.
+MINIMUM_VOCABULARY="2.3.0"
 
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${APP_ROOT}"
@@ -54,11 +61,11 @@ if [[ -n "${PYTHONPATH:-}" ]]; then
 fi
 
 echo "app directory: ${APP_ROOT}"
-python - "${PRINCIPAL}" "${CATEGORIES}" "${EXPECTED_QUESTIONS}" "${EXPECTED_VOCABULARY}" <<'PY'
+python - "${PRINCIPAL}" "${CATEGORIES}" "${EXPECTED_QUESTIONS}" "${MINIMUM_VOCABULARY}" "${IDS}" <<'PY'
 import json, os, sys
 from pathlib import Path
 
-principal, categories, expected, vocabulary = sys.argv[1:5]
+principal, categories, expected, vocabulary, ids = sys.argv[1:6]
 problems = []
 
 build = Path("build_info.json")
@@ -67,9 +74,11 @@ print(f"deployed commit: {commit or '(no build_info.json)'}")
 
 from mi_agent.interpretation_v2.vocabulary import VOCABULARY_VERSION
 print(f"vocabulary: {VOCABULARY_VERSION}")
-if VOCABULARY_VERSION != vocabulary:
-    problems.append(f"this build's vocabulary is {VOCABULARY_VERSION}, not "
-                    f"{vocabulary}: deploy claude/wizardly-faraday-o712ib first")
+def _v(text):
+    return tuple(int(x) for x in str(text).split("."))
+if _v(VOCABULARY_VERSION) < _v(vocabulary):
+    problems.append(f"this build's vocabulary is {VOCABULARY_VERSION}, older "
+                    f"than {vocabulary}: deploy claude/wizardly-faraday-o712ib first")
 
 from mi_agent import plan_serving_canary as canary
 from mi_agent import plan_shadow_evidence as evidence
@@ -87,11 +96,20 @@ if not sink:
     problems.append(f"{evidence.SINK_ENV_VAR} is unset: nothing would be recorded")
 
 from mi_agent_api.question_bank import DEFAULT_BANKS, load_bank
-wanted = set(categories.split(","))
-count = sum(1 for r in load_bank(DEFAULT_BANKS) if r.get("category") in wanted)
-print(f"questions selected: {count}")
-if count != int(expected):
-    problems.append(f"{count} questions selected, not {expected}")
+rows = load_bank(DEFAULT_BANKS)
+if ids:
+    wanted_ids = {i.strip() for i in ids.split(",") if i.strip()}
+    count = sum(1 for r in rows if r.get("id") in wanted_ids)
+    missing = sorted(wanted_ids - {r.get("id") for r in rows})
+    print(f"questions selected: {count} (spot check)")
+    if missing:
+        problems.append(f"not in the bank: {', '.join(missing)}")
+else:
+    wanted = set(categories.split(","))
+    count = sum(1 for r in rows if r.get("category") in wanted)
+    print(f"questions selected: {count}")
+    if count != int(expected):
+        problems.append(f"{count} questions selected, not {expected}")
 
 for p in problems:
     print(f"REFUSED: {p}")
@@ -108,7 +126,7 @@ START="$(date -u +%Y-%m-%dT%H:%M:%S)"
   echo
 } > "${LOG}"
 nohup python -m mi_agent_api.question_bank \
-  --principal "${PRINCIPAL}" --categories "${CATEGORIES}" --out "${OUT}" \
+  --principal "${PRINCIPAL}" $([[ -n "${IDS}" ]] && echo "--ids ${IDS}" || echo "--categories ${CATEGORIES}") --out "${OUT}" \
   >> "${LOG}" 2>&1 &
 
 echo
