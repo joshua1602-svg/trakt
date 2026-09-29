@@ -84,6 +84,26 @@ def summarise(record: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def why_lines(record: Dict[str, Any], summary: Dict[str, Any]) -> List[str]:
+    """The reading and the reason a question was not served, in a few short
+    lines: the plan's measures, axes and filters, the perimeter's own detail,
+    and any ambiguity the model marked blocking. Plan-level fields only — no
+    row, value or borrower detail — and redacted like the projection."""
+    lines = [f"reading: measures={summary.get('measures')} "
+             f"dimensions={summary.get('dimensions')} "
+             f"filters={summary.get('filters')}"]
+    detail = str((record.get("eligibility") or {}).get("detail") or "")
+    if detail:
+        lines.append(f"why: {detail[:300]}")
+    payload = (record.get("raw_model_payload") or record.get("candidate_intent")
+               or {})
+    for item in (payload.get("ambiguity") or ()):
+        if isinstance(item, dict) and item.get("blocking"):
+            lines.append(f"clarify: {item.get('slot')}: "
+                         f"{str(item.get('note') or '')[:300]}")
+    return [str(redact(line)) for line in lines]
+
+
 def select(rows: List[Dict[str, Any]], bank: List[Dict[str, Any]], *,
            since: Optional[str]) -> Dict[str, Optional[Dict[str, Any]]]:
     """`{question id: record or None}`, per the rule in the module docstring."""
@@ -165,6 +185,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                   f"{s['operation']} base={s['population_base']} "
                   f"period={s['period']['form']} -> {s['serving_decision']} "
                   f"{s['serving_reason'] or ''}")
+            if s["serving_decision"] != "NEW":
+                # WHY IT FELL, readable in the job log itself — the artifact is
+                # not always reachable from where the readback is read.
+                for line in why_lines(record, s):
+                    print(f"      {line}")
         else:
             print(f"[{case['n']:>3}] {case['id']:<22} NO RECORD")
         report["cases"][case["id"]] = entry
