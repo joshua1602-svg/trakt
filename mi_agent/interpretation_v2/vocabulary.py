@@ -79,7 +79,12 @@ from mi_agent import semantic_model as _semantic_model
 #: ladder — and lets a forecast be broken down. The three 2.3.0 definitions
 #: keep every phrase that ruled out a production misread, and now point to the
 #: concept that answers it.
-VOCABULARY_VERSION = "2.7.0"
+#:
+#: 2.8.0 shows ONE concept per meaning: a registry field `superseded_by`
+#: another is folded into it as an alias. `borrower_structure` (a legacy band
+#: no book materialises) is now `borrower_type`, which funded preparation
+#: builds — "balance by borrower structure" used to fail on every book.
+VOCABULARY_VERSION = "2.8.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -1044,6 +1049,24 @@ def load_governed_vocabulary() -> GovernedVocabulary:
             canonical.get(canonical_field) or {}, values)
         if concept is not None:
             concepts[concept.concept_id] = concept
+
+    # ONE CONCEPT PER MEANING. A registry field `superseded_by` another is a
+    # second name for the same fact (the registry records which is governed);
+    # the model is shown only the governed one, and the superseded name and
+    # its synonyms become aliases of it, so a reader's words still resolve —
+    # to the field the books carry. A successor that is not itself a concept
+    # leaves the field as it was: nothing is folded into nothing.
+    for canonical_field, entry in sorted(mi_fields.items()):
+        successor = str((entry or {}).get("superseded_by") or "")
+        if not successor or successor not in concepts \
+                or canonical_field not in concepts:
+            continue
+        retired = concepts.pop(canonical_field)
+        folded = {canonical_field, *retired.aliases}
+        folded.discard(successor)
+        target = concepts[successor]
+        concepts[successor] = replace(
+            target, aliases=tuple(sorted(set(target.aliases).union(folded))))
 
     # Default weights, now that every identifier exists.
     for concept_id, concept in list(concepts.items()):

@@ -96,6 +96,8 @@ CLARIFY_NOT_SERVED = "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
 REFUSE_NOT_SERVED = "REFUSE_NOT_SERVED_IN_THIS_SLICE"
 INELIGIBLE = "INELIGIBLE"
 EXECUTION_FAILED = "EXECUTION_FAILED"
+#: The plan names a governed field the book being answered does not carry.
+FIELD_NOT_IN_BOOK = "FIELD_NOT_IN_BOOK"
 RECONCILIATION_FAILED = "PLAN_RECEIPT_RECONCILIATION_FAILED"
 RENDER_FAILED = "RENDER_FAILED"
 UNEXPECTED_ERROR = "UNEXPECTED_ERROR"
@@ -1690,6 +1692,19 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
 
     from mi_agent.mi_query_executor import execute_mi_query
     spec = adapter.spec_for_plan(plan)
+    # A FIELD THIS BOOK DOES NOT CARRY is a fact about the book, not a failed
+    # execution: the executor's own validator says which governed fields have
+    # no column here, and the attempt is recorded as that — never as a crash,
+    # and never answered from a neighbouring field.
+    missing = adapter.fields_not_in_book(spec, semantics,
+                                         getattr(frame, "columns", None))
+    if missing:
+        body["execution"] = {"attempted": False,
+                             "why_not": (f"{FIELD_NOT_IN_BOOK}: this book carries "
+                                         f"no {', '.join(missing)}")[:300],
+                             "fields_not_in_book": missing}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{FIELD_NOT_IN_BOOK}"
     body["execution"] = {"attempted": True, "bound_spec": spec.to_dict(),
                          "requested_semantics": adapter.requested_semantics(plan)}
     try:

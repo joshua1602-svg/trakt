@@ -411,6 +411,9 @@ fields:
     display_name: Borrower Structure
     business_description: 'Single vs joint borrower band (derived from number_of_borrowers). Legacy: prefer
       borrower_type, which funded prep materialises from second-applicant presence.'
+    # The governed field for single vs joint: the interpreter is shown
+    # borrower_type, and "borrower structure" / "sole or joint" resolve to it.
+    superseded_by: borrower_type
     description: ''
     synonyms:
     - borrower structure

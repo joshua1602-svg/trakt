@@ -1153,3 +1153,44 @@ The D6 holds stay: `point_in_time/forecast_completion_rate` and
 `forecast_projection/forecast_funded_balance` are released only when the spot
 check shows the 2.7.0 readings have moved onto the new concepts. The scenario
 run-rates are declared and read the owner's figure, and wait on that release.
+
+## 17. Breadth — the funded book's remaining gaps (2026-09-29)
+
+From the 2026-09-29 run, 12 funded questions fell back. Each is closed at its
+owner, with the rule that closes it stated once:
+
+    "by region" (7)          INELIGIBLE:GEOGRAPHY_REQUESTED. The compiler had
+                             already resolved each to ONE field through the
+                             governed geography contract ("by region" is the
+                             client's reporting taxonomy); the funded adapter
+                             refused any geography wholesale. It now carries the
+                             binding to the executor — a grouping as an axis, a
+                             restriction ("in London") as a predicate through the
+                             one predicate accessor (`plan_predicates`) — and the
+                             coverage owner proves the axis on every receipt
+                             (`_geography_coverage`, shared with the specialist
+                             runtimes). The temporal path still refuses geography
+                             until it declares it carries one.
+    median / largest /       INELIGIBLE:MEASURE_NOT_GENERIC. The executor has
+    smallest (3)             always computed them; the adapter's statistic map
+                             lacked them. The answer names them ("Maximum Balance:
+                             £274K") — the label and money-format suffix lists
+                             gained `_min` / `_max`.
+    borrower structure (1)   EXECUTION_FAILED. A legacy concept for a band no book
+                             materialises; the registry already said "prefer
+                             borrower_type". Registry `superseded_by` folds a
+                             legacy name into its governed successor as an alias
+                             (vocabulary 2.8.0): one concept per meaning.
+    occupancy type (1)       EXECUTION_FAILED on the production book, which does
+                             not carry the field. A field the book lacks is now
+                             recorded as the book's (`FIELD_NOT_IN_BOOK`, named by
+                             the executor's own validator before executing), not
+                             as a crash — and never answered from a neighbour.
+    weighted-average         already closed (D10, 2.4.0).
+    valuation (1)
+
+On a production book whose preparation stamps the reporting region (the
+platform path does), "by region" now answers from the governed field; on a
+book that does not, it is FIELD_NOT_IN_BOOK. Serving that refusal to the reader
+— instead of falling back — belongs with served clarifications (§15, next).
+Pinned by `tests/interpretation_v2/test_funded_breadth.py`.

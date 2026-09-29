@@ -680,8 +680,15 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
                 f"the model was shown new concepts "
                 f"{sorted(after_ids - before_ids - AUTHORISED_CONCEPT_ADDITIONS)}"
                 f"; only {sorted(AUTHORISED_CONCEPT_ADDITIONS)} were authorised")
-            assert before_ids - after_ids == set(), (
-                f"the model lost concepts {sorted(before_ids - after_ids)}")
+            #: ONE CONCEPT PER MEANING. `borrower_structure` is the registry's
+            #: legacy second name for single vs joint ("Legacy: prefer
+            #: borrower_type"), a band no book materialises; it is folded into
+            #: `borrower_type` as an alias (`superseded_by`), so the reader's
+            #: words still resolve — to the field the books carry.
+            AUTHORISED_CONCEPT_REMOVALS = {"borrower_structure"}
+            assert before_ids - after_ids == AUTHORISED_CONCEPT_REMOVALS, (
+                f"the model lost concepts "
+                f"{sorted(before_ids - after_ids - AUTHORISED_CONCEPT_REMOVALS)}")
             continue
         if key == "capability_operations":
             for capability in sorted(set(was[key]) | set(now[key])):

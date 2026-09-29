@@ -149,7 +149,8 @@ def _infer_col_format(col: str, resolved: Dict[str, Any]) -> str:
         return "pct"
     # strip common aggregation suffixes to match a resolved canonical field
     base = col
-    for suffix in ("_sum", "_avg", "_weighted_avg", "_median", "_count", "_count_distinct"):
+    for suffix in ("_sum", "_avg", "_weighted_avg", "_median", "_min", "_max",
+                   "_count", "_count_distinct"):
         if base.endswith(suffix):
             base = base[: -len(suffix)]
             break
@@ -175,8 +176,8 @@ def _kpi_label(key: str, resolved: Dict[str, Any]) -> str:
     # `current_loan_to_value_weighted_avg` lost only "_avg" and read
     # "Average Current Loan To Value Weighted".
     base, agg = key, ""
-    for suffix in sorted(("_sum", "_avg", "_weighted_avg", "_median",
-                          "_count", "_count_distinct"), key=len, reverse=True):
+    for suffix in sorted(("_sum", "_avg", "_weighted_avg", "_median", "_min",
+                          "_max", "_count", "_count_distinct"), key=len, reverse=True):
         if base.endswith(suffix):
             base, agg = base[: -len(suffix)], suffix[1:]
             break

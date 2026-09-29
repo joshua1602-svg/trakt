@@ -362,6 +362,26 @@ def _execution_receipts(executed: Mapping[str, Any]) -> List[Dict[str, Any]]:
     return [dict(executed)]
 
 
+def _geography_coverage(requested: Mapping[str, Any],
+                        receipts: Sequence[Mapping[str, Any]],
+                        owner: str) -> Optional[Dict[str, Any]]:
+    """A GEOGRAPHY GROUPING IS AN AXIS TOO. It travels on its own slot, not
+    among the dimensions, so it is proved here, on every receipt: "balance by
+    region" answered as a total, or by another geography, is unaccounted. (A
+    geography RESTRICTION is a predicate, and is proved with the others.)"""
+    geography = requested.get("geography") or {}
+    if not (isinstance(geography, Mapping) and geography.get("group_by")):
+        return None
+    axis = str(geography.get("canonical_field") or "")
+    grouped = bool(axis) and bool(receipts) and all(
+        axis in {str(k) for k in (receipt.get("group_field_keys") or ())}
+        for receipt in receipts)
+    return {"kind": "governed_plan:geography", "field": axis or "geography",
+            "value": axis, "term": "region", "owner": owner,
+            "disposition": (_coverage_resolved() if grouped
+                            else _coverage_missing())}
+
+
 def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The coverage ledger for a governed-plan answer, or None if this is legacy.
 
@@ -462,21 +482,10 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
                 "disposition": (_coverage_resolved() if grouped
                                 else _coverage_missing()),
             })
-        # A GEOGRAPHY GROUPING IS AN AXIS TOO. It travels on its own slot, not
-        # among the dimensions, so it is proved here: "pipeline by region"
-        # answered as a total, or by another geography, is unaccounted.
-        geography = requested.get("geography") or {}
-        if isinstance(geography, Mapping) and geography.get("group_by"):
-            axis = str(geography.get("canonical_field") or "")
-            grouped = bool(axis) and axis in {
-                str(k) for k in (executed.get("group_field_keys") or ())}
-            entries.append({
-                "kind": "governed_plan:geography", "field": axis or "geography",
-                "value": axis, "term": "region",
-                "owner": "governed_plan + specialist execution receipt",
-                "disposition": (_coverage_resolved() if grouped
-                                else _coverage_missing()),
-            })
+        entry = _geography_coverage(requested, [executed],
+                                    "governed_plan + specialist execution receipt")
+        if entry:
+            entries.append(entry)
         # A THRESHOLD IS PART OF WHAT WAS ASKED. "When do we reach £250m?"
         # answered for £75m is a substitution no predicate or axis shows, and
         # it is the defect the milestone rule was moved to its owner to end. So
@@ -513,6 +522,10 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
             "disposition": (_coverage_resolved() if grouped
                             else _coverage_missing()),
         })
+    entry = _geography_coverage(requested, receipts,
+                                "governed_plan + execution_receipt")
+    if entry:
+        entries.append(entry)
     return {"version": 1, "concepts": entries,
             "unaccounted": [e for e in entries
                             if e["disposition"] == _coverage_missing()]}

@@ -42,7 +42,8 @@ from typing import (Any, Dict, FrozenSet, Iterable, List, Mapping, Optional,
                     Sequence, Tuple)
 
 from mi_agent.mi_query_spec import MIQuerySpec
-from mi_agent.query_plan import AVERAGE, COUNT, SUM, WEIGHTED_AVERAGE
+from mi_agent.query_plan import (AVERAGE, COUNT, MAX, MEDIAN, MIN, SUM,
+                                  WEIGHTED_AVERAGE)
 from mi_agent.query_plan_compiler import (_MANY_DIMENSIONS, _RENDERING,
                                           _executor_value)
 
@@ -115,6 +116,13 @@ _AGGREGATION: Mapping[str, str] = {
     "average": AVERAGE,
     "weighted_average": WEIGHTED_AVERAGE,
     "count": COUNT,
+    # The executor has always computed these (`mi_query_executor`); the plan
+    # states them as governed statistics the registry permits per field. The
+    # map was the only thing between "what is the median loan balance?" and
+    # the figure.
+    "median": MEDIAN,
+    "min": MIN,
+    "max": MAX,
 }
 
 #: What the executor calls a row count, mirroring `query_plan_compiler`'s own
@@ -272,7 +280,7 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 f"period.form={period.get('form')!r} needs the temporal owner, "
                 f"which this slice does not touch")
 
-    return check_structure(plan)
+    return check_structure(plan, geography=True)
 
 
 def requested_population_base(plan: Any) -> str:
@@ -383,10 +391,58 @@ def plan_predicates(body: Mapping[str, Any],
     population = body.get("population") or {}
     return (tuple(body.get("filters") or ())
             + tuple(output.get("filters") or ())
-            + tuple(population.get("scope_predicates") or ()))
+            + tuple(population.get("scope_predicates") or ())
+            + geography_predicates(body))
 
 
-def check_structure(plan: Any) -> Tuple[bool, str, str]:
+def _geography_bindings(body: Mapping[str, Any]) -> Tuple[Mapping[str, Any], ...]:
+    """The plan's geography binding(s), wherever the compiler put them.
+
+    The compiler writes one binding at plan level AND on its output; the same
+    binding read twice is one binding, not a second restriction."""
+    seen = set()
+    out = []
+    for b in (body.get("geography"),
+              *(o.get("geography") for o in (body.get("outputs") or ()))):
+        if not (isinstance(b, Mapping) and b):
+            continue
+        key = (b.get("canonical_field"), bool(b.get("group_by")),
+               tuple(str(v) for v in (b.get("values") or ())))
+        if key not in seen:
+            seen.add(key)
+            out.append(b)
+    return tuple(out)
+
+
+def geography_axis(plan: Any) -> Optional[str]:
+    """The governed field a plan GROUPS by geographically, or None.
+
+    The compiler already resolved the question's level and basis to ONE field
+    through the governed geography contract (`compiler._GEOGRAPHY_CONTRACT` —
+    "by region" is the client's reporting taxonomy); this reads that binding.
+    Nothing here chooses a geography.
+    """
+    for binding in _geography_bindings(_as_mapping(plan)):
+        if binding.get("group_by") and _bound(binding.get("canonical_field")):
+            return str(binding["canonical_field"])
+    return None
+
+
+def geography_predicates(plan: Any) -> Tuple[Mapping[str, Any], ...]:
+    """The plan's geography RESTRICTION ("in London"), as the predicate it is
+    on the field the compiler resolved — one equality, or one `in` list."""
+    out = []
+    for binding in _geography_bindings(_as_mapping(plan)):
+        values = [v for v in (binding.get("values") or ()) if v not in (None, "")]
+        if values and _bound(binding.get("canonical_field")):
+            out.append({"canonical_field": binding["canonical_field"],
+                        "concept": binding["canonical_field"],
+                        "comparator": "eq" if len(values) == 1 else "in",
+                        "value": values[0] if len(values) == 1 else list(values)})
+    return tuple(out)
+
+
+def check_structure(plan: Any, *, geography: bool = False) -> Tuple[bool, str, str]:
     """Everything the generic executor needs that is NOT about time.
 
     The population lens, the geography contract, the comparison and target
@@ -394,6 +450,10 @@ def check_structure(plan: Any) -> Tuple[bool, str, str]:
     measure and its statistic, and one predicate per field. Called by slice 1
     and by slice 2 alike, so a plan that is structurally inexpressible is
     refused identically whichever period it names.
+
+    `geography` is the caller's declaration that it carries the plan's resolved
+    geography binding to the executor (`geography_axis`,
+    `geography_predicates`). Slice 1 does; slice 2 does not yet, and refuses.
     """
     body = _as_mapping(plan)
     if not body:
@@ -441,14 +501,24 @@ def check_structure(plan: Any) -> Tuple[bool, str, str]:
     # `canonical_region_reporting`, and the shadow was grouping by their other
     # axis alone. The plan is the contract; an axis it states and this module
     # cannot carry is an ineligibility, never a narrowing.
-    for binding in (body.get("geography"),
-                    *(o.get("geography") for o in (body.get("outputs") or ()))):
-        if isinstance(binding, Mapping) and binding:
+    #
+    # SINCE THEN, SLICE 1 CARRIES IT. The binding names ONE resolved field; a
+    # grouping becomes an axis and a restriction a predicate on that field, so
+    # the executor computes exactly the breakdown the reader authorised, and
+    # the coverage owner proves the axis and the predicate ran. A binding with
+    # no resolved field, or one that neither groups nor restricts, is still
+    # refused — and so is every geography on a path that has not declared it
+    # carries one.
+    for binding in _geography_bindings(body):
+        carried = (geography and _bound(binding.get("canonical_field"))
+                   and (binding.get("group_by") or binding.get("values")))
+        if not carried:
             return (False, GEOGRAPHY_REQUESTED,
                     f"geography level={binding.get('resolved_level')!r} "
                     f"field={binding.get('canonical_field')!r} "
-                    f"group_by={bool(binding.get('group_by'))} — owned by the "
-                    f"geography basis resolver, which this slice does not touch")
+                    f"group_by={bool(binding.get('group_by'))} — "
+                    + ("not carried by this runtime" if not geography
+                       else "no resolved field to group or restrict by"))
 
     comparison = str(body.get("comparison_kind") or "none").strip().lower()
     if comparison != "none":
@@ -462,9 +532,14 @@ def check_structure(plan: Any) -> Tuple[bool, str, str]:
 
     output = outputs[0]
     dimensions = tuple(output.get("dimensions") or ())
-    if len(dimensions) > MAX_DIMENSIONS:
+    region = geography_axis(body) if geography else None
+    axes = len(dimensions) + (1 if region else 0)
+    if axes > MAX_DIMENSIONS:
         return (False, TOO_MANY_DIMENSIONS,
-                f"{len(dimensions)} dimensions, limit {MAX_DIMENSIONS}")
+                f"{axes} axes (geography included), limit {MAX_DIMENSIONS}")
+    if region and region in {str(d.get("canonical_field") or "") for d in dimensions}:
+        return (False, TOO_MANY_DIMENSIONS,
+                f"{region!r} is named as a dimension and as the geography")
     for dim in dimensions:
         if not _bound(dim.get("canonical_field")):
             return (False, DIMENSION_UNBOUND,
@@ -585,6 +660,10 @@ def spec_for_plan(plan: Any, *,
         metric = (_ROW_COUNT_FIELD if aggregation == COUNT
                   else measure.get("canonical_field"))
     axes = [d.get("canonical_field") for d in (output.get("dimensions") or ())]
+    # The geography grouping the compiler resolved is an axis like any other.
+    region = geography_axis(body)
+    if region:
+        axes.append(region)
 
     # PRESENTATION, borrowed rather than invented. `MIQuerySpec` defaults to an
     # intent/chart_type pair its own validator rejects, and the estate already
@@ -620,6 +699,26 @@ def spec_for_plan(plan: Any, *,
         filters=_filters_for(body, output),
         explanation="Shadow execution of a governed plan (slice 1).",
     )
+
+
+def fields_not_in_book(spec: MIQuerySpec, semantics: Any,
+                       columns: Optional[Iterable[str]]) -> List[str]:
+    """The governed fields `spec` binds that have no column in this book.
+
+    Asked of the executor's own validator (`validate_mi_query`), the check it
+    runs before executing, so this names exactly what the executor would refuse
+    — and names it as the book's, not as an execution failure. Empty when the
+    semantics or the columns are not in hand; the executor then decides.
+    """
+    if columns is None or not isinstance(semantics, Mapping):
+        return []
+    from mi_agent.mi_query_validator import validate_mi_query
+
+    available = {str(c) for c in columns}
+    result = validate_mi_query(spec, semantics, available_columns=available)
+    return sorted({str(meta.get("canonical_field"))
+                   for meta in result.resolved_fields.values()
+                   if str(meta.get("canonical_field")) not in available})
 
 
 def requested_semantics(plan: Any) -> Dict[str, Any]:

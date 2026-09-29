@@ -111,7 +111,10 @@ def test_todays_compiler_reproduces_the_recorded_plans(replay):
         assert str(row["result"].outcome) == recorded["compile_outcome"], n
         if row["plan"] and row["plan"]["plan_id"] != recorded["plan_id"]:
             moved[n] = row["plan"]["population"]["base"]
-    assert moved == {112: "forecast", 113: "forecast", 125: "forecast"}
+    # 43 ("balance by borrower structure") now binds the governed
+    # borrower_type: the legacy concept is folded into it (`superseded_by`).
+    assert moved == {112: "forecast", 113: "forecast", 125: "forecast",
+                     43: "funded"}
 
 
 def test_exactly_the_pinned_questions_are_newly_admitted(replay):
