@@ -406,3 +406,7 @@ intents added beside the baseline's.
                 summary naming amount and case count, refused). Built (§30):
                 the pipeline summary accepts the headline figures it states.
                 Not deployed yet
+    2026-09-30  19:52 UTC 8463fd03 deployed (run 36768321984, success, no
+                retry): a "what changed" summary may name the headline figures
+                it states (§30). Suites: no new failure. Next: the full bank
+                (`all`, the D13 measurement), then a third held-out set
