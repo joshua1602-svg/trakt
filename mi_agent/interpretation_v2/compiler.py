@@ -85,6 +85,7 @@ from .plan import (
 )
 from .vocabulary import (
     CHANGE_FORM_ABSENT_PERIOD_DEFAULT,
+    CAPABILITY_CHANGE_FORMS,
     CHANGE_FORM_CAPABILITY,
     CHANGE_FORM_MODE,
     CAPABILITY_OPERATIONS,
@@ -1205,6 +1206,9 @@ class DeterministicCompiler:
         under ``compiler_bindings["normalisation"]``, because the rewrite is the
         compiler's decision and belongs on the compiler's side of the line.
         """
+        # The capability the plan is BOUND to — normalisation's, not the claim.
+        bound_capability = getattr(getattr(normalised, "intent", None),
+                                   "capability", None) or intent.capability
         claims: Dict[str, Any] = {
             "capability": intent.capability,
             "operation": intent.operation,
@@ -1251,7 +1255,14 @@ class DeterministicCompiler:
             # reading.
             "change_form": {
                 "form": intent.change_form,
-                "capability": CHANGE_FORM_CAPABILITY.get(intent.change_form),
+                # The capability that implements the form HERE: the plan's own
+                # where it implements the form over its own figures (the
+                # pipeline's change between snapshots), else the funded
+                # book's owner of the form.
+                "capability": (bound_capability
+                               if intent.change_form in CAPABILITY_CHANGE_FORMS.get(
+                                   bound_capability, ())
+                               else CHANGE_FORM_CAPABILITY.get(intent.change_form)),
                 "mode": CHANGE_FORM_MODE.get(intent.change_form or ""),
             } if intent.change_form else None,
         }

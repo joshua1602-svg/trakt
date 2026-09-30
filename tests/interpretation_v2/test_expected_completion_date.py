@@ -38,14 +38,18 @@ def test_each_stage_date_rests_on_the_stages_own_timing(history):
     latest = _iso(history["observationWindowEnd"])
     for stage, row in history["expectedCompletionByStage"].items():
         assert row["liveCases"] >= 1
+        assert row["liveCases"] == row["lapsedCases"] + row["datedCases"] or \
+            "medianDate" not in row
         if stage not in timing:
             assert "medianDate" not in row    # no completion from it, no date
             continue
         assert row["medianDays"] == timing[stage]["medianDays"]
         assert row["completionsObserved"] == timing[stage]["observed"]
+        if "medianDate" not in row:
+            continue                          # every live case lapsed
         assert _iso(row["medianDate"]) <= latest + dt.timedelta(
             days=row["medianDays"])
-        assert 0 <= row["pastTypical"] <= row["liveCases"]
+        assert 0 <= row["pastTypical"] <= row["datedCases"]
 
 
 def test_the_date_by_stage_is_the_owners(history):
@@ -64,8 +68,9 @@ def test_one_stage_is_that_stages_date_with_its_evidence(history):
                      filters=_stage("origin_stage", "OFFER")), history)
     assert out.value == owner["medianDate"]
     assert out.receipt["member_evidence"] == {
-        k: owner[k] for k in ("liveCases", "medianDays", "completionsObserved",
-                              "pastTypical")}
+        k: owner.get(k) for k in ("liveCases", "lapsedCases", "datedCases",
+                                  "windowDays", "medianDays",
+                                  "completionsObserved", "pastTypical")}
 
 
 def test_the_whole_live_pipeline_is_the_owners_median(history):
@@ -81,7 +86,8 @@ def test_the_answer_is_a_date_that_says_it_is_conditional(monkeypatch, history):
     assert answer.startswith("Expected completion date: "
                              + history["expectedCompletion"]["medianDate"])
     assert "that complete" in answer and "not a promise" in answer
-    assert f"{history['expectedCompletion']['liveCases']:,} live cases" in answer
+    assert f"{history['expectedCompletion']['datedCases']:,} live cases" in answer
+    assert f"{history['expectedCompletion']['lapsedCases']:,} more have sat" in answer
 
 
 def _intent_for_the_whole_pipeline():
@@ -158,3 +164,61 @@ def test_one_stage_says_it_is_the_current_stage_and_carries_the_caveat(
     answer = _served(intent, monkeypatch, history)["answer"]
     assert answer.startswith("Expected completion date (current stage: Offer): ")
     assert "not a promise that they will" in answer
+
+
+
+# --------------------------------------------------------------------------- #
+# D17: lapsed cases are not dated (owner decision 2026-09-30)
+# --------------------------------------------------------------------------- #
+
+def test_a_lapsed_case_is_counted_and_left_out_of_the_date():
+    """The 13:49 check answered 2026-04-01 for a pipeline as at 2026-09-24:
+    most live cases were KFIs sat far past the stage's validity window. The
+    forecast gives such a case no weight; the date now leaves it out too."""
+    from mi_agent_api.pipeline_history import _expected_completion
+    latest = "2026-09-24"
+    timelines = {
+        # Entered KFI in January: past a 14-day window — lapsed.
+        "stale": {"last_seen": latest, "final_stage": "KFI",
+                  "stages": {"KFI": "2026-01-05"}, "kfi_date": "2026-01-05"},
+        # Entered KFI last week: inside the window — dated.
+        "fresh": {"last_seen": latest, "final_stage": "KFI",
+                  "stages": {"KFI": "2026-09-17"}, "kfi_date": "2026-09-17"},
+        # No entry date: the forecast cannot measure its time in stage, so it
+        # does not lapse it — nor does this.
+        "undated": {"last_seen": latest, "final_stage": "KFI",
+                    "stages": {"KFI": "2026-09-10"}},
+    }
+    timing = {"KFI": {"medianDays": 60, "observed": 40}}
+    by_stage, overall = _expected_completion(
+        timelines, timing, latest, 20, windows={"KFI": 14},
+        window_basis={"KFI": "measured"})
+    row = by_stage["KFI"]
+    assert (row["liveCases"], row["lapsedCases"], row["datedCases"]) == (3, 1, 2)
+    assert row["windowDays"] == 14 and row["windowBasis"] == "measured"
+    assert row["medianDate"] == "2026-11-09"          # 2026-09-10 + 60 days
+    assert overall["medianDate"] >= latest
+    assert (overall["liveCases"], overall["lapsedCases"],
+            overall["datedCases"]) == (3, 1, 2)
+
+
+def test_the_window_is_the_forecasts_own():
+    """One definition of lapsed: the forecast's tier-4 rule and the date read
+    the same function over the same run-off model."""
+    import inspect
+    from mi_agent_api import pipeline_history, pipeline_prep
+    assert "stage_validity_windows(runoff)" in inspect.getsource(
+        pipeline_history.build_historical_completion_model)
+    assert "windows = stage_validity_windows(runoff)" in inspect.getsource(
+        pipeline_prep._derive_probabilities_and_amounts)
+
+
+def test_the_history_publishes_the_window_it_applied(history):
+    windows = pipeline_prep_windows(history)
+    for stage, row in history["expectedCompletionByStage"].items():
+        assert row["windowDays"] == windows.get(stage)
+
+
+def pipeline_prep_windows(history):
+    from mi_agent_api.pipeline_prep import stage_validity_windows
+    return stage_validity_windows(history["runoff"])

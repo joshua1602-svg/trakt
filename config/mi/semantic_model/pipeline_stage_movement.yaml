@@ -139,11 +139,15 @@ measures:
     value: expectedCompletion.medianDate
     inputs: [case_history]
     context:
-      live_case_count: expectedCompletion.liveCases
+      dated_case_count: expectedCompletion.datedCases
+      lapsed_case_count: expectedCompletion.lapsedCases
     explain: >-
-      the median over the {live_case_count} live cases of the date each was first
-      seen at its stage plus the book's median time to complete from that
-      stage, measured on the cases that did complete
+      the median over the {dated_case_count} live cases still inside their
+      stage's validity window of the date each was first seen at its stage
+      plus the book's median time to complete from that stage, measured on
+      the cases that did complete; {lapsed_case_count} more have sat in their
+      stage past that window and are lapsed, as the forecast treats them, so
+      are not dated
     caveat: >-
       A date for the cases that complete, not a promise that they will
     by:
@@ -152,19 +156,24 @@ measures:
         label: current stage
         map: expectedCompletionByStage
         value: medianDate
-        # What each date rests on, stated with it: the live cases, the median
-        # days to complete from the stage, the completions that measured it,
-        # and how many live cases are already past it.
-        also: [liveCases, medianDays, completionsObserved, pastTypical]
+        # What each date rests on, stated with it: the live cases, how many
+        # are lapsed past the stage's validity window (D17) and how many are
+        # dated, the median days to complete from the stage, the completions
+        # that measured it, and how many dated cases are already past it.
+        also: [liveCases, lapsedCases, datedCases, windowDays, medianDays,
+               completionsObserved, pastTypical]
         provisional_unless: sufficient
-    # Owner decision 2026-09-30 ("a date answer based on historical time to
-    # complete using the client's time series"). No date in the definition:
+    # Owner decisions 2026-09-30: "a date answer based on historical time to
+    # complete using the client's time series"; D17, lapsed cases are not
+    # dated (the forecast's own validity windows). No date in the definition:
     # the model is shown none (test_model_sees_no_data).
     definition: >-
       WHEN the live pipeline is expected to complete, from the book's own
       history: for each live case, the date it was
       first seen at its current stage plus the median time this book's cases
-      have taken to complete from that stage. It is the answer to WHEN live
+      have taken to complete from that stage. A case that has sat in its
+      stage past the stage's validity window is lapsed, as the forecast treats
+      it, and is not dated (owner decision D17). It is the answer to WHEN live
       cases will complete, or how long until they do — a date, for the whole
       live pipeline or by origin_stage for each stage. It is conditional on
       completing: the share that complete is

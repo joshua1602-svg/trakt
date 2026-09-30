@@ -109,6 +109,22 @@
         does not. When the question does not say which, the agent asks.
         Owner agreed.
 
+    D15 THE PIPELINE'S "PREVIOUS"                             SETTLED 2026-09-30
+        "Week on week is difficult because the reporting of the pipeline is
+        adhoc — so it should strictly be between the two most recent pipeline
+        snapshots." Previous, prior, last week and week on week of the
+        pipeline are the snapshot before the latest, whatever the gap; the
+        answer names both dates and the gap. §26.1.
+
+    D16 "EXPECTED TO COMPLETE IN A MONTH"                     SETTLED 2026-09-30
+        The pipeline amount of the cases due then, at face value, with the
+        weighted figure alongside. §26.2.
+
+    D17 THE EXPECTED COMPLETION DATE                          SETTLED 2026-09-30
+        Leaves out lapsed cases — the forecast's own rule: a case past its
+        stage's validity window carries no weight and is not dated; the
+        answer says how many are lapsed. §26.3.
+
     D12 PIPELINE "BY REGION"                                  SETTLED 2026-09-29
         The client's reporting regions, on the Pipeline tab and in an agent
         answer alike. The pipeline is harmonised with the funded book's region
@@ -1753,3 +1769,60 @@ fixed the file is spent: the next proof needs variants written after that fix.
 The proof the pass mark (D13) asks for is then both: every must-answer bank
 question answered correctly, nothing wrong, AND the held-out variants
 answering as their bank questions do.
+
+## 26. The held-out variants check; D15, D16, D17 (2026-09-30)
+
+The 13:49 check on 2d6df14d (vocabulary 2.15.0): the eighteen questions changed
+for since 2026-09-29, each followed by its held-out variants (42 asked; the
+readback found all 42). 17 of 21 variants compared answered exactly as their
+bank question. The four that did not:
+
+    [82]  x2   "How has the pipeline changed since the previous extract?",
+               "Latest pipeline against the one before it: what moved?" —
+               read as a `material_summary` with no measure, sent to the
+               FUNDED book's owner of the form, refused for the population.
+    [57]       "What's due to complete out of the pipeline next month?" £7.8m
+               (face value) against the bank question's £4.8m (weighted):
+               two readings of one question.
+    [122]      "How long until we're big enough to securitise?" — both
+               readings wait on OCC activating ERE's stage (PR #510).
+
+And [135] answered 2026-04-01 for a pipeline as at 2026-09-24: most live cases
+are KFIs sat far past their stage's window.
+
+### 26.1 D15 — the pipeline's "previous" is the snapshot before the latest
+
+A change form's owner was chosen from the form alone: `material_summary` is
+the funded book's. With no measure to name an owner, the POPULATION now does
+(`vocabulary.POPULATION_CHANGE_OWNER`, normalisation rule 4): a change in the
+pipeline is the pipeline's, where it implements the form. The pipeline now
+implements `material_summary` — what moved between two snapshots: the change
+in each headline figure (amount, case count, weighted amount), from the same
+weekly owner, through the semantic engine's `period_change`
+(`plan_pipeline_runtime._dated_summary`). "Previous", "prior", "last week" and
+"week on week" select the latest snapshot and the one before it whatever the
+gap, and the answer names both and the gap — "between the previous snapshot
+(2026-09-21) and the latest snapshot (2026-09-24), 3 days apart" — never "a
+week before". Pinned by `test_pipeline_previous_snapshot.py`.
+
+### 26.2 D16 — expected to complete in a month is face value
+
+The Pipeline tab publishes, for each month bucket, the amount, the case count
+and the weighted amount of the same cases. The model is told the month's
+"how much" is the amount at face value and the weighted figure only when
+weighting is asked for; every answer states the figures it did not lead with
+(`receipt["timing_figures"]`). Pinned by
+`test_expected_in_a_month_is_face_value.py`.
+
+### 26.3 D17 — lapsed cases are not dated
+
+`pipeline_prep.stage_validity_windows` is now the one definition of lapsed,
+read by the forecast's weighting and by the history owner's expected date:
+a live case whose time in its stage (from the stage's entry date) exceeds the
+stage's window — measured by the run-off model where history supports it,
+else the configured fallback — is counted and left out of the date. Each
+stage publishes its live, lapsed and dated cases and the window applied.
+Pinned by `test_expected_completion_date.py`.
+
+Vocabulary 2.16.0. The variants that exposed D15–D17 are now spent: the next
+proof needs variants written after this build.

@@ -310,3 +310,11 @@ intents added beside the baseline's.
                 (run_production_bank.sh <principal> variants-recent: the 18
                 questions changed for since 2026-09-29, each followed by its
                 variants, 42 in all; `variants` for all 105)
+    2026-09-30  13:49:43 UTC held-out variants check on 2d6df14d (42 asked,
+                all recorded — the uploaded log was mid-run): 17 of 21
+                variants answered as their bank question. Owner decisions
+                D15 (the pipeline's "previous" = the snapshot before the
+                latest, whatever the gap), D16 (expected to complete in a
+                month = face value, weighted alongside), D17 (the expected
+                completion date leaves lapsed cases out). Built, vocabulary
+                2.16.0 (design §26). Storage revalidation is one listing

@@ -133,7 +133,14 @@ from mi_agent import semantic_model as _semantic_model
 #: expected completion date); each now states the meaning it rests on, with
 #: term-level synonyms only, so a reworded question reads the same as the
 #: bank's. Guarded by `test_no_bank_question_is_in_the_models_view.py`.
-VOCABULARY_VERSION = "2.15.0"
+#:
+#: 2.16.0 (owner decisions 2026-09-30, P0 design §26): D15, what moved in the
+#: pipeline is the pipeline's own `material_summary` between its two most
+#: recent snapshots (`POPULATION_CHANGE_OWNER`); D16, what is expected to
+#: complete in a month is the pipeline amount at face value, the weighted
+#: figure only when weighting is asked for; D17, the expected completion date
+#: leaves lapsed cases out.
+VOCABULARY_VERSION = "2.16.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -439,8 +446,23 @@ CHANGE_FORM_CAPABILITY: Mapping[str, Optional[str]] = {
 #: here, so normalisation keeps the measure's owner rather than sending a
 #: pipeline change to a funded-book runtime that would refuse its population.
 CAPABILITY_CHANGE_FORMS: Mapping[str, FrozenSet[str]] = {
-    "pipeline": frozenset({"metric_delta", "level_comparison"}),
+    # `material_summary` since 2.16.0 (owner decision D15, 2026-09-30): what
+    # moved in the pipeline between its two most recent snapshots — the change
+    # in each of its headline figures, from the same weekly owner.
+    "pipeline": frozenset({"metric_delta", "level_comparison",
+                           "material_summary"}),
 }
+
+#: WHOSE CHANGE A POPULATION'S CHANGE IS, where no measure names an owner.
+#:
+#: `CHANGE_FORM_CAPABILITY` is the FUNDED book's owner of each form. A change
+#: question about another population with no measure named — "how has the
+#: pipeline changed since the previous extract?" — is still about THAT
+#: population, and its owner implements the form over its own figures
+#: (`CAPABILITY_CHANGE_FORMS`). The 13:49 check (2026-09-30) sent two such
+#: readings to the funded book's material summary, which refused the
+#: population: the form's owner had been chosen without the population.
+POPULATION_CHANGE_OWNER: Mapping[str, str] = {"pipeline": "pipeline"}
 
 CHANGE_FORM_MODE: Mapping[str, str] = {
     "metric_delta": "requested_metric",
@@ -661,7 +683,11 @@ SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
         "The LIVE pipeline weighted by each case's probability of completing — "
         "the Pipeline tab's weighted expected funded figure, also called the "
         "weighted pipeline or the expected completions from the pipeline. It is "
-        "the pipeline part of the forecast funded balance. It is NOT the "
+        "the pipeline part of the forecast funded balance. What is expected or "
+        "due to complete IN A MONTH (overdue, this month, next month) is the "
+        "pipeline AMOUNT of the cases due then, at face value — name this "
+        "measure there only when the question asks for the weighted or "
+        "probability-adjusted figure (owner decision D16). It is NOT the "
         "pipeline amount (unweighted), and NOT the forecast funded balance "
         "(which adds the funded book): 'the expected funded BALANCE' is the "
         "forecast funded balance — a balance the book is expected to hold — "
@@ -688,7 +714,11 @@ SPECIALIST_DIMENSION_DEFINITIONS: Mapping[str, str] = {
         "case is past its expected completion), `current_month` (this month) "
         "or `next_month` (the first month after). Filter on ONE value when "
         "the pipeline asked about is overdue, due this month or due next "
-        "month. A month used to describe the PIPELINE ITSELF — 'current month "
+        "month. HOW MUCH is expected or due to complete in it is the "
+        "`pipeline_amount` of those cases, at face value; the weighted "
+        "figure is `weighted_expected_funded_amount` only when the question "
+        "asks for weighting, and the answer states both (owner decision D16). "
+        "A month used to describe the PIPELINE ITSELF — 'current month "
         "pipeline', 'this month's pipeline', 'next month's pipeline', the "
         "pipeline due in or completing in a month — is this timing, NOT a "
         "reporting period: the pipeline is always read at its latest weekly "

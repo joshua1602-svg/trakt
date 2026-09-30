@@ -662,7 +662,7 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
 
     # 4-5. Validity windows and the run-off model.
     dwell = _stage_dwell_days(out, stage, rep_ts)
-    windows = _stage_windows(runoff)
+    windows = stage_validity_windows(runoff)
     if dwell is not None:
         out["pipeline_stage_dwell_days"] = dwell
         out["pipeline_stage_validity_days"] = stage.map(windows)
@@ -742,8 +742,11 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
     return "unavailable"
 
 
-_STAGE_ENTRY_FIELD = {"KFI": "kfi_date", "APPLICATION": "application_date",
-                      "OFFER": "offer_date"}
+#: The date a case entered each open stage — what a case's time IN the stage
+#: is measured from, here and in the expected completion date (D17).
+STAGE_ENTRY_FIELD = {"KFI": "kfi_date", "APPLICATION": "application_date",
+                     "OFFER": "offer_date"}
+_STAGE_ENTRY_FIELD = STAGE_ENTRY_FIELD
 
 
 def _stage_dwell_days(out: pd.DataFrame, stage: pd.Series,
@@ -765,9 +768,13 @@ def _stage_dwell_days(out: pd.DataFrame, stage: pd.Series,
     return dwell if found else None
 
 
-def _stage_windows(runoff: Optional[Dict[str, Any]]) -> Dict[str, int]:
+def stage_validity_windows(runoff: Optional[Dict[str, Any]]) -> Dict[str, int]:
     """Validity window (days) per stage: the run-off model's measured window
-    where history supports it, else the configured fallback."""
+    where history supports it, else the configured fallback.
+
+    THE ONE DEFINITION of when an open case has LAPSED: past this window it
+    carries no forecast weight (tier 4 below), and the expected completion
+    date leaves it out (owner decision D17, `pipeline_history`)."""
     from . import pipeline_runoff as _runoff
     fallback = dict(_runoff.DEFAULTS["fallback_validity_days"])
     fallback.update((runoff_settings().get("fallback_validity_days") or {}))

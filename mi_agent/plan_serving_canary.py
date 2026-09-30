@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
 from mi_agent import answer_standard as _standard
 from mi_agent import plan_runtime_adapter as adapter
@@ -664,9 +664,12 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                                description="Governed pipeline extract.")]
         timing = receipt.get("timing") or {}
         if timing:
-            # D11: the bucket, stated against the extract's month.
+            # D11: the bucket, stated against the extract's month; D16: with
+            # the figures the question did not name beside the one it did.
             answer = (f"The {phrase} {_timing_phrase(timing)} is "
-                      f"{_shown(value)}{as_at}.")
+                      f"{_shown(value)}{as_at}."
+                      + _timing_companions(receipt.get("measure_kind"),
+                                           receipt.get("timing_figures") or {}))
         else:
             answer = f"The {phrase} is {_shown(value)}{as_at}."
     elif shape == "grouped":
@@ -701,18 +704,49 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                 [(named(r[str(axis)]), _shown(r["value"])) for r in rows],
                 total=len(rows))
             answer = f"{lead}{as_at}."
+    elif shape == "dated_summary":
+        # WHAT MOVED BETWEEN TWO SNAPSHOTS (D15): every headline figure, from
+        # and to, and the change the semantic engine computed.
+        resolution = list(receipt.get("period_resolution") or ())
+        first, second, gap = _snapshot_pair(resolution)
+        parts = []
+        for row in outcome.cells:
+            name = _PIPELINE_LABELS.get(str(row["measure"]), str(row["measure"]))
+            money = row["measure"] != "pipeline_case_count"
+            parts.append(_moved_phrase(
+                ("live " if scope.get("population") == "open" else "") + name.lower(),
+                row, money=money))
+        answer = (f"Between {first} and {second}{gap}: " + "; ".join(parts) + ".")
+        rows = [{"measure": _PIPELINE_LABELS.get(str(r["measure"]), str(r["measure"])),
+                 "from": r["from"], "to": r["to"], "change": r["change"],
+                 "change_pct": r["change_pct"]} for r in outcome.cells]
+        dates = [str(r.get("extract_date")) for r in resolution]
+        columns = [{"key": "measure", "label": "Figure"},
+                   {"key": "from", "label": dates[0] if dates else "from"},
+                   {"key": "to", "label": dates[-1] if dates else "to"},
+                   {"key": "change", "label": "Change"},
+                   {"key": "change_pct", "label": "Change %"}]
+        artefacts = [_artefact("table", "What moved in the pipeline",
+                               rows=rows, columns=columns,
+                               description=f"{_standard.plural(len(rows), 'figure')}.")]
     elif shape in ("dated_change", "grouped_dated_change"):
         # THE CHANGE BETWEEN TWO DATED EXTRACTS (D13, §20): both figures, both
         # extracts and the rule that chose each, and the change the semantic
         # engine computed — never a change stated without what it is from.
         resolution = list(receipt.get("period_resolution") or ())
         dates = [str(r.get("extract_date")) for r in resolution]
+        snapshots = _is_snapshot_pair(resolution)
 
         def _at(i: int) -> str:
             row = resolution[i] if i < len(resolution) else {}
             asked = str(row.get("requested") or "")
+            if snapshots:
+                # D15: the snapshot it is, and its date — never "a week before".
+                return f"{asked} ({row.get('extract_date')})"
             named = f" ({asked})" if asked and asked != row.get("extract_date") else ""
             return f"the weekly extract of {row.get('extract_date')}{named}"
+
+        gap = _snapshot_pair(resolution)[2] if snapshots else ""
 
         def _signed(value: Any) -> str:
             return (_standard.signed_money(value) if is_amount
@@ -727,7 +761,7 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                           f"published no figure at one of the two extracts.")
             elif delta == 0:
                 answer = (f"The {phrase} was unchanged at {_shown(moved['to'])} "
-                          f"between {_at(0)} and {_at(1)}.")
+                          f"between {_at(0)} and {_at(1)}{gap}.")
             else:
                 verb = "rose" if delta > 0 else "fell"
                 size = _signed(delta).lstrip("+-")
@@ -735,7 +769,7 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                           + (f" ({_standard.signed_percent(pct)})" if pct is not None
                              else "")
                           + f", from {_shown(moved['from'])} at {_at(0)} to "
-                            f"{_shown(moved['to'])} at {_at(1)}.")
+                            f"{_shown(moved['to'])} at {_at(1)}{gap}.")
             rows = [dict(r) for r in outcome.cells]
             columns = [{"key": "period", "label": "Weekly extract"},
                        {"key": "value", "label": label}]
@@ -748,7 +782,7 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                 f"Change in the {phrase}", axis_label,
                 [(named(r[str(axis)]), _signed(r.get("change"))) for r in ranked],
                 total=len(ranked), word="largest moves")
-            answer = f"{lead}, from {_at(0)} to {_at(1)}."
+            answer = f"{lead}, from {_at(0)} to {_at(1)}{gap}."
             rows = [dict(r) for r in outcome.cells]
             columns = ([{"key": str(axis), "label": axis_label.capitalize()},
                         {"key": "from", "label": dates[0] if dates else "from"},
@@ -1496,6 +1530,64 @@ def _catalogue_notes(receipt: Mapping[str, Any]) -> List[Dict[str, str]]:
         notes.append({"field": "definition",
                       "note": f"owner decision {receipt.get('definition_decision')}"})
     return notes
+
+
+def _timing_companions(kind: Any, figures: Mapping[str, Any]) -> str:
+    """D16: the figures for the same cases that the headline is not — the
+    face value, the weighted value and the case count."""
+    amount, count, weighted = (figures.get("amount"), figures.get("count"),
+                               figures.get("weighted"))
+    parts = []
+    if kind != "amount" and amount is not None:
+        parts.append(f"at face value {_money(amount)}")
+    if kind != "weighted" and weighted is not None:
+        parts.append(f"weighted by each case's chance of completing "
+                     f"{_money(weighted)}")
+    if kind != "count" and count is not None:
+        parts.append(_standard.plural(int(count), "case"))
+    return (" " + "; ".join(parts)[:1].upper() + "; ".join(parts)[1:] + "."
+            if parts else "")
+
+
+def _is_snapshot_pair(resolution: Sequence[Mapping[str, Any]]) -> bool:
+    """Were these two extracts chosen as the latest snapshot and the one
+    before it (D15), rather than by a named month (D7)?"""
+    from mi_agent import plan_pipeline_runtime as _rt
+    return bool(resolution) and all(
+        str(r.get("rule") or "").startswith(_rt.SNAPSHOT_RULE) for r in resolution)
+
+
+def _snapshot_pair(resolution: Sequence[Mapping[str, Any]]) -> Tuple[str, str, str]:
+    """`(earlier, later, gap)` as a reader writes them: "the previous snapshot
+    (2026-09-21)", "the latest snapshot (2026-09-24)", ", 3 days apart"."""
+    from datetime import date
+    rows = list(resolution)
+    named = [f"{r.get('requested')} ({r.get('extract_date')})" for r in rows]
+    gap = ""
+    try:
+        days = (date.fromisoformat(str(rows[-1]["extract_date"]))
+                - date.fromisoformat(str(rows[0]["extract_date"]))).days
+        gap = f", {_standard.plural(days, 'day')} apart"
+    except Exception:                                               # noqa: BLE001
+        pass
+    return (named[0] if named else "", named[-1] if named else "", gap)
+
+
+def _moved_phrase(name: str, row: Mapping[str, Any], *, money: bool) -> str:
+    """"the live pipeline amount rose £2.9m (+0.3%) to £969.8m"."""
+    def shown(v: Any) -> str:
+        return "n/a" if v is None else (_money(v) if money else f"{float(v):,.0f}")
+    delta = row.get("change")
+    if delta is None:
+        return f"{name}: no figure at one of the two snapshots"
+    if delta == 0:
+        return f"{name} unchanged at {shown(row.get('to'))}"
+    size = (_standard.signed_money(delta) if money
+            else f"{float(delta):+,.0f}").lstrip("+-")
+    pct = row.get("change_pct")
+    return (f"{name} {'rose' if delta > 0 else 'fell'} {size}"
+            + (f" ({_standard.signed_percent(pct)})" if pct is not None else "")
+            + f" to {shown(row.get('to'))}")
 
 
 #: Reader-facing names for the governed pipeline measures. Presentation only.

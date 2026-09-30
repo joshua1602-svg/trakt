@@ -226,6 +226,15 @@ TEMPORAL_GRAIN = "weekly"
 NATIVE_GRAIN_RULE = ("no grain was named, so 'previous' is the pipeline's own: "
                      "its previous weekly extract")
 
+#: D15 (owner decision 2026-09-30): "week on week is difficult because the
+#: reporting of the pipeline is adhoc — so it should strictly be between the
+#: two most recent pipeline snapshots". "Previous", "prior", "last week" and
+#: "week on week" of the pipeline are the snapshot before the latest, however
+#: far apart the two are; the answer names both dates and the gap, and never
+#: calls the earlier one "a week before".
+SNAPSHOT_RULE = ("D15: the pipeline is reported ad hoc, so 'previous' is the "
+                 "snapshot before the latest, whatever the gap between them")
+
 
 def _pair_grain(period: Mapping[str, Any]) -> Tuple[str, bool]:
     """`(grain, defaulted)` a relative pair is read on: the one it states, or
@@ -314,6 +323,27 @@ def timing_of(plan: Any) -> Optional[str]:
     return str(value).strip().lower() if value is not None else None
 
 
+#: A "WHAT MOVED" SUMMARY OF THE PIPELINE (D15; vocabulary 2.16.0): the
+#: `material_summary` form over the pipeline, which names no measure and is
+#: answered with the change in each of the pipeline's headline figures between
+#: the two snapshots, all from the same weekly owner.
+SUMMARY_FORM = "material_summary"
+SUMMARY_MEASURES: Tuple[str, ...] = ("pipeline_amount", "pipeline_case_count",
+                                     "weighted_expected_funded_amount")
+
+
+def change_form_of(plan: Any) -> Optional[str]:
+    """The analytical form the COMPILER read, from the plan's own bindings."""
+    provenance = _as_mapping(plan).get("provenance") or {}
+    bindings = provenance.get("compiler_bindings") or {}
+    form = (bindings.get("change_form") or {}).get("form")
+    return str(form) if form else None
+
+
+def is_summary(plan: Any) -> bool:
+    return change_form_of(plan) == SUMMARY_FORM
+
+
 def is_dated(plan: Any) -> bool:
     """Does this plan ask for the pipeline AT named points in time?"""
     period = _as_mapping(plan).get("period") or {}
@@ -394,6 +424,21 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 "the pipeline runtime serves no population comparison")
 
     measures = [str(m.get("concept") or "") for m in (output.get("measures") or ())]
+    if is_summary(body):
+        # WHAT MOVED between two snapshots: the headline figures, all of them,
+        # and nothing narrower — a named measure is a metric delta, a grouping
+        # a change by stage, and both have their own shape.
+        if measures or grouping_axes(body) or filters:
+            return (False, MEASURE_NOT_SUPPORTED,
+                    "a summary of what moved reports the pipeline's headline "
+                    "figures between two snapshots; it names no measure, "
+                    "grouping or filter")
+        if not is_dated(body):
+            return (False, PERIOD_NOT_SUPPORTED,
+                    "what moved in the pipeline is between two snapshots; "
+                    f"period.form={str((body.get('period') or {}).get('form'))!r} "
+                    f"names no pair")
+        return _dated_period_refusal(body, change=True) or (True, "", "")
     if len(measures) != 1:
         return (False, MEASURE_NOT_SUPPORTED,
                 f"exactly one measure is served; this plan names {measures}")
@@ -445,30 +490,9 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 f"a {operation} of the pipeline is between two dated extracts; "
                 f"period.form={form!r} names no pair of dates")
     if is_dated(body):
-        if operation not in DATED_OPERATIONS | CHANGE_OPERATIONS:
-            return (False, OPERATION_NOT_SUPPORTED,
-                    f"operation={operation!r} has no dated pipeline owner")
-        if form == "explicit_period" and not (period.get("labels") or ()):
-            return (False, PERIOD_NOT_SUPPORTED,
-                    "an explicit period with no label names no point in time")
-        if (operation in CHANGE_OPERATIONS and form == "explicit_period"
-                and len(period.get("labels") or ()) != 2):
-            return (False, PERIOD_NOT_SUPPORTED,
-                    f"a change is between two dates; this plan names "
-                    f"{len(period.get('labels') or ())}")
-        if form == "relative_pair":
-            grain, _ = _pair_grain(period)
-            back = period.get("periods_back")
-            if grain not in DATED_GRAINS:
-                return (False, PERIOD_NOT_SUPPORTED,
-                        f"a relative pair needs a weekly or monthly grain to "
-                        f"say what 'previous' means; this plan states "
-                        f"{grain or 'none'!r}")
-            if isinstance(back, bool) or not isinstance(back, int) or back < 1:
-                return (False, PERIOD_NOT_SUPPORTED,
-                        f"a relative pair needs a positive distance; this plan "
-                        f"states periods_back={back!r}")
-        return True, "", ""
+        return (_dated_period_refusal(body,
+                                      change=operation in CHANGE_OPERATIONS)
+                or (True, "", ""))
 
     if form not in CURRENT_PERIOD_FORMS:
         return (False, PERIOD_NOT_SUPPORTED,
@@ -478,6 +502,38 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
         return (False, OPERATION_NOT_SUPPORTED,
                 f"operation={operation!r} has no current pipeline owner")
     return True, "", ""
+
+
+def _dated_period_refusal(body: Mapping[str, Any], *, change: bool
+                          ) -> Optional[Tuple[bool, str, str]]:
+    """Why a dated plan's period cannot be served, or None if it can."""
+    operation = str(body.get("operation") or "")
+    period = body.get("period") or {}
+    form = str(period.get("form") or "")
+    if operation not in DATED_OPERATIONS | CHANGE_OPERATIONS:
+        return (False, OPERATION_NOT_SUPPORTED,
+                f"operation={operation!r} has no dated pipeline owner")
+    if form == "explicit_period" and not (period.get("labels") or ()):
+        return (False, PERIOD_NOT_SUPPORTED,
+                "an explicit period with no label names no point in time")
+    if (change and form == "explicit_period"
+            and len(period.get("labels") or ()) != 2):
+        return (False, PERIOD_NOT_SUPPORTED,
+                f"a change is between two dates; this plan names "
+                f"{len(period.get('labels') or ())}")
+    if form == "relative_pair":
+        grain, _ = _pair_grain(period)
+        back = period.get("periods_back")
+        if grain not in DATED_GRAINS:
+            return (False, PERIOD_NOT_SUPPORTED,
+                    f"a relative pair needs a weekly or monthly grain to "
+                    f"say what 'previous' means; this plan states "
+                    f"{grain or 'none'!r}")
+        if isinstance(back, bool) or not isinstance(back, int) or back < 1:
+            return (False, PERIOD_NOT_SUPPORTED,
+                    f"a relative pair needs a positive distance; this plan "
+                    f"states periods_back={back!r}")
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -867,6 +923,14 @@ def _execute_timing(body: Mapping[str, Any], *, measure: str, kind: str,
                                       "values": [timing]}]
     receipt["timing"] = {"value": timing, "as_of_month": summary.get("asOfMonth"),
                          "next_month": summary.get("nextExpectedCompletionMonth")}
+    # D16 (owner decision 2026-09-30): what is expected to complete in a month
+    # is stated at face value with the weighted figure alongside — and the
+    # case count — whichever of them the question asked for. All three are the
+    # tab's own figures for the same cases, read here, never computed.
+    receipt["timing_figures"] = {
+        k: (float(summary[_TAB_TIMING_KEY[(timing, k)]])
+            if summary.get(_TAB_TIMING_KEY[(timing, k)]) is not None else None)
+        for k in (_AMOUNT, _COUNT, _WEIGHTED)}
     receipt["completion_basis"] = COMPLETION_BASIS
     receipt["pipeline_scope"] = _noted(live_scope)
     return PipelineOutcome(ok=True, value=float(value), cells=None,
@@ -1076,13 +1140,16 @@ def _dated_selection(plan: Mapping[str, Any], dates: Sequence[str]
     if grain == "weekly":
         if len(ordered) <= back:
             return ([], PERIOD_NOT_AVAILABLE,
-                    f"{_plural(back, 'week')} back needs {back + 1} weekly extracts; the "
-                    f"history holds {len(ordered)}")
-        rule = (f"the latest weekly extract, and the one {_plural(back, 'extract')} "
-                f"before it" + (f" ({NATIVE_GRAIN_RULE})" if defaulted else ""))
-        return ([{"requested": f"{_plural(back, 'week')} before the latest",
-                  "extract_date": ordered[-1 - back], "rule": rule},
-                 {"requested": "latest", "extract_date": ordered[-1],
+                    f"{_plural(back, 'snapshot')} back needs {back + 1} "
+                    f"snapshots; the history holds {len(ordered)}")
+        rule = (f"{SNAPSHOT_RULE}: the latest snapshot, and the one "
+                f"{_plural(back, 'snapshot')} before it"
+                + (f" ({NATIVE_GRAIN_RULE})" if defaulted else ""))
+        earlier = ("the previous snapshot" if back == 1
+                   else f"{_plural(back, 'snapshot')} before the latest")
+        return ([{"requested": earlier, "extract_date": ordered[-1 - back],
+                  "rule": rule},
+                 {"requested": "the latest snapshot", "extract_date": ordered[-1],
                   "rule": rule}], "", "")
     latest = _month_of(ordered[-1]) if ordered else None
     if latest is None:
@@ -1117,6 +1184,9 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
     from mi_agent_api import evolution as evolution_mod
 
     body = _as_mapping(plan)
+    if is_summary(body):
+        return _dated_summary(body, root=root, client_id=client_id,
+                              to_run_id=to_run_id, history_model=history_model)
     output = _single_output(body) or {}
     measure = str((output.get("measures") or [{}])[0].get("concept") or "")
     kind = SUPPORTED_MEASURES[measure]
@@ -1178,6 +1248,65 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
         return _dated_change(body, cells=cells, chosen=chosen, receipt=receipt,
                              axis=dimensions[0] if dimensions else None)
     return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
+
+
+def _dated_summary(body: Mapping[str, Any], *, root: Any, client_id: str,
+                   to_run_id: Optional[str],
+                   history_model: Optional[Mapping[str, Any]]) -> PipelineOutcome:
+    """WHAT MOVED between two snapshots: each headline figure at both, and the
+    change the semantic engine computes — from the weekly owner's own series,
+    exactly the figures a named-measure change reads."""
+    from mi_agent import semantic_engine as engine
+    from mi_agent_api import evolution as evolution_mod
+
+    if not root or not client_id:
+        return PipelineOutcome(
+            ok=False, reason=HISTORY_UNAVAILABLE,
+            detail="no governed weekly pipeline history was supplied for this "
+                   "request")
+    try:
+        series = evolution_mod.pipeline_evolution(
+            root, client_id, to_run_id, historical_model=history_model)
+    except Exception as exc:                                         # noqa: BLE001
+        return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
+                               detail=f"{type(exc).__name__}: {exc}"[:200])
+    by_date = {str(p.get("extract_date") or ""): p
+               for p in (series.get("periods") or ())}
+    resolution, why, detail = _dated_selection(body, list(by_date))
+    if why:
+        return PipelineOutcome(ok=False, reason=why, detail=detail[:300])
+    chosen = [row["extract_date"] for row in resolution]
+    if len(chosen) != 2:
+        return PipelineOutcome(
+            ok=False, reason=PERIOD_NOT_SUPPORTED,
+            detail=f"what moved is between two snapshots; the plan's dates "
+                   f"resolved to {len(chosen)}")
+    earlier, later = chosen
+    rows, changes = [], {}
+    for measure in SUMMARY_MEASURES:
+        metric = _SERIES_METRIC[SUPPORTED_MEASURES[measure]]
+        at = {d: (by_date[d].get("metrics") or {}).get(metric) for d in chosen}
+        moved = engine.period_change(
+            None if at[earlier] is None else float(at[earlier]),
+            None if at[later] is None else float(at[later]))
+        changes[measure] = moved
+        rows.append({"measure": measure, "from": moved["from"],
+                     "to": moved["to"], "change": moved["change"],
+                     "change_pct": moved["change_pct"]})
+    dataset = {
+        "identity": "governed_weekly_pipeline_extracts",
+        "extracts_used": len(chosen),
+        "source_files": [str(by_date[d].get("source_file") or "") for d in chosen],
+    }
+    receipt = _receipt(body, measure="pipeline_headline_figures", kind="summary",
+                       dimensions=[], dataset=dataset, result_shape="dated_summary",
+                       owner=OWNER_EVOLUTION, periods=chosen)
+    receipt["measures_reported"] = list(SUMMARY_MEASURES)
+    receipt["changes"] = changes
+    receipt["change_owner"] = "semantic_engine.period_change"
+    receipt["period_resolution"] = resolution
+    receipt["pipeline_scope"] = _noted(_series_scope())
+    return PipelineOutcome(ok=True, cells=rows, value=None, receipt=receipt)
 
 
 def _dated_change(body: Mapping[str, Any], *, cells: List[Dict[str, Any]],

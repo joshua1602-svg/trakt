@@ -55,6 +55,7 @@ from .vocabulary import (CAPABILITY_CHANGE_FORMS,
                          CHANGE_FORM_CANONICAL_OPERATION,
                          CHANGE_FORM_CAPABILITY,
                          CHANGE_FORM_OPERATION_VARIANTS,
+                         POPULATION_CHANGE_OWNER,
                          GovernedVocabulary)
 
 __all__ = ["NORMAL_FORM_VERSION", "PAIR_IMPLYING_OPERATIONS",
@@ -340,8 +341,19 @@ def canonical_intent(intent: CandidateIntent,
     # there is nothing to reconcile — the form still decides the operation.
     owner_implements = bool(form and owner is not None
                             and form in CAPABILITY_CHANGE_FORMS.get(owner, ()))
+    # With no measure to name an owner, the POPULATION does: a change in the
+    # pipeline is the pipeline's to implement, where it implements the form
+    # (D15) — never the funded book's owner of the same form.
+    population_owner = POPULATION_CHANGE_OWNER.get(
+        getattr(intent.population, "base", None) or "")
+    if (form and owner is None and population_owner
+            and form in CAPABILITY_CHANGE_FORMS.get(population_owner, ())):
+        owner_implements = population_owner == intent.capability
     if form and not owner_implements:
         implied = CHANGE_FORM_CAPABILITY.get(form)
+        if (owner is None and population_owner
+                and form in CAPABILITY_CHANGE_FORMS.get(population_owner, ())):
+            implied = population_owner
         form_conflict = (owner is not None and implied is not None
                          and owner != implied)
         if form_conflict:

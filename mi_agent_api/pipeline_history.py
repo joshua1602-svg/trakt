@@ -24,7 +24,8 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from . import pipeline_runoff as _runoff
-from .pipeline_prep import ACTIVE_STAGES, case_stage_frame
+from .pipeline_prep import (ACTIVE_STAGES, STAGE_ENTRY_FIELD, case_stage_frame,
+                            stage_validity_windows)
 from trakt_core import perf as _perf
 
 # Minimum observed cases at a stage before its empirical rate is trusted. Short
@@ -183,9 +184,6 @@ def build_historical_completion_model(
     # WHEN THE LIVE PIPELINE IS EXPECTED TO COMPLETE, from the book's own history
     # (owner decision 2026-09-30: "a date answer based on historical time to
     # complete using the client's time series").
-    expected_by_stage, expected_all = _expected_completion(
-        timelines, timing_by_stage, max(dates) if dates else None,
-        min_observations)
 
     # Cumulative cohort progression: of the ORIGINAL KFI cohort, the % that has
     # reached each milestone (KFI -> Application -> Offer -> Funded) by each week.
@@ -218,6 +216,17 @@ def build_historical_completion_model(
          for t in timelines.values()),
         min(dates) if dates else None, max(dates) if dates else None,
         runoff_settings)
+
+    # WHEN THE LIVE PIPELINE IS EXPECTED TO COMPLETE, from the book's own history
+    # (owner decision 2026-09-30: "a date answer based on historical time to
+    # complete using the client's time series"), over the live cases the
+    # forecast has not lapsed (D17) — so after the run-off, whose measured
+    # validity windows are the forecast's.
+    expected_by_stage, expected_all = _expected_completion(
+        timelines, timing_by_stage, max(dates) if dates else None,
+        min_observations, windows=stage_validity_windows(runoff),
+        window_basis={s: (m or {}).get("windowBasis")
+                      for s, m in (runoff.get("stages") or {}).items()})
 
     return {
         "available": bool(stage_rates) or bool(runoff.get("available")),
@@ -253,7 +262,9 @@ def build_historical_completion_model(
 
 def _expected_completion(timelines: Dict[str, Dict[str, Any]],
                          timing_by_stage: Dict[str, Any], latest: Optional[str],
-                         min_observations: int
+                         min_observations: int, *,
+                         windows: Optional[Dict[str, int]] = None,
+                         window_basis: Optional[Dict[str, Any]] = None
                          ) -> "tuple[Dict[str, Any], Dict[str, Any]]":
     """When the LIVE pipeline is expected to complete, from the book's history.
 
@@ -265,37 +276,65 @@ def _expected_completion(timelines: Dict[str, Dict[str, Any]],
     CONDITIONAL on completing: most KFI cases never do (the completion rate by
     stage says how many), and the answer says so.
 
-    `(by stage, all live cases)`: per stage the live cases, the median
-    expected date, the median days it rests on, the completions that measured
-    it, how many live cases are already past it, and the owner's sufficiency
-    flag; over all live cases the median expected date.
+    LAPSED CASES ARE NOT DATED (owner decision D17, 2026-09-30). A live case
+    that has sat in its stage longer than the stage's validity window — the
+    forecast's own rule, `pipeline_prep.stage_validity_windows`, measured from
+    the stage's entry date as the forecast measures it — carries no forecast
+    weight, and dating it would put the answer in the past: the 13:49 check
+    answered 2026-04-01 for a pipeline as at 2026-09-24. It is counted, and
+    left out of the date.
+
+    `(by stage, all live cases)`: per stage the live cases, how many are
+    lapsed and against which window, the median expected date over the rest,
+    the median days it rests on, the completions that measured it, how many
+    dated cases are already past it, and the owner's sufficiency flag; over
+    all live cases the median expected date of those not lapsed.
     """
+    windows = windows or {}
     by_stage: Dict[str, Any] = {}
     every: List[str] = []
-    live_total = 0
+    live_total = lapsed_total = 0
     if not latest:
-        return by_stage, {"medianDate": None, "liveCases": 0, "asOf": None}
+        return by_stage, {"medianDate": None, "liveCases": 0, "lapsedCases": 0,
+                          "datedCases": 0, "asOf": None}
+    as_of = pd.Timestamp(latest)
     for stage in ACTIVE_STAGES:
         live = [t for t in timelines.values()
                 if t.get("last_seen") == latest and t.get("final_stage") == stage
                 and t["stages"].get(stage)]
         if not live:
             continue
+        window = windows.get(stage)
+        entry_field = STAGE_ENTRY_FIELD.get(stage)
+
+        def lapsed(t: Dict[str, Any]) -> bool:
+            entry = pd.to_datetime(t.get(entry_field), errors="coerce") \
+                if entry_field else pd.NaT
+            return (window is not None and pd.notna(entry)
+                    and (as_of - entry).days > window)
+
+        current = [t for t in live if not lapsed(t)]
         live_total += len(live)
+        lapsed_total += len(live) - len(current)
         # No completion from the stage in the history: no date, and said so.
-        row: Dict[str, Any] = {"liveCases": len(live), "sufficient": False}
+        row: Dict[str, Any] = {"liveCases": len(live),
+                               "lapsedCases": len(live) - len(current),
+                               "datedCases": 0, "windowDays": window,
+                               "windowBasis": (window_basis or {}).get(stage),
+                               "sufficient": False}
         timing = timing_by_stage.get(stage)
         if timing:
             days = int(timing["medianDays"])
-            firsts = pd.to_datetime([t["stages"][stage] for t in live],
+            firsts = pd.to_datetime([t["stages"][stage] for t in current],
                                     errors="coerce")
             expected = sorted((f + pd.Timedelta(days=days)).date().isoformat()
                               for f in firsts if pd.notna(f))
+            row.update({"medianDays": days,
+                        "completionsObserved": int(timing["observed"])})
             if expected:
                 row.update({
                     "medianDate": statistics.median_low(expected),
-                    "medianDays": days,
-                    "completionsObserved": int(timing["observed"]),
+                    "datedCases": len(expected),
                     "pastTypical": sum(1 for d in expected if d < latest),
                     "sufficient": int(timing["observed"]) >= min_observations,
                 })
@@ -303,7 +342,8 @@ def _expected_completion(timelines: Dict[str, Dict[str, Any]],
         by_stage[stage] = row
     return by_stage, {"medianDate": (statistics.median_low(sorted(every))
                                      if every else None),
-                      "liveCases": live_total, "asOf": latest}
+                      "liveCases": live_total, "lapsedCases": lapsed_total,
+                      "datedCases": len(every), "asOf": latest}
 
 
 # Origination funnel milestone order (entry -> exit). Funded == COMPLETED.
