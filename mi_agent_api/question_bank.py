@@ -120,6 +120,7 @@ def holdout_rows(mode: str) -> List[Dict[str, Any]]:
 def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
             lens: Optional[str], principal: str = "question-bank") -> Dict[str, Any]:
     from trakt_core import perf as _perf
+    from mi_agent_api import request_scope as _request_scope
 
     t0 = time.monotonic()
     _SERVING.clear()
@@ -127,13 +128,21 @@ def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
     try:
         # WHERE THE TIME GOES, per question: the same stage collector the HTTP
         # layer opens for every request (and reports as `Server-Timing`),
-        # opened here because the bank calls the service in-process.
-        with _perf.collect(route="question_bank") as collector:
+        # opened here because the bank calls the service in-process — and the
+        # same REQUEST SCOPE beside it, so a storage revalidation is made once
+        # per question as it is once per HTTP request. Without it the bank
+        # measured several revalidations a question that no user pays.
+        with _perf.collect(route="question_bank") as collector, \
+                _request_scope.scope():
             result = _ask(row["question"], portfolio=portfolio, lens=lens,
                           principal=principal)
             if collector is not None:
                 snap = collector.snapshot()
-                timing = {"total_ms": snap["total_ms"], "stages": snap["stages"]}
+                timing = {"total_ms": snap["total_ms"], "stages": snap["stages"],
+                          "stage_calls": snap.get("stage_calls", {}),
+                          "storage_calls": {
+                              k: v for k, v in (snap.get("counters") or {}).items()
+                              if k.startswith("storage.")}}
         res = result.result or {}
         meta = res.get("metadata") or {}
         ok = bool(res.get("ok"))

@@ -429,7 +429,7 @@ _BLOB_DATED_SNAPSHOT_RE = re.compile(
     r"/(?P<date>\d{4}-\d{2}-\d{2})/pipeline_snapshot\.csv$")
 
 
-def _blob_dated_snapshots(root: str, storage) -> List[Dict[str, str]]:
+def _blob_dated_snapshots(root: str, storage) -> List[Dict[str, Optional[str]]]:
     """List the DATED published pipeline snapshots under a ``blob://`` root, using
     the storage abstraction (same helper that downloads MI_AGENT_PIPELINE_URI).
 
@@ -440,17 +440,22 @@ def _blob_dated_snapshots(root: str, storage) -> List[Dict[str, str]]:
     if not str(root).startswith("blob://"):
         return []
     try:
-        uris = storage.list(root)
+        # ONE listing that carries each blob's ETag (the List Blobs response
+        # does), so the mirror's freshness signature needs no HEAD per
+        # snapshot — with a year of weekly extracts that was ~12s a request.
+        # A storage without it lists names and is asked per blob, as before.
+        listed = storage.list_etags(root) if hasattr(storage, "list_etags") \
+            else dict.fromkeys(storage.list(root))
     except Exception as exc:  # noqa: BLE001 - discovery must never 500
         logger.warning("blob pipeline listing failed for %s: %s", root, exc)
         return []
-    dated: List[Dict[str, str]] = []
-    for uri in uris:
+    dated: List[Dict[str, Optional[str]]] = []
+    for uri, etag in listed.items():
         if "/latest/" in uri:
             continue  # the latest/ pointer is never a dated historical source
         m = _BLOB_DATED_SNAPSHOT_RE.search(uri)
         if m:
-            dated.append({"date": m.group("date"), "uri": uri})
+            dated.append({"date": m.group("date"), "uri": uri, "etag": etag})
     dated.sort(key=lambda d: d["date"])
     return dated
 
@@ -494,7 +499,8 @@ def _materialise_pipeline_root_uncached(root: Optional[str]) -> Optional[str]:
         dated = _blob_dated_snapshots(root, storage)
         if not dated:
             return root  # nothing dated to mirror; blob discovery yields []
-        sig = ";".join(f"{d['uri']}:{storage.etag(d['uri']) or ''}" for d in dated)
+        sig = ";".join(f"{d['uri']}:{d.get('etag') or storage.etag(d['uri']) or ''}"
+                       for d in dated)
         cache = _PIPELINE_MIRROR_CACHE
         if (cache.get("root") == root and cache.get("sig") == sig
                 and cache.get("local") and _Path(cache["local"]).exists()):

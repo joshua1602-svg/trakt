@@ -44,8 +44,21 @@ from due_diligence.evidence.deployed_acceptance_0399a315 import (  # noqa: E402
     run_acceptance as ra)
 
 
-def load_bank(path: Path) -> List[Dict[str, Any]]:
-    return list(json.loads(path.read_text(encoding="utf-8"))["questions"])
+#: The held-out variants (P0 design §25): read back with the bank, so a
+#: variant that did not answer as its bank question did can be read the same
+#: way — what the model read, and why the compiler refused it.
+HOLDOUT = _REPO_ROOT / "config" / "mi" / "golden_questions" / "holdout_variants_20260930.yaml"
+
+
+def load_bank(path: Path, holdout: Optional[Path] = HOLDOUT) -> List[Dict[str, Any]]:
+    bank = list(json.loads(path.read_text(encoding="utf-8"))["questions"])
+    if holdout is not None and holdout.exists():
+        import yaml
+        rows = yaml.safe_load(holdout.read_text(encoding="utf-8"))["questions"]
+        bank += [{"n": 1000 + i, "id": row["id"], "category": row["category"],
+                  "question": row["question"]}
+                 for i, row in enumerate(rows, start=1)]
+    return bank
 
 
 def summarise(record: Dict[str, Any]) -> Dict[str, Any]:
