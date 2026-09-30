@@ -452,3 +452,19 @@ intents added beside the baseline's.
                 run-rate on the calendar (vocabulary 2.20.0). Next: the 15
                 questions by id (the 8 cut off by the credit limit, the three
                 19:59 fixes, [74][75] over time, [125][126] named windows)
+    2026-09-30  22:58:11 UTC 15 questions by id on 617a9469 (files
+                uploaded): 15 answered, all by the governed path. The 8 cut
+                off by the credit limit all answered; [112] current run-rate
+                and [117] base forecast answered; "expected completions by
+                month" leads with face value, weighted alongside (D16); [74]
+                [75] by stage over time across 90 extracts (D20); [125] 8-week
+                £4.1m/month, [126] 12-week £4.5m/month (D22). The calendar
+                run-rate is £3.0m/month over the 5 weeks to 2026-09-24 (24
+                cases, £3.4m) — the old per-extract figure was £1.2m — so
+                scale moves from ~2027-07 to ~2027-01 and the base curve
+                reaches £140.5m by 2028-02. Must-answer: 88/88 answered across
+                the 19:59 run and this one. First (cold) question 318s: 90
+                extract preparations and the case history; the rest 7-17s.
+                Found: "lapsed" is stated two ways ([133] the weighted stages,
+                £538k / 4 cases; [135] every stage, 4,698 cases, mostly KFIs
+                past a measured 9-day window)
