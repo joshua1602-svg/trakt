@@ -60,7 +60,7 @@ EXPECTED_QUESTIONS=135
 # The oldest vocabulary the next measurement is for (2.10.0: conversion and
 # pipeline change, §20; 2.9.0 and the catalogue batches before it): an older
 # build is not the one being measured.
-MINIMUM_VOCABULARY="2.17.0"
+MINIMUM_VOCABULARY="2.18.0"
 
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${APP_ROOT}"

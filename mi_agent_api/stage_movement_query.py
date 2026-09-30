@@ -352,7 +352,7 @@ def _window(payload: Dict[str, Any]) -> str:
 
 
 def _cases(n: int) -> str:
-    return "%d case%s" % (int(n), "" if int(n) == 1 else "s")
+    return "%s case%s" % (f"{int(n):,}", "" if int(n) == 1 else "s")
 
 
 def _transition_row(payload: Dict[str, Any], src: str, dst: str
@@ -584,14 +584,19 @@ def _summary(payload: Dict[str, Any], *, money: Any
                     else "their value %s by %s" % ("up" if change > 0 else "down",
                                                    money(abs(change))))
     delta = closing - opening
+    amount_delta = closing_amount - opening_amount
+    amount_moved = ("unchanged" if money(abs(amount_delta)) == money(0)
+                    else "%s %s" % ("up" if amount_delta > 0 else "down",
+                                    money(abs(amount_delta))))
     answer = (
-        "%s, the cases in the pipeline extracts went from %s to %s (%s%d) "
-        "and their amount from %s to %s. "
+        "%s, the cases in the pipeline extracts went from %s to %s (%s%s) "
+        "and their amount from %s to %s (%s). "
         "%s arrived, carrying %s; %s moved to another stage, carrying %s; "
         "%s left the extracts, carrying %s when last seen; and %s stayed at "
         "their stage, %s."
         % (window, _cases(opening), _cases(closing), "+" if delta >= 0 else "",
-           delta, money(opening_amount), money(closing_amount),
+           f"{delta:,}", money(opening_amount), money(closing_amount),
+           amount_moved,
            _cases(arrived["n"]), money(arrived["latest"]),
            _cases(moved["n"]), money(moved["latest"]),
            _cases(left["n"]), money(left["prior"]),

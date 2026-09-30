@@ -74,7 +74,11 @@ def test_the_answer_is_the_owners_own_totals(monkeypatch, payload):
         assert f"{n} case{'' if n == 1 else 's'} {words}" in answer, (cls, answer)
     opening = sum(r["opening_case_count"] for r in by_stage)
     closing = sum(r["closing_case_count"] for r in by_stage)
-    assert f"went from {opening} cases to {closing} cases" in answer
+    assert f"went from {opening:,} cases to {closing:,} cases" in answer
+    opening_amount = sum(r["opening_amount"] for r in by_stage)
+    closing_amount = sum(r["closing_amount"] for r in by_stage)
+    if round(closing_amount - opening_amount):
+        assert (" (up " in answer) or (" (down " in answer)
     assert "reconciles to both extracts" in answer
     # the per-stage reconciliation is the table
     tables = [a for a in served["artifacts"] if a["type"] == "table"]
@@ -100,6 +104,8 @@ def test_one_stages_movement_is_its_reconciliation_not_the_summary():
     {"form": "explicit_period", "labels": ["August", "September"]},
 ])
 def test_any_pair_but_the_latest_two_extracts_is_refused(time):
+    """The owner holds only its latest pair; "since the last snapshot" in any
+    shape names it (`plan_reading.names_latest_pair`), another pair does not."""
     plan = _plan(time=time)
     ok, reason, _ = stage_rt.check_eligibility(plan)
     assert (ok, reason) == (False, stage_rt.PERIOD_NOT_SUPPORTED)
@@ -116,3 +122,16 @@ def test_the_summary_is_one_owner_answer_not_a_composition():
     from mi_agent import plan_composition as composition
     assert stage_rt.serves_figures_together(_plan())
     assert not composition.needs_composition(_plan())
+
+
+@pytest.mark.parametrize("time", [None, {"form": "current"},
+                                  {"form": "previous_reporting_period"},
+                                  {"form": "relative_pair", "periods_back": 1}])
+def test_every_way_of_naming_the_latest_pair_is_served(time):
+    reading = {k: v for k, v in _READING.items() if k != "time"}
+    if time is not None:
+        reading["time"] = time
+    result = DeterministicCompiler(CompilerContext()).compile(
+        parse_candidate_intent(reading))
+    assert result.plan is not None, [(r.code, r.detail) for r in result.reasons]
+    assert stage_rt.check_eligibility(result.plan.to_dict()) == (True, "", "")

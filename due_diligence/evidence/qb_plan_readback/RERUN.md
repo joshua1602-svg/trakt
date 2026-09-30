@@ -370,3 +370,16 @@ intents added beside the baseline's.
                 against 2e4ab2f2's. Next: variants-recent (the runner refuses
                 a vocabulary below 2.17.0), then the full bank with a fresh
                 held-out set for D13
+    2026-09-30  18:42:51 UTC variants-recent on ac0caf0c (42 asked, all
+                recorded; files uploaded): 31 answered, 11 declined, none by
+                the legacy path. Scored: 16 SAME, 5 DECLINED both sides (by
+                design), LOST [82] "what's changed since the last snapshot"
+                (period read only as a stated pair), DIFFERENT [82] "week on
+                week, how has the pipeline moved" (stage flows £1.18bn vs the
+                live pipeline's +£2.9m) and [135]-by-stage (authoring error).
+                "Is any overdue, and how much" answered with both figures.
+                Scale still SCALE_NOT_CONFIGURED although OCC holds ERE v2 with
+                portfolio.stage = pre_securitisation_spv — D19 did not resolve
+                in production; read-only check requested. Built (design §29):
+                one reading of the latest pair (plan_reading), the stage flow
+                figures' definitions (vocabulary 2.18.0). Not deployed yet

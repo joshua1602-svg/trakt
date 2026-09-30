@@ -332,12 +332,7 @@ SUMMARY_MEASURES: Tuple[str, ...] = ("pipeline_amount", "pipeline_case_count",
                                      "weighted_expected_funded_amount")
 
 
-def change_form_of(plan: Any) -> Optional[str]:
-    """The analytical form the COMPILER read, from the plan's own bindings."""
-    provenance = _as_mapping(plan).get("provenance") or {}
-    bindings = provenance.get("compiler_bindings") or {}
-    form = (bindings.get("change_form") or {}).get("form")
-    return str(form) if form else None
+change_form_of = _plan_reading.change_form_of
 
 
 def is_summary(plan: Any) -> bool:
@@ -345,9 +340,12 @@ def is_summary(plan: Any) -> bool:
 
 
 def is_dated(plan: Any) -> bool:
-    """Does this plan ask for the pipeline AT named points in time?"""
+    """Does this plan ask for the pipeline AT named points in time? Named
+    ones, or — for a change — the latest pair named implicitly ("since the
+    last snapshot", or a "what changed" with no period: D15)."""
     period = _as_mapping(plan).get("period") or {}
-    return str(period.get("form") or "") in DATED_PERIOD_FORMS
+    return (str(period.get("form") or "") in DATED_PERIOD_FORMS
+            or _plan_reading.names_latest_pair(plan))
 
 
 def is_temporal(plan: Any) -> bool:
@@ -508,7 +506,7 @@ def _dated_period_refusal(body: Mapping[str, Any], *, change: bool
                           ) -> Optional[Tuple[bool, str, str]]:
     """Why a dated plan's period cannot be served, or None if it can."""
     operation = str(body.get("operation") or "")
-    period = body.get("period") or {}
+    period = _plan_reading.pair_period(body)
     form = str(period.get("form") or "")
     if operation not in DATED_OPERATIONS | CHANGE_OPERATIONS:
         return (False, OPERATION_NOT_SUPPORTED,
@@ -1113,7 +1111,8 @@ def _dated_selection(plan: Mapping[str, Any], dates: Sequence[str]
     """
     from mi_agent.period_labels import parse_anchor
 
-    period = plan.get("period") or {}
+    # A change naming the latest pair implicitly is read as that pair (D15).
+    period = _plan_reading.pair_period(plan)
     ordered = sorted(d for d in dates if d)
     rows: List[Dict[str, str]] = []
     if str(period.get("form") or "") == "explicit_period":

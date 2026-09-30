@@ -124,3 +124,63 @@ def test_a_named_measure_change_is_worded_the_same_way(monkeypatch, history):
     assert f"the previous snapshot ({_PREVIOUS})" in answer
     assert f"the latest snapshot ({_LATEST}), 336 days apart." in answer
     assert "week before" not in answer
+
+
+# --------------------------------------------------------------------------- #
+# §29 — every way of naming the latest pair is the latest pair
+# --------------------------------------------------------------------------- #
+
+#: "Since the last snapshot" reaches the plan in more than one shape: as a
+#: relative pair, as "the previous period", or — for a "what changed" summary,
+#: whose form owns its window — as no period or the current state. The 18:42
+#: check (2026-09-30) declined "What's changed in the pipeline since the last
+#: snapshot?" for its period: the pipeline read only the first shape.
+_UNNAMED_PAIRS = [None, {"form": "current"},
+                  {"form": "previous_reporting_period"},
+                  {"form": "previous_reporting_period",
+                   "labels": ["the last snapshot"]}]
+
+
+def _what_changed(time):
+    payload = {"schema_version": "candidate_intent/1.0",
+               "capability": "pipeline", "change_form": "material_summary",
+               "operation": "summary", "population": {"base": "pipeline"}}
+    if time is not None:
+        payload["time"] = time
+    return payload
+
+
+@pytest.mark.parametrize("time", _UNNAMED_PAIRS)
+def test_a_what_changed_naming_no_pair_is_the_latest_pair(time, history):
+    plan = _compile(_what_changed(time)).plan.to_dict()
+    assert pipeline_rt.check_eligibility(plan) == (True, "", "")
+    outcome = pipeline_rt.execute_dated(plan, root=history, client_id=_CLIENT)
+    assert outcome.ok, outcome.detail
+    assert outcome.receipt["selected_periods"] == [_PREVIOUS, _LATEST]
+
+
+def test_a_named_measures_change_since_the_previous_snapshot(history):
+    payload = dict(_what_changed({"form": "previous_reporting_period"}),
+                   change_form="metric_delta", operation="movement",
+                   measures=[{"concept": "pipeline_amount"}])
+    plan = _compile(payload).plan.to_dict()
+    assert pipeline_rt.check_eligibility(plan) == (True, "", "")
+    outcome = pipeline_rt.execute_dated(plan, root=history, client_id=_CLIENT)
+    assert outcome.ok, outcome.detail
+    assert outcome.receipt["selected_periods"] == [_PREVIOUS, _LATEST]
+
+
+def test_a_current_figure_is_still_the_current_extract_not_a_pair():
+    payload = {"schema_version": "candidate_intent/1.0",
+               "capability": "pipeline", "operation": "point_in_time",
+               "population": {"base": "pipeline"},
+               "measures": [{"concept": "pipeline_amount"}],
+               "time": {"form": "current"}}
+    plan = _compile(payload).plan.to_dict()
+    assert not pipeline_rt.is_dated(plan)
+
+
+def test_another_pair_is_still_refused():
+    plan = _compile(_what_changed({"form": "relative_pair", "periods_back": 1,
+                                   "grain": "quarterly"})).plan.to_dict()
+    assert pipeline_rt.check_eligibility(plan)[1] == pipeline_rt.PERIOD_NOT_SUPPORTED

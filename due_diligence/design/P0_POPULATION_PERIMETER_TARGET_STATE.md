@@ -1966,3 +1966,64 @@ it — D15's "previous"; any other pair is refused. The owner's wording
 (`stage_movement_query`, subtype `summary`) reads its own event totals and
 per-stage rows and states its residuals rather than hiding them. Pinned by
 `test_pipeline_movement_summary.py`.
+
+
+## 29. The 18:42 check: every way of naming the latest pair; what the flows are (2026-09-30)
+
+ac0caf0c (vocabulary 2.17.0), 42 questions, the second held-out set: 31
+answered, 11 declined, none by the legacy path (D18). The composed answer and
+the whole-pipeline movement both served in production ("is any overdue, and
+how much": 0 cases and £0; "week on week, how has the pipeline moved": 21 Sep
+to 24 Sep, 36 arrived, 20 moved stage, 1 left). Scored: 16 SAME, 5 DECLINED
+on both sides by design, and three:
+
+    LOST       "What's changed in the pipeline since the last snapshot?" —
+               a pipeline `material_summary`, declined PERIOD_NOT_SUPPORTED.
+               The pipeline read a change's pair only as a stated relative
+               pair; "since the last snapshot" also reaches the plan as "the
+               previous period", or — for a summary, whose form owns its
+               window — as no period or the current state.
+    DIFFERENT  "Week on week, how has the pipeline moved?" — read as the
+               stage-movement flows over every case the extracts hold
+               (£1.18bn), where the pipeline's own change (+£2.9m on £969.8m,
+               D15) was asked for. The flow figures were shown to the model by
+               name only.
+    DIFFERENT  the expected completion date "by stage" variant asks a
+               different question (an authoring error, as at 15:53).
+
+Scale was still declined as not configured (§29.3).
+
+### 29.1 One reading of "the latest pair"
+
+`plan_reading.names_latest_pair`: a CHANGE plan that names no pair — "the
+previous period", or the current state / no period where the change form owns
+its window (`CHANGE_FORM_ABSENT_PERIOD_DEFAULT`) — is the latest snapshot and
+the one before it (D15); `pair_period` gives that pair. The pipeline
+(`is_dated`, `_dated_selection`, `_dated_period_refusal`) and stage movement's
+summary read it from there, so no runtime decides it alone. A plan with no
+change form is not a pair: the current pipeline is still the current extract.
+Pinned in `test_pipeline_previous_snapshot.py` and
+`test_pipeline_movement_summary.py`.
+
+### 29.2 What the flow figures are (vocabulary 2.18.0)
+
+Each stage-movement flow figure (cases moved, amount moved, arrived, departed,
+stayed, stayers' amount change, a stage's opening and closing) now says what
+it is and what it is not: it counts cases BETWEEN STAGES over every case the
+two extracts hold, and a change in the live pipeline's size or value — or a
+summary of what changed in the pipeline — is the pipeline's own figures (D15).
+The same treatment the forecast measures had in 2.3.0. The movement summary
+states counts with thousands separators and the change in amount, which
+rounded to "£1.18bn to £1.18bn".
+
+### 29.3 Scale in production
+
+OCC shows ERE's version 2 in force since 17:51:35, recording the
+securitisation stage `pre_securitisation_spv`, and the field catalogue writes
+it to `client_config:portfolio.stage` — the path the MI reads. So the value
+and the path agree, and the four scale questions still declined: D19's
+resolution did not reach it in production. The code cannot say which of its
+fail-closed conditions held (another client ever activated in OCC — OCC keeps
+no "deactivated" state; an explicit tenancy registry; a different served
+tenant; the OCC container unreadable from the MI app). A read-only check run
+in the MI app's environment says which, before anything changes.

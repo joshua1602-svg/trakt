@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
+from mi_agent import plan_reading as _plan_reading
 from mi_agent import semantic_engine as _engine
 from mi_agent import semantic_model as _semantic_model
 
@@ -129,9 +130,6 @@ SUMMARY_FORM = "material_summary"
 SUMMARY_MEASURES: FrozenSet[str] = frozenset({
     "cases_moved", "amount_moved", "cases_arrived", "cases_departed",
     "cases_stayed", "stayer_amount_change"})
-#: The periods that name the owner's latest pair (D15).
-SUMMARY_PERIOD_FORMS: FrozenSet[str] = frozenset({
-    "current", "previous_reporting_period", "relative_pair"})
 
 OWNER = "movement_detail.resolve_stage_transition_detail"
 WORDING_OWNER = "stage_movement_query.compose"
@@ -158,12 +156,7 @@ def _measures(body: Mapping[str, Any]) -> List[str]:
     return [str(m.get("concept") or "") for m in (output.get("measures") or ())]
 
 
-def change_form_of(plan: Any) -> Optional[str]:
-    """The analytical form the COMPILER read, from the plan's own bindings."""
-    provenance = _as_mapping(plan).get("provenance") or {}
-    bindings = provenance.get("compiler_bindings") or {}
-    form = (bindings.get("change_form") or {}).get("form")
-    return str(form) if form else None
+change_form_of = _plan_reading.change_form_of
 
 
 def is_summary(plan: Any) -> bool:
@@ -332,13 +325,15 @@ def _check_summary(body: Mapping[str, Any], output: Mapping[str, Any]
                 "what moved at one stage is that stage's reconciliation; the "
                 "summary is of the whole pipeline"
                 + (f" ({'; '.join(problems)})" if problems else ""))
-    period = body.get("period") or {}
+    # The owner's pair is the latest two extracts: a plan naming it
+    # implicitly (D15, `plan_reading.names_latest_pair`) or as the relative
+    # pair one extract back.
+    period = _plan_reading.pair_period(body)
     form = str(period.get("form") or "")
     back = period.get("periods_back")
     grain = period.get("grain")
-    if (form not in SUMMARY_PERIOD_FORMS
-            or (form == "relative_pair"
-                and (back not in (None, 1) or grain not in (None, "weekly")))):
+    if form != "relative_pair" or back not in (None, 1) \
+            or grain not in (None, "weekly"):
         return (False, PERIOD_NOT_SUPPORTED,
                 f"the owner answers for the latest extract and the one before "
                 f"it (D15); period.form={form!r}, periods_back={back!r}, "

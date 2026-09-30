@@ -13,6 +13,12 @@ from typing import Any, List, Mapping, Optional, Tuple
 REPORTING_REGION = "canonical_region_reporting"
 
 
+#: THE LATEST PAIR, as a relative pair: the latest snapshot and the one before
+#: it. What a change of the pipeline means when no pair is named (owner
+#: decision D15: "strictly between the two most recent pipeline snapshots").
+LATEST_PAIR: Mapping[str, Any] = {"form": "relative_pair", "periods_back": 1}
+
+
 def as_mapping(plan: Any) -> Mapping[str, Any]:
     if isinstance(plan, Mapping):
         return plan
@@ -82,3 +88,49 @@ def member_filter(predicate: Mapping[str, Any]) -> Optional[Tuple[str, str]]:
     if value is None or isinstance(value, (dict, bool)):
         return None
     return field, str(value).strip()
+
+
+def change_form_of(plan: Any) -> Optional[str]:
+    """The analytical form the COMPILER read, from the plan's own bindings."""
+    provenance = as_mapping(plan).get("provenance") or {}
+    bindings = provenance.get("compiler_bindings") or {}
+    form = (bindings.get("change_form") or {}).get("form")
+    return str(form) if form else None
+
+
+def names_latest_pair(plan: Any) -> bool:
+    """Does a CHANGE plan name the latest pair without naming a pair?
+
+    One reading for every owner of a change over the pipeline's snapshots
+    (owner decision D15). A change needs two states; when the plan names
+    none, which two is decided here, not by each runtime:
+
+        "the previous period" ("since the last snapshot")   the latest pair
+        the current state, or nothing stated, where the     the latest pair
+          change form owns its window (a "what changed"
+          summary compares the current state with the
+          previous one — the compiler's own default)
+
+    A plan that states a pair (a relative pair, named periods) is read by its
+    owner as stated; a plan with no change form is not a change.
+    """
+    body = as_mapping(plan)
+    change = change_form_of(body)
+    if not change:
+        return False
+    form = str((body.get("period") or {}).get("form") or "")
+    if form == "previous_reporting_period":
+        return True
+    if form != "current":
+        return False
+    from mi_agent.interpretation_v2.vocabulary import (
+        CHANGE_FORM_ABSENT_PERIOD_DEFAULT)
+    return CHANGE_FORM_ABSENT_PERIOD_DEFAULT.get(change) is not None
+
+
+def pair_period(plan: Any) -> Mapping[str, Any]:
+    """The pair a change plan is read over: its own period, or the latest
+    pair when it names the latest pair implicitly (`names_latest_pair`)."""
+    body = as_mapping(plan)
+    return (dict(LATEST_PAIR) if names_latest_pair(body)
+            else dict(body.get("period") or {}))

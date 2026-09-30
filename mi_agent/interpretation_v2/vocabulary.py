@@ -147,7 +147,14 @@ from mi_agent import semantic_model as _semantic_model
 #: owner's own totals. A "what moved" reading over the stage-movement figures
 #: was bound to the FUNDED book's owner of the form and refused; the owner of
 #: the figures now owns the form over them.
-VOCABULARY_VERSION = "2.17.0"
+#:
+#: 2.18.0 (P0 design §29): the stage-movement figures say what they are. They
+#: were shown by name only, and a question about how the pipeline changed
+#: overall was answered with the flows between stages over every case in the
+#: extracts (£1.18bn) where the pipeline's own change (+£2.9m on £969.8m) was
+#: asked for. Each now says it counts cases BETWEEN STAGES, and that a change
+#: in the pipeline's size or value is the pipeline's own figures (D15).
+VOCABULARY_VERSION = "2.18.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -684,11 +691,56 @@ SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
 #: is NOT, naming the readings the production run actually made. It states no
 #: methodology the model could decompose (rule 3 still holds: the capability
 #: owns the arithmetic) and no column, dataset or date.
+#: What every stage-movement FLOW figure is not (2.18.0, §29): a change in the
+#: pipeline's size or value. Said once, carried by each.
+_NOT_THE_PIPELINES_CHANGE = (
+    " It counts cases between STAGES, over every case the two extracts hold "
+    "(closed stages included). It is NOT how the pipeline changed in size or "
+    "value: the change in the live pipeline's amount, case count or weighted "
+    "value between two extracts — or a summary of what changed in the "
+    "pipeline — is the pipeline's own figures (`pipeline_amount`, "
+    "`pipeline_case_count`, `weighted_expected_funded_amount`), owner "
+    "decision D15.")
+
+#: The flows between the latest pair of weekly extracts, as the movement owner
+#: classifies every case once: arrived, moved stage, left, or stayed.
+_STAGE_FLOW_DEFINITIONS: Mapping[str, str] = {
+    "cases_moved": (
+        "The number of pipeline cases that MOVED FROM ONE STAGE TO ANOTHER "
+        "between the latest two weekly extracts (e.g. from KFI to "
+        "Application)." + _NOT_THE_PIPELINES_CHANGE),
+    "amount_moved": (
+        "The amount carried by the cases that moved from one stage to another "
+        "between the latest two weekly extracts." + _NOT_THE_PIPELINES_CHANGE),
+    "cases_arrived": (
+        "The number of cases in the latest weekly extract that were in no "
+        "stage of the one before — new to the pipeline, or new at a stage."
+        + _NOT_THE_PIPELINES_CHANGE),
+    "cases_departed": (
+        "The number of cases in the earlier of the latest two weekly extracts "
+        "that left a stage — moved on, or left the extracts."
+        + _NOT_THE_PIPELINES_CHANGE),
+    "cases_stayed": (
+        "The number of cases at the same stage in both of the latest two "
+        "weekly extracts." + _NOT_THE_PIPELINES_CHANGE),
+    "stayer_amount_change": (
+        "The change in the amount of the cases that stayed at the same stage "
+        "between the latest two weekly extracts (amendments to cases, not "
+        "movement)." + _NOT_THE_PIPELINES_CHANGE),
+    "stage_opening": (
+        "A stage's case count at the earlier of the latest two weekly "
+        "extracts, as the stage's reconciliation opens."),
+    "stage_closing": (
+        "A stage's case count at the latest weekly extract, as the stage's "
+        "reconciliation closes."),
+}
+
 SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
     # The forecast definitions (2.3.0, amended 2.7.0) live in the semantic
     # model, beside the path each figure is read from.
     **{name: m.definition for name, m in _FORECAST_MODEL.measures.items()},
     **{name: m.definition for name, m in _STAGE_MODEL.measures.items()},
+    **_STAGE_FLOW_DEFINITIONS,
     # THE PIPELINE'S WEIGHTED VALUE (catalogue batch 1, 2026-09-29). The
     # Pipeline tab has shown it for months; the model was told no such concept
     # existed and asked to clarify every question about it.
