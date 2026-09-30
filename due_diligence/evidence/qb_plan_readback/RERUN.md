@@ -447,3 +447,8 @@ intents added beside the baseline's.
                 cases by run-off, £12.0m). D21 changes no production figure.
                 Suites for 617a9469: no new failure. Deploy triggered
                 22:52 UTC (run 36788018871)
+    2026-09-30  22:54 UTC 617a9469 deployed (run 36788018871, success, no
+                retry): D20 "over time", D21 measured or declined, D22 the
+                run-rate on the calendar (vocabulary 2.20.0). Next: the 15
+                questions by id (the 8 cut off by the credit limit, the three
+                19:59 fixes, [74][75] over time, [125][126] named windows)
