@@ -1805,8 +1805,10 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # compilation and never caches it. With none supplied a question naming a
     # portfolio is refused, which is where every caller was until the production
     # seam started passing one.
-    outcome, compiled = wiring.build_plan(question,
-                                          source_registry=source_registry)
+    from trakt_core import perf as _perf
+    with _perf.stage("governed.interpret_and_compile"):
+        outcome, compiled = wiring.build_plan(question,
+                                              source_registry=source_registry)
     wiring.record_plan_stages(body, outcome, compiled)
 
     if not outcome.ok:

@@ -95,11 +95,21 @@ def _ask(question: str, *, portfolio: Optional[str], lens: Optional[str],
 
 def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
             lens: Optional[str], principal: str = "question-bank") -> Dict[str, Any]:
+    from trakt_core import perf as _perf
+
     t0 = time.monotonic()
     _SERVING.clear()
+    timing: Dict[str, Any] = {}
     try:
-        result = _ask(row["question"], portfolio=portfolio, lens=lens,
-                      principal=principal)
+        # WHERE THE TIME GOES, per question: the same stage collector the HTTP
+        # layer opens for every request (and reports as `Server-Timing`),
+        # opened here because the bank calls the service in-process.
+        with _perf.collect(route="question_bank") as collector:
+            result = _ask(row["question"], portfolio=portfolio, lens=lens,
+                          principal=principal)
+            if collector is not None:
+                snap = collector.snapshot()
+                timing = {"total_ms": snap["total_ms"], "stages": snap["stages"]}
         res = result.result or {}
         meta = res.get("metadata") or {}
         ok = bool(res.get("ok"))
@@ -114,7 +124,7 @@ def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
             "question": row["question"], "outcome": outcome, "route": route,
             "view": view, "seconds": round(time.monotonic() - t0, 1),
             "served": served, "serving_reason": _SERVING.get("reason") or "",
-            "answer": answer}
+            "timing": timing, "answer": answer}
 
 
 def main(argv: Optional[List[str]] = None) -> int:

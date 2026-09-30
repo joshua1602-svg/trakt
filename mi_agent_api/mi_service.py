@@ -2107,16 +2107,20 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # temporal path is unavailable and the legacy envelope serves. A slice 1
         # request never reads any of this.
         from mi_agent_api import governed_snapshot_store as _snapshot_store
+        with _perf.stage("mi_query.governed_inputs"):
+            snapshot_store = _snapshot_store.build_store(ds, client_id)
+            source_registry = _source_registry(df, client_id)
+            pipeline_inputs = _pipeline_inputs(ds, client_id, run_id)
         return _plan_serving.serve(
             question=req.question, context=context, client_id=client_id,
             run_id=run_id, legacy_result=legacy_envelope, frame=df,
             semantics=semantics, view=view,
             portfolio_id=authorised.portfolio_id,
             render_portfolio_id=portfolio_id, as_of=req.as_of_date,
-            snapshot_store=_snapshot_store.build_store(ds, client_id),
+            snapshot_store=snapshot_store,
             snapshot_client_id=client_id,
             snapshot_route=_snapshot_store.FUNDED_ROUTE,
-            source_registry=_source_registry(df, client_id),
+            source_registry=source_registry,
             # THE CHANGE-INTELLIGENCE OWNERS' INPUTS. The governed source root is
             # `ds._onboarding_output_root()` — the same one this function already
             # passes to `chat_routing.try_route`, so a plan-served material
@@ -2143,7 +2147,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             # already owns discovery. A pipeline PLAN is served from these
             # regardless of which view the legacy router picked, which is what
             # makes the plan — and not the sentence — decide the dataset.
-            **_pipeline_inputs(ds, client_id, run_id))
+            **pipeline_inputs)
 
     # The funded frame for a routed intent, and for the governed forecast
     # composer (D6), defined before the governed attempt that is handed it.
@@ -2160,7 +2164,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     from mi_agent import plan_serving_canary as _plan_serving
     _canary = _plan_serving.handles(context)
     if _canary:
-        served = _governed_serving_attempt(None)
+        with _perf.stage("mi_query.governed_attempt"):
+            served = _governed_serving_attempt(None)
         if served is not None:
             return _governed_context(served, req=req, client_id=client_id,
                                      run_id=run_id, geography=geography,
