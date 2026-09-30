@@ -326,3 +326,20 @@ intents added beside the baseline's.
                 second held-out set (holdout_variants_20260930b.yaml). Next:
                 variants-recent, then the scale questions once OCC activates
                 ERE's stage (PR #510)
+    2026-09-30  15:53:05 UTC second held-out set on 2e4ab2f2 (42 asked, all
+                recorded; readback run 36744000164). 18 of 21 variants
+                answered as their bank question (first set: 17). Typical
+                question 7-10s (was ~20s): the model ~6s, storage ~0.3s. D15
+                and D16 served as decided. Findings: [58] variant "is any
+                overdue, and how much" read as two measures, refused by the
+                pipeline runtime (one measure), and the LEGACY path answered
+                the whole pipeline — a wrong answer; [82] variant "pipeline
+                movement since the prior extract" read as stage movement
+                (cases_moved, amount_moved; movement) — the stage owner's
+                reconciliation, not recognised; the [135] "by stage" variant
+                asked a different question (authoring error, not a finding).
+                Scale still SCALE_NOT_CONFIGURED: the MI service asks OCC for
+                client_001's activated configuration, OCC holds it as ERE —
+                no identity crosswalk. [135] now 2026-11-02 over 137 dated
+                cases; 4,698 of 4,835 live cases are lapsed by the forecast's
+                own windows
