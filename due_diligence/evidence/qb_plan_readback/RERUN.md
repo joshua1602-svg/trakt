@@ -231,3 +231,5 @@ intents added beside the baseline's.
                 loan has a balance, §21 one model call per question). Next:
                 the full bank with `all` — the measurement of the one-call
                 interpreter (readback projects model_calls and model_ms)
+    2026-09-30  06:48 UTC 622351a2 deployed (run 36679674222, success; the
+                first attempt succeeded, no retry). Vocabulary 2.12.0
