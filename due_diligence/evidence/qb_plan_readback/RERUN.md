@@ -252,3 +252,8 @@ intents added beside the baseline's.
                 the book's history. Built (design §23): governed attempt
                 before the legacy parse; expected_completion_date; vocabulary
                 2.14.0
+    2026-09-30  10:07 UTC b43cd904 deploying (run 36700450236; vocabulary
+                2.14.0: 2.13.0's definition fixes, [82] prior = previous
+                extract, governed first, scale £250MM, expected completion
+                date). ERE's portfolio.stage must be activated in OCC for
+                [122, 128]
