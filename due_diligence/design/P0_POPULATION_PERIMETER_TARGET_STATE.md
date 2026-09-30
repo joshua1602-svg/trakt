@@ -2317,3 +2317,11 @@ measured at test-book scale (`tests/measured_history.py`: the history owner's
 own thresholds set to one — still measured from the book's extracts, never
 configured); tests of D21 read the book without it and assert the withholding
 (`test_measured_or_declined.py` and the owners' own suites).
+
+### 33.5 Deferred (owner, 2026-09-30)
+
+"Lapsed" is stated two ways — the weighted stages (Application, Offer: £538k,
+4 cases) by the lapsed-exclusion figure, every stage (4,698 cases, mostly KFIs
+past a measured 9-day window) by the expected completion date. The owner:
+"keep as is for now — a low-priority question that can be configured with
+client preferences." Both stay as built, each stating its own basis.
