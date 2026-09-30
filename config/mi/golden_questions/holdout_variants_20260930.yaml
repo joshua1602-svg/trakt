@@ -26,7 +26,7 @@
 #
 # Run (the bank runner, with the canary's principal):
 #   python -m mi_agent_api.question_bank \
-#     --bank mi_agent/interpretation_v2/banks/holdout_variants_20260930.yaml \
+#     --bank config/mi/golden_questions/holdout_variants_20260930.yaml \
 #     --categories all --principal <allow-listed principal>
 # Compare with the bank questions' answers from the same deploy:
 #   python due_diligence/evidence/qb_plan_readback/score_variants.py \

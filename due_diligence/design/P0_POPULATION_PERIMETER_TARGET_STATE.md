@@ -1735,7 +1735,7 @@ the owner decided (§23.3).
 
 ### 25.3 Held-out variants
 
-`mi_agent/interpretation_v2/banks/holdout_variants_20260930.yaml`: 105
+`config/mi/golden_questions/holdout_variants_20260930.yaml`: 105
 questions, each asking exactly what one bank question asks in other words
 (other verbs and nouns, order, form, contractions, a reader's synonyms) — one
 for every must-answer question, two or three for the questions a definition,

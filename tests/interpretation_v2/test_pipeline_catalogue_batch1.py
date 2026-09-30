@@ -106,9 +106,12 @@ def test_the_model_is_shown_the_three_concepts():
     timing = vocabulary.resolve("expected_completion_timing")
     assert timing.values == ("overdue", "current_month", "next_month")
     assert "arrears" in timing.description        # D11: loans are another question
-    # "How much pipeline is current month?" is this month's completions (D13
-    # must-answer 59), not the pipeline at the current period (2026-09-29).
-    assert "'how much pipeline is current month'" in timing.description
+    # A month used to describe the pipeline itself is this month's
+    # completions (D13 must-answer 59), not the pipeline at the current
+    # period (2026-09-29) — stated as a meaning with the reader's term, never
+    # as the bank's sentence (design §25).
+    assert "'current month pipeline'" in timing.description
+    assert "describe the PIPELINE ITSELF" in timing.description
     assert "NOT a reporting period" in timing.description
     assert vocabulary.resolve("expected_completion_month").role == "dimension"
     assert SPECIALIST_DIMENSION_VALUES["expected_completion_timing"] == \
