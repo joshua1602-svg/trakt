@@ -2048,3 +2048,35 @@ resolves to the single activated client's configuration; any other identifier
 is another client's and still resolves to its own activation or to nothing,
 and a tenancy registry still turns the inference off. Pinned by
 `tests/test_single_activated_client.py::TestTheBooksLabelIsTheSameClient`.
+
+
+## 30. The 19:28 check: scale answers; a summary naming its figures (2026-09-30)
+
+2e3278ff (vocabulary 2.18.0), the same 42 questions: 35 answered, 7 declined,
+none by the legacy path. Scored: 19 SAME, 3 DECLINED on both sides, the
+by-stage authoring error, and one LOST.
+
+    SCALE      all four answered (D19 in production): "for a new SPV before
+               securitisation, scale is £100.0m, measured on the SPV's funded
+               balance: around 2027-07 at the base completion run-rate of
+               £1.2m/month (downside 2027-10, upside 2027-05), from a funded
+               balance of £87.1m, £12.9m to go".
+    FLOWS      "Week on week, how has the pipeline moved?" now reads as the
+               pipeline's own change (+£2.9m to £969.8m) — the 2.18.0
+               definitions.
+    LOST       "What's changed in the pipeline since the last snapshot?" was
+               read this time as a summary NAMING the pipeline amount and case
+               count. The pipeline's summary refused any named figure, and the
+               composer split the plan into one-figure summaries, each refused.
+
+### 30.1 A summary names figures it states
+
+A "what changed" summary naming some of the headline figures is still the
+summary — it states every headline figure, the named ones included. The
+pipeline's summary now accepts named figures from its own headline set
+(`SUMMARY_MEASURES`) and still refuses any other figure, a grouping or a
+filter; its receipt carries the first named figure, so the coverage owner
+reconciles the plan's measure. The pipeline declares `serves_figures_together`
+for its summary, as stage movement does, and the composer asks every runtime
+that declares it rather than one. Pinned in
+`test_pipeline_previous_snapshot.py`.

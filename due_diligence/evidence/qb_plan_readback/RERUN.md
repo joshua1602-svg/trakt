@@ -396,3 +396,13 @@ intents added beside the baseline's.
                 reading every identifier of the deployment's one book as that
                 client (§29.3). Next: variants-recent (the runner refuses a
                 vocabulary below 2.18.0) — scale should answer at £100MM
+    2026-09-30  19:28:05 UTC variants-recent on 2e3278ff (42 asked, all
+                recorded; files uploaded): 35 answered, 7 declined, none by
+                the legacy path. Scale answered by all four (£100.0m, around
+                2027-07, £12.9m to go) — D19 live. "Week on week, how has the
+                pipeline moved" answered with the live pipeline's change.
+                Scored 19 SAME, 3 DECLINED both sides, the by-stage authoring
+                error, LOST [82] "what's changed since the last snapshot" (a
+                summary naming amount and case count, refused). Built (§30):
+                the pipeline summary accepts the headline figures it states.
+                Not deployed yet

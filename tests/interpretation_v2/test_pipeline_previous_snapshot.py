@@ -184,3 +184,47 @@ def test_another_pair_is_still_refused():
     plan = _compile(_what_changed({"form": "relative_pair", "periods_back": 1,
                                    "grain": "quarterly"})).plan.to_dict()
     assert pipeline_rt.check_eligibility(plan)[1] == pipeline_rt.PERIOD_NOT_SUPPORTED
+
+
+# --------------------------------------------------------------------------- #
+# §30 — a "what changed" naming some of the headline figures is the summary
+# --------------------------------------------------------------------------- #
+
+#: The 19:28 check (2026-09-30) read "What's changed in the pipeline since the
+#: last snapshot?" as a summary naming the pipeline amount and case count. The
+#: summary refused any named figure, and the composer split it into one-figure
+#: summaries, each refused in turn.
+_NAMED = [{"concept": "pipeline_amount"}, {"concept": "pipeline_case_count"}]
+
+
+@pytest.mark.parametrize("time", [None, {"form": "previous_reporting_period"},
+                                  {"form": "relative_pair", "periods_back": 1}])
+def test_a_what_changed_naming_headline_figures_is_the_summary(
+        time, monkeypatch, history):
+    from mi_agent import plan_composition as composition
+    from mi_agent_api.mi_service import _governed_plan_coverage
+    from tests.interpretation_v2.test_specialist_runtime_pipeline_dated import (
+        _served)
+
+    payload = dict(_what_changed(time), measures=_NAMED)
+    plan = _compile(payload).plan.to_dict()
+    assert pipeline_rt.check_eligibility(plan) == (True, "", "")
+    assert not composition.needs_composition(plan)
+
+    served, record = _served(payload, monkeypatch, history)
+    assert served is not None, record.get("execution")
+    assert record["execution"]["receipt"]["selected_periods"] == [_PREVIOUS,
+                                                                  _LATEST]
+    for label in ("amount", "case count", "weighted"):
+        assert label in served["answer"]
+    assert _governed_plan_coverage(served)["unaccounted"] == []
+
+
+def test_a_summary_naming_a_figure_it_does_not_state_is_refused():
+    payload = dict(_what_changed(None),
+                   measures=[{"concept": "pipeline_amount"},
+                             {"concept": "average_loan_size"}])
+    result = _compile(payload)
+    if result.plan is not None:       # the compiler may already refuse it
+        assert pipeline_rt.check_eligibility(result.plan.to_dict())[1] == \
+            pipeline_rt.MEASURE_NOT_SUPPORTED

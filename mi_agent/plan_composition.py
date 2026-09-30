@@ -68,11 +68,15 @@ def figures(plan: Any) -> List[str]:
 def natively_served(plan: Any) -> bool:
     """Does the plan's own runtime serve this SET of figures as one answer?
 
-    Asked of the runtime, not decided here. Stage movement's reconciliation and
-    "what moved" summary report several figures from one owner payload.
+    Asked of the runtime, not decided here: every runtime that states several
+    figures from one owner payload says so (`serves_figures_together`) —
+    stage movement's reconciliation and "what moved", the pipeline's "what
+    changed" summary.
     """
+    from mi_agent import plan_pipeline_runtime as pipeline_rt
     from mi_agent import plan_stage_movement_runtime as stage_rt
-    return stage_rt.claims(plan) and stage_rt.serves_figures_together(plan)
+    return any(runtime.claims(plan) and runtime.serves_figures_together(plan)
+               for runtime in (pipeline_rt, stage_rt))
 
 
 def needs_composition(plan: Any) -> bool:

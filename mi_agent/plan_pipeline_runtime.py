@@ -339,6 +339,14 @@ def is_summary(plan: Any) -> bool:
     return change_form_of(plan) == SUMMARY_FORM
 
 
+def serves_figures_together(plan: Any) -> bool:
+    """Does this runtime answer the plan's figures as ONE owner answer? The
+    summary states every headline figure between two snapshots, so a summary
+    naming several of them is one answer, not a composition of one-figure
+    summaries (`plan_composition`)."""
+    return is_summary(plan)
+
+
 def is_dated(plan: Any) -> bool:
     """Does this plan ask for the pipeline AT named points in time? Named
     ones, or — for a change — the latest pair named implicitly ("since the
@@ -424,13 +432,17 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     measures = [str(m.get("concept") or "") for m in (output.get("measures") or ())]
     if is_summary(body):
         # WHAT MOVED between two snapshots: the headline figures, all of them,
-        # and nothing narrower — a named measure is a metric delta, a grouping
-        # a change by stage, and both have their own shape.
-        if measures or grouping_axes(body) or filters:
+        # and nothing narrower. A summary naming some of those figures ("what
+        # changed in the pipeline's amount and case count") is still the
+        # summary — it states them — while a figure it does not state, a
+        # grouping (a change by stage) or a filter has its own shape.
+        unknown = [m for m in measures if m not in SUMMARY_MEASURES]
+        if unknown or grouping_axes(body) or filters:
             return (False, MEASURE_NOT_SUPPORTED,
                     "a summary of what moved reports the pipeline's headline "
-                    "figures between two snapshots; it names no measure, "
-                    "grouping or filter")
+                    f"figures ({', '.join(SUMMARY_MEASURES)}) between two "
+                    "snapshots, with no grouping or filter; this plan names "
+                    f"{unknown or grouping_axes(body) or 'a filter'}")
         if not is_dated(body):
             return (False, PERIOD_NOT_SUPPORTED,
                     "what moved in the pipeline is between two snapshots; "
@@ -1297,7 +1309,12 @@ def _dated_summary(body: Mapping[str, Any], *, root: Any, client_id: str,
         "extracts_used": len(chosen),
         "source_files": [str(by_date[d].get("source_file") or "") for d in chosen],
     }
-    receipt = _receipt(body, measure="pipeline_headline_figures", kind="summary",
+    # The figure the plan named first, where it named one — the summary
+    # states it, and the coverage owner reconciles the plan's measure against
+    # it; otherwise the headline figures as a whole.
+    named = [m for m in requested_measures(body) if m in SUMMARY_MEASURES]
+    receipt = _receipt(body, measure=named[0] if named
+                       else "pipeline_headline_figures", kind="summary",
                        dimensions=[], dataset=dataset, result_shape="dated_summary",
                        owner=OWNER_EVOLUTION, periods=chosen)
     receipt["measures_reported"] = list(SUMMARY_MEASURES)
