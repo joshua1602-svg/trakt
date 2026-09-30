@@ -305,3 +305,8 @@ intents added beside the baseline's.
                 pipeline history on demand, per-stage timing in the bank log.
                 Next: the bank beside the held-out variants (start with
                 --categories holdout_recent), scored by score_variants.py
+    2026-09-30  12:30 UTC 2d6df14d deployed (run 36714882653, success, no
+                retry): the bank runner asks the held-out variants
+                (run_production_bank.sh <principal> variants-recent: the 18
+                questions changed for since 2026-09-29, each followed by its
+                variants, 42 in all; `variants` for all 105)
