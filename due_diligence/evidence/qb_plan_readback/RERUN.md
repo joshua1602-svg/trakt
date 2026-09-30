@@ -318,3 +318,11 @@ intents added beside the baseline's.
                 month = face value, weighted alongside), D17 (the expected
                 completion date leaves lapsed cases out). Built, vocabulary
                 2.16.0 (design §26). Storage revalidation is one listing
+    2026-09-30  15:15 UTC 2e4ab2f2 deployed (run 36734994989, success, no
+                retry). Vocabulary 2.16.0: D15 (the pipeline's "previous" is
+                the snapshot before the latest), D16 (a month's expected
+                completions at face value, weighted alongside), D17 (lapsed
+                cases not dated); storage revalidation is one listing; the
+                second held-out set (holdout_variants_20260930b.yaml). Next:
+                variants-recent, then the scale questions once OCC activates
+                ERE's stage (PR #510)
