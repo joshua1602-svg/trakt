@@ -439,3 +439,11 @@ intents added beside the baseline's.
                 with the reason; the agent declines it (RATE_NOT_MEASURED /
                 FIGURE_WITHHELD). Dashboard shows n/a (ships from main). Before
                 deploying: read-only check that production measures every stage
+    2026-09-30  Owner's read-only check before D21 (production, deployed
+                8463fd03): every stage's rate measured (APPLICATION, KFI,
+                OFFER), none without enough history; every validity window
+                measured (KFI 9d / 1,422 events, APPLICATION 120d / 887, OFFER
+                80d / 580); no case weighted at a configured rate (81 live
+                cases by run-off, £12.0m). D21 changes no production figure.
+                Suites for 617a9469: no new failure. Deploy triggered
+                22:52 UTC (run 36788018871)
