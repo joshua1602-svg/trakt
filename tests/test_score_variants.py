@@ -48,3 +48,15 @@ def test_scoring_reads_the_variant_map_from_the_holdout_file():
     assert finding["variant_of"] == "forecast_003"
     assert finding["bucket"] == "must_answer"
     assert finding["bank"]["headline"] == "£94.1m"
+
+
+def test_the_headline_is_the_amount_not_the_month_that_names_it():
+    bank = _rec("pipeline_012", answer="The live pipeline weighted expected "
+                "funded amount expected to complete next month (2026-10) is "
+                "£4.8m, as at the weekly extract of 2026-09-24.")
+    variant = _rec("v", answer="The live pipeline amount expected to complete "
+                   "next month (2026-10) is £7.8m, as at 2026-09-24.")
+    assert sv.headline(bank["answer"]) == "£4.8m"
+    assert sv.verdict(variant, bank) == "DIFFERENT"
+    assert sv.headline("Expected completion date: 2026-04-01 — over 4835 "
+                       "cases") == "2026-04-01"

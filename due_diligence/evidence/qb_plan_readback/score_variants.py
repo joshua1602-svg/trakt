@@ -41,7 +41,7 @@ HOLDOUT = ROOT / "config/mi/golden_questions/holdout_variants_20260930.yaml"
 FINDINGS = ("DIFFERENT", "PATH", "LOST")
 
 #: A figure as the answer standard writes one: money, a percentage, a date, a
-#: month, or a count. The headline is the first.
+#: month, or a count. The headline is chosen by `headline`.
 _FIGURE = re.compile(
     r"£-?[\d,]+(?:\.\d+)?[mkbn]*"            # £94.1m, £866k, £1,234
     r"|-?[\d,]*\.?\d+%"                        # 12.5%
@@ -51,6 +51,21 @@ _FIGURE = re.compile(
 
 def figures(answer: str) -> List[str]:
     return [m.group(0).replace(",", "") for m in _FIGURE.finditer(answer or "")]
+
+
+def headline(answer: str) -> Optional[str]:
+    """The figure the answer is ABOUT: the first amount or percentage, else
+    the first date, else the first count. A month that only says WHICH month
+    ("next month (2026-10) is £4.8m") is not the answer — the 13:49 check
+    scored £4.8m and £7.8m the same because both said 2026-10 first."""
+    found = figures(answer)
+    for wanted in (lambda f: f.startswith("£") or f.endswith("%"),
+                   lambda f: re.fullmatch(r"\d{4}-\d{2}(?:-\d{2})?", f),
+                   lambda f: True):
+        for figure in found:
+            if wanted(figure):
+                return figure
+    return None
 
 
 def _answered(rec: Dict[str, Any]) -> bool:
@@ -72,7 +87,7 @@ def verdict(variant: Dict[str, Any], bank: Optional[Dict[str, Any]]) -> str:
         return "DECLINED"
     if _path(variant) != _path(bank):
         return "PATH"
-    head_v, head_b = figures(variant["answer"])[:1], figures(bank["answer"])[:1]
+    head_v, head_b = headline(variant["answer"]), headline(bank["answer"])
     return "SAME" if head_v == head_b else "DIFFERENT"
 
 
@@ -101,12 +116,13 @@ def score(variants: Dict[str, Dict[str, Any]], bank: Dict[str, Dict[str, Any]],
             "verdict": verdict(rec, original),
             "variant": {"question": row["question"],
                         "outcome": rec.get("outcome"), "path": _path(rec),
-                        "headline": (figures(rec.get("answer", "")) or [None])[0],
+                        "headline": headline(rec.get("answer", "")) if _answered(rec) else None,
                         "answer": (rec.get("answer") or "")[:240]},
             "bank": None if original is None else {
                 "question": original.get("question"),
                 "outcome": original.get("outcome"), "path": _path(original),
-                "headline": (figures(original.get("answer", "")) or [None])[0],
+                "headline": (headline(original.get("answer", ""))
+                             if _answered(original) else None),
                 "answer": (original.get("answer") or "")[:240]},
         })
     tally: Dict[str, int] = {}
