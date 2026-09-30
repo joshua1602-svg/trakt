@@ -49,10 +49,14 @@ export function ForecastView({
     label: r.key,
     value: r.pipelineAmount,
   }));
-  const byMonth: BarDatum[] = (breakdowns?.byCompletionMonth ?? []).map((m) => ({
-    label: m.month,
-    value: m.weightedExpectedFundedAmount,
-  }));
+  // D21: a month whose weighted amount is withheld is left out of the chart,
+  // never drawn as zero; the bridge card says why.
+  const byMonth: BarDatum[] = (breakdowns?.byCompletionMonth ?? [])
+    .filter((m) => m.weightedExpectedFundedAmount != null)
+    .map((m) => ({
+      label: m.month,
+      value: m.weightedExpectedFundedAmount as number,
+    }));
 
   return (
     <div className="space-y-4">

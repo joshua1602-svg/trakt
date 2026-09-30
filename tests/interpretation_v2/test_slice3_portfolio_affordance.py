@@ -149,6 +149,12 @@ _MIGRATION_SUBJECT = "change_form"
 _MIGRATED_BY_DERIVED_POPULATION = frozenset({"Q23C", "Q24B", "NL2A", "NL4A",
                                              "NL4C"})
 
+#: D20 (owner decision 2026-09-30, P0 design §32.1): a series stating no span,
+#: grain or count is every reporting date the owner holds — no longer a request
+#: to ask back (AMBIGUOUS_PERIOD). "Are direct and acquired balances developing
+#: differently over time?" read exactly that.
+_MIGRATED_BY_OVER_TIME = frozenset({"NL8C"})
+
 
 def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
     """Every recorded payload, re-parsed and re-compiled by this code.
@@ -204,6 +210,16 @@ def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
                 migrated[question_id] = (was[0], now[0])
             continue
 
+        if question_id in _MIGRATED_BY_OVER_TIME:
+            period = plan.to_dict()["period"] if plan is not None else {}
+            if (was[0] != OUTCOME_CLARIFY or now[0] != "PLAN"
+                    or period.get("default_method") != "every_reporting_date"):
+                unexpected.append((question_id, "moved, but not only by D20",
+                                   was, now))
+            else:
+                migrated[question_id] = (was[0], now[0])
+            continue
+
         expected_was = _MIGRATED_BY_CHANGE_FORM_COMPLETENESS.get(question_id)
         if expected_was is None:
             unexpected.append((question_id, "moved but is not an authorised "
@@ -227,7 +243,7 @@ def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
 
     assert unexpected == [], f"UNEXPECTED_MOVES: {unexpected}"
     authorised = (set(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS)
-                  | _MIGRATED_BY_DERIVED_POPULATION)
+                  | _MIGRATED_BY_DERIVED_POPULATION | _MIGRATED_BY_OVER_TIME)
     assert set(migrated) == authorised, (
         f"expected {sorted(authorised)}, migrated {sorted(migrated)}")
 

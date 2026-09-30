@@ -44,12 +44,12 @@ export interface ExpectedCompletionBucket {
 export interface ExpectedCompletionSummary {
   asOfMonth: string | null;
   overdueExpectedCompletionCount: number;
-  overdueExpectedCompletionWeightedAmount: number;
+  overdueExpectedCompletionWeightedAmount: number | null;
   currentMonthExpectedCompletionCount: number;
-  currentMonthExpectedCompletionWeightedAmount: number;
+  currentMonthExpectedCompletionWeightedAmount: number | null;
   nextExpectedCompletionMonth: string | null;
   nextExpectedCompletionCount: number;
-  nextExpectedCompletionWeightedAmount: number;
+  nextExpectedCompletionWeightedAmount: number | null;
 }
 
 /** A generic dimension breakdown row (broker / region). */
@@ -152,6 +152,10 @@ export interface PipelineSnapshot {
   pipelineAmount: number | null;
   expectedFundedAmount: number | null;
   weightedExpectedFundedAmount: number | null;
+  /** D21: false when a live case's stage has no rate measured from the client's
+   *  history; the weighted figures it affects are then null, never zero. */
+  weightingComplete?: boolean;
+  weightingIncompleteReason?: string | null;
   /** Prior weekly extract aggregates for week-on-week tile deltas (optional). */
   priorWeek?: PipelineWeeklyPrior | null;
   completionProbabilityBasis?: string;
@@ -237,8 +241,11 @@ export interface ForecastBridge {
   pipelineAvailable: boolean;
   pipelineAmount: number;
   pipelineCaseCount: number;
-  weightedExpectedFundedAmount: number;
-  forecastFundedBalance: number;
+  /** D21: null — with `forecastWithheldReason` — when the weighted pipeline
+   *  cannot be stated; the forecast built on it is then null too. */
+  weightedExpectedFundedAmount: number | null;
+  forecastFundedBalance: number | null;
+  forecastWithheldReason?: string | null;
   forecastLoanCount: number;
   completionProbabilityBasis: string;
   /** Governed probability disclosure. */
@@ -297,7 +304,7 @@ export interface ForecastBreakdowns {
   byRegion: ForecastDimensionRow[];
   regionBasis?: ForecastRegionBasis;
   byLtvBucket: ForecastDimensionRow[];
-  byCompletionMonth: { month: string; weightedExpectedFundedAmount: number }[];
+  byCompletionMonth: { month: string; weightedExpectedFundedAmount: number | null }[];
   byRegionCapped?: DimensionBucket[];
   byLtvBucketCapped?: DimensionBucket[];
 }

@@ -44,6 +44,23 @@ describe("PipelineSnapshotPanel", () => {
     expect(note).toContain("750 withdrawn");
   });
 
+  it("states a withheld weighted figure as n/a with the reason (D21)", () => {
+    const reason = "the client's history is not yet enough to measure "
+      + "the completion rate for OFFER (2 cases), and no configured rate is used "
+      + "in its place (D21)";
+    render(<PipelineSnapshotPanel snapshot={{
+      ...NOV,
+      weightedExpectedFundedAmount: null,
+      weightingComplete: false,
+      weightingIncompleteReason: reason,
+      expectedCompletionBreakdown: NOV.expectedCompletionBreakdown.map(
+        (m) => ({ ...m, weightedExpectedFundedAmount: null })),
+    }} />);
+    expect(screen.getAllByText("n/a").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(reason).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/^Not stated: the client's history/)).toBeInTheDocument();
+  });
+
   it("shows no scope note when nothing is excluded", () => {
     render(<PipelineSnapshotPanel snapshot={NOV} />);
     expect(screen.queryByTestId("pipeline-open-scope")).toBeNull();

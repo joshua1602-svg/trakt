@@ -18,6 +18,19 @@ describe("ForecastBridgeCard", () => {
     expect(screen.getByText("£10.0MM")).toBeInTheDocument();
   });
 
+  it("states a withheld forecast as n/a with the reason, never £0 (D21)", () => {
+    const reason = "the client's history is not yet enough to measure "
+      + "the completion rate for OFFER (2 cases), and no configured rate is used "
+      + "in its place (D21)";
+    render(<ForecastBridgeCard bridge={{
+      ...bridge, weightedExpectedFundedAmount: null, forecastFundedBalance: null,
+      forecastWithheldReason: reason,
+    }} />);
+    expect(screen.getAllByText("n/a")).toHaveLength(2);
+    expect(screen.queryByText("£0")).toBeNull();
+    expect(screen.getByText(/Forecast not stated: the client's history/)).toBeInTheDocument();
+  });
+
   it("shows the completion probability basis and readiness status", () => {
     render(<ForecastBridgeCard bridge={bridge} />);
     expect(screen.getByText(/mixed_historical_and_config/)).toBeInTheDocument();
