@@ -390,3 +390,9 @@ intents added beside the baseline's.
                 a question naming no portfolio. D19 now reads every
                 identifier of the deployment's one book as that client
                 (dependencies.served_client_ids; design §29.3). Not deployed
+    2026-09-30  19:22 UTC 2e3278ff deployed (run 36764818908, success, no
+                retry). Vocabulary 2.18.0: one reading of the latest pair
+                (§29.1), the stage flow figures' definitions (§29.2), D19
+                reading every identifier of the deployment's one book as that
+                client (§29.3). Next: variants-recent (the runner refuses a
+                vocabulary below 2.18.0) — scale should answer at £100MM
