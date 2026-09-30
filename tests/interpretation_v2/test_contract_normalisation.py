@@ -659,9 +659,16 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: stage-movement capability may be asked for a point in time. D13 (2.10.0):
     #: the pipeline's change between two dated extracts, as a movement or as
     #: the two levels compared.
+    #: What moved in the whole pipeline (2.17.0, §28.2): stage movement owns
+    #: `material_summary` over its own figures, and `summary` is that form's
+    #: canonical operation — for the same reason as `period_movement`'s above,
+    #: without it the form is unreachable (normalisation rule 5 canonicalises
+    #: the form's operation to `summary`, and the compiler refuses an
+    #: operation the capability does not list).
     AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"},
                                       "forecast": {"breakdown"},
-                                      "pipeline_stage_movement": {"point_in_time"},
+                                      "pipeline_stage_movement": {"point_in_time",
+                                                                  "summary"},
                                       "pipeline": {"movement", "compare"}}
 
     #: THE CATALOGUE, WIDENED BY NAME. Catalogue batch 1 (vocabulary 2.6.0,
