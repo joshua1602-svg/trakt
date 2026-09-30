@@ -299,3 +299,9 @@ intents added beside the baseline's.
                 (holdout_variants_20260930.yaml) + score_variants.py: run them
                 beside the bank on the next deploy; findings = a variant not
                 answering as its bank question does
+    2026-09-30  12:15 UTC 927fe882 deployed (run 36713297553, success, no
+                retry). Vocabulary 2.15.0 (no bank wording in the model's
+                view), normal form 1.1 (a grouped figure is a breakdown),
+                pipeline history on demand, per-stage timing in the bank log.
+                Next: the bank beside the held-out variants (start with
+                --categories holdout_recent), scored by score_variants.py
