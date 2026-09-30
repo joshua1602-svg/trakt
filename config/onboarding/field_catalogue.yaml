@@ -79,6 +79,12 @@ vocabularies:
       - {value: direct, label: Originated by the client}
       - {value: acquired, label: Acquired from a third party}
 
+  portfolio_stage:
+    label: Securitisation stage
+    values:
+      - {value: pre_securitisation_spv, label: New SPV before securitisation}
+      - {value: established, label: Established client}
+
   portfolio_structure:
     label: How the book is held
     values:
@@ -240,6 +246,23 @@ sections:
           - {value: uat, label: Test}
         consumers: [Client configuration]
         writes_to: client_config:client.environment
+        amendable: true
+
+      - key: securitisation_stage
+        label: Securitisation stage
+        help: >-
+          Whether the book is a new SPV before securitisation or an established
+          client. It sets what "scale" means in MI answers: £100MM for a new SPV,
+          £250MM of assets under management for an established client.
+        scope: client
+        source: operator_supplied
+        type: enum
+        required: false
+        options_from: portfolio_stage
+        # Owner decision D9 (2026-09-29). The thresholds themselves are
+        # config/system/scale_policy.yaml's; this records only the stage.
+        consumers: [MI scale answers]
+        writes_to: client_config:portfolio.stage
         amendable: true
 
   # -----------------------------------------------------------------------
