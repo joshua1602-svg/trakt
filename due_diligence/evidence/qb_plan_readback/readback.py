@@ -114,6 +114,23 @@ def why_lines(record: Dict[str, Any], summary: Dict[str, Any]) -> List[str]:
     detail = str((record.get("eligibility") or {}).get("detail") or "")
     if detail:
         lines.append(f"why: {detail[:300]}")
+    # A plan the COMPILER refused or asked back on has no plan-level reading:
+    # say what the model proposed and why the compiler stopped it.
+    compiler = record.get("compiler") or {}
+    if compiler.get("outcome") not in (None, "PLAN"):
+        proposed = ((record.get("model") or {}).get("raw_payload")
+                    or (record.get("interpretation") or {}).get("candidate_intent")
+                    or {})
+        lines.append(
+            f"model read: capability={proposed.get('capability')} "
+            f"operation={proposed.get('operation')} measures="
+            f"{[m.get('concept') for m in proposed.get('measures') or () if isinstance(m, dict)]} "
+            f"dimensions={proposed.get('dimensions')}")
+        for reason in compiler.get("reasons") or ():
+            if isinstance(reason, dict):
+                lines.append(f"compiler: {reason.get('code')}: "
+                             f"{reason.get('subject')}: "
+                             f"{str(reason.get('detail') or '')[:250]}")
     payload = (record.get("raw_model_payload") or record.get("candidate_intent")
                or {})
     for item in (payload.get("ambiguity") or ()):
