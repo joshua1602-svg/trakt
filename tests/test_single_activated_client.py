@@ -193,3 +193,60 @@ class TestMiReadsTheActivatedClient:
             for _ in range(4):
                 assert currency.client_config_path(SERVED) == first
         assert len(calls) == 1
+
+
+# --------------------------------------------------------------------------- #
+# production's shape: the tenant is the business client, the book another label
+# --------------------------------------------------------------------------- #
+class TestTheBooksLabelIsTheSameClient:
+    """Measured 2026-09-30 in production: MI_AGENT_CLIENT_ID is ``ERE`` (OCC's
+    client), while a request naming no portfolio is answered from the book
+    labelled ``client_001``. Every such request asked OCC for ``client_001``'s
+    configuration, so "scale" stayed unconfigured although ERE's stage was
+    activated. One client, two labels."""
+
+    @pytest.fixture()
+    def production_shape(self, ops, monkeypatch):
+        monkeypatch.setenv("MI_AGENT_CLIENT_ID", ACTIVATED)
+        _activate(ops, ACTIVATED, _document(ACTIVATED))
+        return ops
+
+    def test_the_books_label_reads_the_activated_configuration(
+            self, production_shape):
+        from mi_agent_api import currency
+        from mi_agent_api.dependencies import DEFAULT_CLIENT_ID
+        location = currency.client_config_path(DEFAULT_CLIENT_ID)
+        assert location is not None and ACTIVATED in location
+
+    def test_scale_resolves_for_a_request_naming_no_portfolio(
+            self, production_shape):
+        from mi_agent_api import mi_service, scale_policy
+        client_id, _ = mi_service.split_portfolio(None)
+        threshold, reason, _ = scale_policy.resolve(client_id)
+        assert reason == "" and threshold.stage == "pre_securitisation_spv"
+
+    def test_the_tenant_still_reads_its_own(self, production_shape):
+        from mi_agent_api import currency
+        assert ACTIVATED in currency.client_config_path(ACTIVATED)
+
+    def test_another_client_still_reads_nothing(self, production_shape):
+        from mi_agent_api import currency
+        assert currency.client_config_path("some_other_lender") is None
+
+    def test_the_platform_datas_label_is_the_same_client(
+            self, production_shape, monkeypatch):
+        monkeypatch.setenv("MI_AGENT_PLATFORM_URI",
+                           "blob://processed/platform/book_7/latest/x.parquet")
+        from mi_agent_api import currency
+        assert ACTIVATED in currency.client_config_path("book_7")
+
+    def test_a_multi_tenant_deployment_still_infers_nothing(
+            self, production_shape, tmp_path, monkeypatch):
+        tenancy = tmp_path / "tenancy-2.yaml"
+        tenancy.write_text(yaml.safe_dump(
+            {"tenants": {ACTIVATED: {"display_name": "A"},
+                         "client_002": {"display_name": "B"}}}))
+        monkeypatch.setenv("TRAKT_TENANCY_CONFIG", str(tenancy))
+        from mi_agent_api import currency
+        from mi_agent_api.dependencies import DEFAULT_CLIENT_ID
+        assert currency.client_config_path(DEFAULT_CLIENT_ID) is None

@@ -2027,3 +2027,24 @@ fail-closed conditions held (another client ever activated in OCC — OCC keeps
 no "deactivated" state; an explicit tenancy registry; a different served
 tenant; the OCC container unreadable from the MI app). A read-only check run
 in the MI app's environment says which, before anything changes.
+
+The check (owner, SSH, 2026-09-30): served tenant `ERE` (from
+`MI_AGENT_CLIENT_ID`), no tenancy registry, OCC readable, one client onboarded
+and activated (`ERE`, v2, `pre_securitisation_spv`), and scale resolving to
+£100MM when asked for `ERE`. So D19's premise was wrong: the served tenant was
+never `client_001`. `client_001` is the LABEL of the deployment's book — the
+selector `mi_service.split_portfolio` gives every request that names no
+portfolio, and the client segment pipeline discovery files the extracts under
+— so every configuration lookup of such a request asked OCC for `client_001`.
+One client, two identifiers.
+
+The data keeps its label (pipeline discovery filters files by it, and moving
+storage is not a configuration change). D19 now reads every identifier under
+which the deployment serves its one book as that book's client:
+`dependencies.served_client_ids()` — the served tenant, the platform data's
+client segment, and `DEFAULT_CLIENT_ID` (now defined once, in `dependencies`,
+beside the tenant it belongs to). In a single-tenant deployment each of them
+resolves to the single activated client's configuration; any other identifier
+is another client's and still resolves to its own activation or to nothing,
+and a tenancy registry still turns the inference off. Pinned by
+`tests/test_single_activated_client.py::TestTheBooksLabelIsTheSameClient`.

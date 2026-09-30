@@ -699,7 +699,7 @@ _NOT_THE_PIPELINES_CHANGE = (
     "value: the change in the live pipeline's amount, case count or weighted "
     "value between two extracts — or a summary of what changed in the "
     "pipeline — is the pipeline's own figures (`pipeline_amount`, "
-    "`pipeline_case_count`, `weighted_expected_funded_amount`), owner "
+    "`pipeline_case_count` and the pipeline's weighted value), owner "
     "decision D15.")
 
 #: The flows between the latest pair of weekly extracts, as the movement owner

@@ -32,10 +32,20 @@ PIPELINE = ("weighted_expected_funded_amount",)
 #: Since 2.10.0 (D2a, §20.2): the stage-movement capability's measured rates,
 #: declared with their definitions in its semantic model.
 STAGE = tuple(semantic_model.load("pipeline_stage_movement").measures)
+#: Since 2.18.0 (§29.2): the stage-movement FLOW figures, which were shown by
+#: name only — "how has the pipeline moved" was answered with the flows over
+#: every case in the extracts where the live pipeline's own change was asked.
+STAGE_FLOWS = ("cases_moved", "amount_moved", "cases_arrived",
+               "cases_departed", "cases_stayed", "stayer_amount_change",
+               "stage_opening", "stage_closing")
 
 #: For each measure, the phrases that rule out a reading the production run
 #: made. Weakening a definition until one of these is gone fails here.
 RULES_OUT = {
+    # §29.2: a flow between stages is not the pipeline's change in size.
+    **{flow: ("between STAGES", "NOT how the pipeline changed")
+       for flow in ("cases_moved", "amount_moved", "cases_arrived",
+                    "cases_departed", "cases_stayed", "stayer_amount_change")},
     "forecast_funded_balance": ("ONE figure", "latest weekly extract",
                                 "NOT a curve", "month-by-month",
                                 "base, downside or upside", "NOT one part",
@@ -81,11 +91,11 @@ def test_the_version_records_what_the_model_is_shown():
 
 def test_exactly_the_forecast_measures_and_the_weighted_pipeline_are_defined():
     assert set(SPECIALIST_MEASURE_DEFINITIONS) == \
-        set(FORECAST) | set(PIPELINE) | set(STAGE)
+        set(FORECAST) | set(PIPELINE) | set(STAGE) | set(STAGE_FLOWS)
     assert set(FORECAST) == set(SPECIALIST_MEASURES["forecast"])
 
 
-@pytest.mark.parametrize("concept", FORECAST + PIPELINE + STAGE)
+@pytest.mark.parametrize("concept", FORECAST + PIPELINE + STAGE + STAGE_FLOWS)
 def test_the_definition_reaches_the_model_through_both_lookups(concept, tools):
     shown = tools.call("get_concept_metadata", {"concept_id": concept})
     assert shown["found"] and shown["definition"] == \

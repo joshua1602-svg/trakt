@@ -66,16 +66,18 @@ from . import chat_routing as chat_routing_mod
 from . import currency as currency_mod
 from . import workspace as workspace_mod
 from .adapters import adapt_workflow_result
-from .dependencies import CapabilityDependencies, build_dependencies
+from .dependencies import (DEFAULT_CLIENT_ID, CapabilityDependencies,
+                           build_dependencies)
 
 logger = logging.getLogger("mi_agent_api.mi_service")
 
 #: Stable capability identifier. Part of the external contract.
 CAPABILITY = "mi.question.answer"
 
-#: Retained for callers that still import it. The tenant now comes from the
-#: ExecutionContext; this is only the historical portfolio-selector fallback.
-DEFAULT_CLIENT_ID = "client_001"
+#: `DEFAULT_CLIENT_ID` (imported above) is retained for callers that still
+#: import it from here. The tenant comes from the ExecutionContext; this is the
+#: portfolio-selector fallback, now defined once in `dependencies` beside the
+#: served tenant it belongs to (owner decision D19).
 
 
 # --------------------------------------------------------------------------- #

@@ -383,3 +383,10 @@ intents added beside the baseline's.
                 in production; read-only check requested. Built (design §29):
                 one reading of the latest pair (plan_reading), the stage flow
                 figures' definitions (vocabulary 2.18.0). Not deployed yet
+    2026-09-30  Scale diagnosed by the owner's read-only check (SSH): served
+                tenant ERE, OCC readable, ERE the one activated client (v2,
+                pre_securitisation_spv), scale £100MM when asked for ERE. The
+                request asked for client_001 — the deployment's book label for
+                a question naming no portfolio. D19 now reads every
+                identifier of the deployment's one book as that client
+                (dependencies.served_client_ids; design §29.3). Not deployed

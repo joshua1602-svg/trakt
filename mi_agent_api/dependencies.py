@@ -22,6 +22,13 @@ from trakt_core.tenancy import TenantRegistry, load_tenant_registry
 from . import datasets as _datasets
 
 
+#: The client selector of the deployment's own book when nothing names one: the
+#: book a request naming no portfolio is answered from (`mi_service`), and the
+#: tenant of last resort below. A storage label for the data — the business
+#: client it belongs to is the served tenant (owner decision D19).
+DEFAULT_CLIENT_ID = "client_001"
+
+
 def default_tenant_id() -> str:
     """The tenant this deployment serves.
 
@@ -34,18 +41,34 @@ def default_tenant_id() -> str:
     if explicit:
         return explicit
     from_uri = _datasets._client_from_platform_uri()
-    return from_uri or "client_001"
+    return from_uri or DEFAULT_CLIENT_ID
+
+
+def served_client_ids() -> frozenset:
+    """Every identifier under which this deployment serves its one book.
+
+    The served tenant (:func:`default_tenant_id` — ``ERE`` in production,
+    from ``MI_AGENT_CLIENT_ID``), the client segment of the platform data's own
+    location, and :data:`DEFAULT_CLIENT_ID`, the selector a request naming no
+    portfolio is answered with. Measured 2026-09-30: production's tenant is
+    ``ERE`` while its book is labelled ``client_001``, so every request naming
+    no portfolio asked OCC for ``client_001``'s configuration — and there is
+    none. They are one client's identifiers, not two clients.
+    """
+    names = {default_tenant_id(), _datasets._client_from_platform_uri(),
+             DEFAULT_CLIENT_ID}
+    return frozenset(str(n).strip().casefold() for n in names
+                     if n and str(n).strip())
 
 
 def serves_only(client_id: Optional[str]) -> bool:
-    """Is ``client_id`` the ONE tenant this deployment serves?
+    """Is ``client_id`` an identifier of the ONE client this deployment serves?
 
     True only when both hold: no explicit tenancy registry declares the
     tenants served (``trakt_core.tenancy`` — with one, the deployment serves
-    whoever it names, and nothing is inferred), and ``client_id`` is
-    :func:`default_tenant_id`. The same single-tenant test
-    ``client_identity`` applies before it lets a configuration name a tenant.
-    Never raises: an unreadable registry answers False.
+    whoever it names, and nothing is inferred), and ``client_id`` is one of
+    :func:`served_client_ids`. Any other identifier is another client's and
+    answers False. Never raises: an unreadable registry answers False.
     """
     wanted = str(client_id or "").strip().casefold()
     if not wanted:
@@ -54,7 +77,7 @@ def serves_only(client_id: Optional[str]) -> bool:
         from trakt_core.tenancy import load_tenant_registry
         if getattr(load_tenant_registry(), "configured", False):
             return False
-        return default_tenant_id().strip().casefold() == wanted
+        return wanted in served_client_ids()
     except Exception:  # noqa: BLE001 — tenancy must never break a request
         return False
 
