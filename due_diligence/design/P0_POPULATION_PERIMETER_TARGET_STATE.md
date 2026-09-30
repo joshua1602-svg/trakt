@@ -2333,3 +2333,26 @@ configured); tests of D21 read the book without it and assert the withholding
 past a measured 9-day window) by the expected completion date. The owner:
 "keep as is for now — a low-priority question that can be configured with
 client preferences." Both stay as built, each stating its own basis.
+
+## 34. The conversational agent — proposed (2026-09-30)
+
+From one question at a time to a conversation, without loosening governance:
+the conversation is carried as the previous turn's governed PLAN, never as
+free text. A follow-up ("and by broker?", "just the Offers", "last month?") is
+read against that plan as a change to it; the deterministic compiler applies
+the change and every gate a first question passes runs again. The answer states
+what it carried over. A clarifying question holds the half-built plan for that
+conversation; the reply fills the missing slot. Context never crosses from one
+book to another silently, and a follow-up never widens what the user may see.
+
+Memory (proposed, for the owner's confirmation): the previous answer only, plus
+an open clarifying question — a follow-up refines exactly one plan — expiring
+after 15 minutes idle or on a change of topic; nothing kept beyond that except
+the audit log each question already writes. Widened to the last three answers
+only if "compare it with the one before" proves to be needed.
+
+Low-risk ambiguity is defaulted, not asked (D23). Phases: (1) clarification as
+a two-turn exchange; (2) follow-ups as plan changes; (3) references and
+comparisons across turns (on answer composition, §28.1); (4) a multi-turn bank
+with a pass mark per conversation, as D13 is for single questions. After the
+D13 sign-off.
