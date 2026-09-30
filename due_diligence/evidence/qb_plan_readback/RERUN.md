@@ -225,3 +225,9 @@ intents added beside the baseline's.
                 the receipt line: fixed. Not answered: the 68 questions after
                 the credits ran out — re-ask exactly those, by id, once
                 2.11.0 is deployed (plus [59])
+    2026-09-30  MI_AGENT_PLAN_SERVE set to off — operator confirmed. 06:42 UTC
+                622351a2 deploying (run 36679674222; vocabulary 2.12.0:
+                'current month' pipeline timing (2.11.0), D14 the smallest
+                loan has a balance, §21 one model call per question). Next:
+                the full bank with `all` — the measurement of the one-call
+                interpreter (readback projects model_calls and model_ms)
