@@ -247,3 +247,8 @@ intents added beside the baseline's.
                 dropped. Fixed in vocabulary 2.13.0 with [82] 'prior' = the
                 previous extract; the run-rate hold stays ([125, 126] dropped
                 their window). Design §22
+    2026-09-30  owner decisions: ERE established, scale £250MM (OCC must
+                activate portfolio.stage); governed first; [135] a date from
+                the book's history. Built (design §23): governed attempt
+                before the legacy parse; expected_completion_date; vocabulary
+                2.14.0

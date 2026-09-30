@@ -685,7 +685,10 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
                                     # D2a (2.10.0): the stage-movement
                                     # capability's measured rates.
                                     "cohort_conversion", "stage_pull_through",
-                                    "stage_completion_rate"}
+                                    "stage_completion_rate",
+                                    # §23 (2.14.0): when the live pipeline
+                                    # is expected to complete, from history.
+                                    "expected_completion_date"}
 
     #: ONE KEY REWORDED, BY NAME. `how_to_find_a_concept` told the model to
     #: call the lookup tools; with the governed catalogue in the prompt (one

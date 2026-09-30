@@ -133,21 +133,26 @@ class TestTheGovernedPathIsOfferedARoutedQuestion(unittest.TestCase):
         self.assertEqual(len(cfg.calls), 1,
                          "the governed path was not offered this request")
         self.assertEqual(cfg.calls[0]["question"], question)
-        # The LEGACY envelope is still computed and handed over as the fallback:
-        # precedence means the governed result may replace it, not that the
-        # legacy answer is skipped.
-        # IDENTIFIED BY ITS ROUTE, not by its prose. The post-routing guards
-        # run before this attempt and may rewrite `answer` — S2-P4's does,
-        # refusing the routed envelope outright — and the fallback handed over
-        # is deliberately the GUARDED envelope, which is the one that would have
-        # been served. `metadata.route` is what proves it is that envelope and
-        # not a fresh one.
-        self.assertEqual(
-            (cfg.calls[0]["legacy_result"].get("metadata") or {}).get("route"),
-            "evolution")
+        # GOVERNED FIRST (owner decision 2026-09-30, P0 design §23): the attempt
+        # is made before the legacy parse and the legacy router, so no legacy
+        # envelope exists yet to hand over — it is computed only if the attempt
+        # declines (test_8).
+        self.assertIsNone(cfg.calls[0]["legacy_result"])
         self.assertEqual(body.get("answer"), "the governed temporal answer",
                          "the routed envelope was still authoritative")
         return body
+
+    def test_a_governed_answer_never_runs_the_legacy_path(self):
+        """The saving the order exists for: no legacy parse — its own model
+        call — and no legacy router, for a question the governed path answers."""
+        with _Routed() as cfg, \
+                mock.patch("mi_agent.parsed_question.ParsedQuestion.parse",
+                           side_effect=AssertionError("the legacy parse ran")), \
+                mock.patch.object(mi_service.chat_routing_mod, "try_route",
+                                  side_effect=AssertionError("the router ran")):
+            body = ask(S2_P1)
+        self.assertEqual(body.get("answer"), "the governed temporal answer")
+        self.assertEqual(len(cfg.calls), 1)
 
     def test_1_S2_P1_reaches_the_governed_path(self):
         self._case(S2_P1)

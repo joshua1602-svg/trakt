@@ -121,7 +121,12 @@ from mi_agent import semantic_model as _semantic_model
 #: restriction is kept, not dropped ([102]); the completion run-rate says it
 #: is measured over the forecast's own window, so an 8- or 12-week run-rate
 #: keeps its window ([125, 126]).
-VOCABULARY_VERSION = "2.13.0"
+#:
+#: 2.14.0 (owner decision 2026-09-30, P0 design §23): WHEN the live pipeline
+#: is expected to complete, from the book's own history — the stage-movement
+#: capability's `expected_completion_date` — and the extract's own
+#: expected-completion month no longer claims that question ([135]).
+VOCABULARY_VERSION = "2.14.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -664,9 +669,12 @@ SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
 #: tab's own definition).
 SPECIALIST_DIMENSION_DEFINITIONS: Mapping[str, str] = {
     "expected_completion_month": (
-        "The month a live pipeline case is expected to complete. Group by it "
-        "for 'by expected completion month or date' and 'when are cases "
-        "expected to complete'."),
+        "The month a live pipeline case's OWN record says it is expected to "
+        "complete — the date the extract carries, which only some cases have. "
+        "Group by it for 'by expected completion month or date'. WHEN the live "
+        "pipeline is expected to complete, from the book's own history of how "
+        "long cases take, is the stage-movement capability's "
+        "`expected_completion_date`."),
     "expected_completion_timing": (
         "Where a live pipeline case's expected completion month falls against "
         "the month of the pipeline extract: `overdue` (an earlier month — the "

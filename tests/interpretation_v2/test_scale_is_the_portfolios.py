@@ -50,16 +50,20 @@ def stage(monkeypatch):
 def test_the_policy_is_the_owners_decision():
     policy = scale_policy.load_policy()
     assert policy["pre_securitisation_spv"]["threshold"] == 100_000_000
-    assert policy["established"]["threshold"] == 200_000_000
+    # £250MM (owner decision 2026-09-30; was £200MM).
+    assert policy["established"]["threshold"] == 250_000_000
     assert "all the client's portfolios" in policy["established"]["measured_on_label"]
 
 
-def test_ere_is_recorded_as_a_pre_securitisation_spv():
+def test_ere_is_recorded_as_an_established_client():
+    """Owner-confirmed 2026-09-30 (superseding 2026-09-29's pre-securitisation
+    SPV): ERE is established, at scale at £250MM of assets under management.
+    Production reads the configuration OCC activated, not this file."""
     import yaml
     doc = yaml.safe_load(open("config/client/config_client_ERE.yaml"))
     threshold, why, _ = scale_policy.resolve("ERE", document=doc)
-    assert why == "" and threshold.stage == "pre_securitisation_spv"
-    assert threshold.threshold == 100_000_000
+    assert why == "" and threshold.stage == "established"
+    assert threshold.threshold == 250_000_000
 
 
 def test_the_model_is_told_to_name_scale_and_never_a_number():

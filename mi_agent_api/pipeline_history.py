@@ -110,6 +110,7 @@ def build_historical_completion_model(
                 if value is not None and not pd.isna(value):
                     t[fld] = pd.Timestamp(value)
             t["final_stage"] = stage
+            t["last_seen"] = extract_date
             if stage in ACTIVE_STAGES:
                 t["seen_open"] = True
             if stage == WITHDRAWN and not t.get("withdrawn_on"):
@@ -179,6 +180,13 @@ def build_historical_completion_model(
         if sufficient and rate is not None:
             stage_rates[stage] = rate
 
+    # WHEN THE LIVE PIPELINE IS EXPECTED TO COMPLETE, from the book's own history
+    # (owner decision 2026-09-30: "a date answer based on historical time to
+    # complete using the client's time series").
+    expected_by_stage, expected_all = _expected_completion(
+        timelines, timing_by_stage, max(dates) if dates else None,
+        min_observations)
+
     # Cumulative cohort progression: of the ORIGINAL KFI cohort, the % that has
     # reached each milestone (KFI -> Application -> Offer -> Funded) by each week.
     # This is a true cohort-tracked funnel (case timelines), NOT a ratio of
@@ -228,6 +236,8 @@ def build_historical_completion_model(
         "excludedStageCounts": excluded_stage_counts,
         "historicalCompletionRateByStage": rate_by_stage,
         "historicalCompletionTimingByStage": timing_by_stage,
+        "expectedCompletionByStage": expected_by_stage,
+        "expectedCompletion": expected_all,
         "historicalCompletionRateWindow": {
             "fromDate": min(dates) if dates else None,
             "toDate": max(dates) if dates else None,
@@ -239,6 +249,61 @@ def build_historical_completion_model(
         "cohortProgression": cohort_progression,
         "cumulativeCohortConversion": cumulative_cohort_conversion,
     }
+
+
+def _expected_completion(timelines: Dict[str, Dict[str, Any]],
+                         timing_by_stage: Dict[str, Any], latest: Optional[str],
+                         min_observations: int
+                         ) -> "tuple[Dict[str, Any], Dict[str, Any]]":
+    """When the LIVE pipeline is expected to complete, from the book's history.
+
+    A live case is one the latest weekly extract shows at an open stage. Its
+    expected completion is the date it was first seen at that stage plus the
+    stage's median elapsed days to completion — measured on this book's cases
+    that DID complete, first-seen to completion, exactly as
+    `historicalCompletionTimingByStage` measures it. So the date is
+    CONDITIONAL on completing: most KFI cases never do (the completion rate by
+    stage says how many), and the answer says so.
+
+    `(by stage, all live cases)`: per stage the live cases, the median
+    expected date, the median days it rests on, the completions that measured
+    it, how many live cases are already past it, and the owner's sufficiency
+    flag; over all live cases the median expected date.
+    """
+    by_stage: Dict[str, Any] = {}
+    every: List[str] = []
+    live_total = 0
+    if not latest:
+        return by_stage, {"medianDate": None, "liveCases": 0, "asOf": None}
+    for stage in ACTIVE_STAGES:
+        live = [t for t in timelines.values()
+                if t.get("last_seen") == latest and t.get("final_stage") == stage
+                and t["stages"].get(stage)]
+        if not live:
+            continue
+        live_total += len(live)
+        # No completion from the stage in the history: no date, and said so.
+        row: Dict[str, Any] = {"liveCases": len(live), "sufficient": False}
+        timing = timing_by_stage.get(stage)
+        if timing:
+            days = int(timing["medianDays"])
+            firsts = pd.to_datetime([t["stages"][stage] for t in live],
+                                    errors="coerce")
+            expected = sorted((f + pd.Timedelta(days=days)).date().isoformat()
+                              for f in firsts if pd.notna(f))
+            if expected:
+                row.update({
+                    "medianDate": statistics.median_low(expected),
+                    "medianDays": days,
+                    "completionsObserved": int(timing["observed"]),
+                    "pastTypical": sum(1 for d in expected if d < latest),
+                    "sufficient": int(timing["observed"]) >= min_observations,
+                })
+                every.extend(expected)
+        by_stage[stage] = row
+    return by_stage, {"medianDate": (statistics.median_low(sorted(every))
+                                     if every else None),
+                      "liveCases": live_total, "asOf": latest}
 
 
 # Origination funnel milestone order (entry -> exit). Funded == COMPLETED.

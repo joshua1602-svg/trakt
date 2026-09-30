@@ -7,7 +7,8 @@
 #
 #   established             a client is AT SCALE once its assets under
 #                           management — the funded balance across all the
-#                           client's portfolios — exceed the threshold.
+#                           client's portfolios — exceed the threshold
+#                           (£250MM, owner decision 2026-09-30; was £200MM).
 #   pre_securitisation_spv  a new SPV before securitisation: scale is the
 #                           threshold (at £80MM, scale is £100MM, £20MM away).
 #
@@ -21,5 +22,5 @@ stages:
     measured_on_label: the SPV's funded balance
   established:
     label: established client
-    threshold: 200000000
+    threshold: 250000000
     measured_on_label: assets under management (the funded balance across all the client's portfolios)

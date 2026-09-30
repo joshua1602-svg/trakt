@@ -129,3 +129,42 @@ measures:
       origin_stage for every stage. It is NOT the pull-through to the NEXT
       stage, NOT the cohort conversion, and NOT the completion run-rate in £
       per month.
+
+  expected_completion_date:
+    label: Expected completion date
+    unit: date
+    view: case_history
+    operations: [point_in_time, breakdown]
+    periods: [current]
+    value: expectedCompletion.medianDate
+    inputs: [case_history]
+    context:
+      live_case_count: expectedCompletion.liveCases
+    explain: >-
+      the median over the {live_case_count} live cases of the date each was first
+      seen at its stage plus the book's median time to complete from that
+      stage, measured on the cases that did complete — a date for the cases
+      that complete, not a promise that they will
+    by:
+      origin_stage:
+        map: expectedCompletionByStage
+        value: medianDate
+        # What each date rests on, stated with it: the live cases, the median
+        # days to complete from the stage, the completions that measured it,
+        # and how many live cases are already past it.
+        also: [liveCases, medianDays, completionsObserved, pastTypical]
+        provisional_unless: sufficient
+    # Owner decision 2026-09-30 ("a date answer based on historical time to
+    # complete using the client's time series"). No date in the definition:
+    # the model is shown none (test_model_sees_no_data).
+    definition: >-
+      WHEN the live pipeline is expected to complete, from the book's own
+      history: for each live case, the date it was
+      first seen at its current stage plus the median time this book's cases
+      have taken to complete from that stage. It answers 'when are pipeline
+      cases expected to complete', 'when will the pipeline complete' and 'how
+      long until the offers complete' — a date, by origin_stage for each
+      stage. It is conditional on completing: the share that complete is
+      stage_completion_rate. It is NOT the completion date each case's own
+      record carries (group by expected_completion_month for that), and NOT
+      the forecast's completion run-rate.

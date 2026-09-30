@@ -2042,30 +2042,6 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         geography = _parser_mod.bind_geography(
             _resolve_geography(client_id, portfolio_id, df))
 
-    try:
-        with _perf.stage("mi_query.parse"):
-            parsed = ParsedQuestion.parse(
-                req.question, semantics,
-                # The contract in force for the whole parse, so the dimension
-                # binder, the categorical filter and the population resolver
-                # cannot bind "region" to three different columns.
-                geography=geography,
-                available_columns=set(df.columns) if df is not None else None,
-                # THE BOOK'S OWN CATEGORY VALUES. Without them the parser has
-                # no way to tell which governed field a named category belongs
-                # to, and bound every one to geography.
-                available_values=(_book_values(df, semantics)
-                                  if df is not None else None),
-                llm_enabled=llm_cfg.enabled, model=llm_cfg.model,
-                # Extension point: supply a Business Semantics Registry resolver
-                # here to attach governed business-term metadata to every parse.
-                # It flows to every recogniser via
-                # ``RouteRequest.semantics_context`` with no further plumbing.
-                semantics_resolver=deps.semantics_resolver)
-    except Exception:  # noqa: BLE001 - a parser fault is a controlled failure
-        logger.exception("MI query parse failed for question=%r", req.question)
-        return _error_envelope("The MI Agent could not interpret this question.",
-                               req=req, view=view)
 
     # THE GOVERNED SERVING ATTEMPT, DEFINED ONCE AND OFFERED ON BOTH PATHS.
     #
@@ -2084,11 +2060,16 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # and nothing is disabled — a request the governed path declines is answered
     # by exactly the envelope that branch had already built.
     #
-    # THE LEGACY ANSWER IS STILL COMPUTED FIRST AND KEPT. `serve` takes it as the
-    # fallback it returns to on any failure, which is what makes the fallback
-    # incapable of failing. Precedence here means the governed result may BECOME
-    # the response before the legacy one is returned — not that the legacy one is
-    # skipped.
+    # THE GOVERNED ATTEMPT RUNS FIRST, ONCE (owner decision 2026-09-30, P0
+    # design §23). It needs nothing the legacy path computes — not the legacy
+    # parse, not the routed envelope — so for an allow-listed principal it is
+    # made before either, and a question it answers never pays for the legacy
+    # parse's model call or the legacy computation. A question it declines is
+    # answered by exactly the legacy path it always was: `serve` returns None on
+    # any failure, and the legacy path runs from the parse on. The fallback is
+    # still incapable of failing; what changed is that it is only computed when
+    # it is used. The legacy value is therefore not on the evidence record of a
+    # governed answer (`legacy_result_available: false`).
     def _pipeline_inputs(ds_mod, cid: Optional[str], rid: Optional[str]
                          ) -> Dict[str, Any]:
         """What the Pipeline owners need, from the module that already finds it.
@@ -2113,7 +2094,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                            "governed attempt", exc_info=True)
         return found
 
-    def _governed_serving_attempt(legacy_envelope: Dict[str, Any]
+    def _governed_serving_attempt(legacy_envelope: Optional[Dict[str, Any]]
                                   ) -> Optional[Dict[str, Any]]:
         from mi_agent import plan_serving_canary as _plan_serving
         if not _plan_serving.handles(context):
@@ -2164,17 +2145,56 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             # makes the plan — and not the sentence — decide the dataset.
             **_pipeline_inputs(ds, client_id, run_id))
 
+    # The funded frame for a routed intent, and for the governed forecast
+    # composer (D6), defined before the governed attempt that is handed it.
+    def _routed_frame(cli: str, rid: Optional[str]):
+        """The funded frame for a routed intent, resolved by exactly the same
+        governed resolver the point-in-time path uses. With no run selected
+        this is the ACTIVE governed dataset — a point-in-time question (e.g.
+        regional concentration) must never require a run id."""
+        pid = f"{cli}/{rid}" if rid else (cli or None)
+        frame, err = ds._resolve_query_frame("funded", pid)
+        return None if err else frame
+
+    # GOVERNED FIRST — see the helper above. One attempt per request.
+    from mi_agent import plan_serving_canary as _plan_serving
+    _canary = _plan_serving.handles(context)
+    if _canary:
+        served = _governed_serving_attempt(None)
+        if served is not None:
+            return _governed_context(served, req=req, client_id=client_id,
+                                     run_id=run_id, geography=geography,
+                                     view=view, run_required=bool(run_id),
+                                     semantics=semantics, frame=df)
+
+    # ---- the legacy path, from its parse on ------------------------------- #
+    try:
+        with _perf.stage("mi_query.parse"):
+            parsed = ParsedQuestion.parse(
+                req.question, semantics,
+                # The contract in force for the whole parse, so the dimension
+                # binder, the categorical filter and the population resolver
+                # cannot bind "region" to three different columns.
+                geography=geography,
+                available_columns=set(df.columns) if df is not None else None,
+                # THE BOOK'S OWN CATEGORY VALUES. Without them the parser has
+                # no way to tell which governed field a named category belongs
+                # to, and bound every one to geography.
+                available_values=(_book_values(df, semantics)
+                                  if df is not None else None),
+                llm_enabled=llm_cfg.enabled, model=llm_cfg.model,
+                # Extension point: supply a Business Semantics Registry resolver
+                # here to attach governed business-term metadata to every parse.
+                # It flows to every recogniser via
+                # ``RouteRequest.semantics_context`` with no further plumbing.
+                semantics_resolver=deps.semantics_resolver)
+    except Exception:  # noqa: BLE001 - a parser fault is a controlled failure
+        logger.exception("MI query parse failed for question=%r", req.question)
+        return _error_envelope("The MI Agent could not interpret this question.",
+                               req=req, view=view)
+
     routed = None
     try:
-        def _routed_frame(cli: str, rid: Optional[str]):
-            """The funded frame for a routed intent, resolved by exactly the same
-            governed resolver the point-in-time path uses. With no run selected
-            this is the ACTIVE governed dataset — a point-in-time question (e.g.
-            regional concentration) must never require a run id."""
-            pid = f"{cli}/{rid}" if rid else (cli or None)
-            frame, err = ds._resolve_query_frame("funded", pid)
-            return None if err else frame
-
         # P1L — GOVERNED POPULATION PROPAGATION.
         #
         # The population is resolved ONCE, here, and the specialist routes
@@ -2276,18 +2296,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # SITE 1 OF 2 — a named GEOGRAPHY this book does not carry.
         routed = _guard_stated_geography_basis(
             routed, question=req.question, geography=geography)
-        # BEFORE THE ROUTED ENVELOPE BECOMES AUTHORITATIVE — see the helper above.
-        served = _governed_serving_attempt(routed)
-        if served is not None:
-            # A GOVERNED ANSWER IS NOT THE ROUTED ONE, so it is not labelled with
-            # the routed capability's run requirement: it resolved its own
-            # snapshots from the governed catalogue. It is stamped exactly as a
-            # governed answer on the point-in-time branch is, so which branch the
-            # request happened to arrive on is not visible in the response.
-            return _governed_context(served, req=req, client_id=client_id,
-                                     run_id=run_id, geography=geography,
-                                     view=view, run_required=bool(run_id),
-                                     semantics=semantics, frame=df)
+        # The governed attempt was made above, before the parse; a routed
+        # envelope here is one it declined (or a principal outside the canary).
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  geography=geography,
                                  view=view, run_required=_route_requires_run(route),
@@ -2397,17 +2407,12 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # canary handled has already bought its interpretation, and shadowing it
     # would buy a second and compare the new result against itself.
     #
-    # The legacy envelope is complete before either runs, so `serve` returning
-    # None — off, ineligible, clarify, refuse, any failure — leaves `result`
-    # exactly as the legacy path built it.
-    # THE SAME ATTEMPT THE ROUTED BRANCH MAKES, through the one helper defined
-    # above. It was written out here when this was the only place it happened.
-    from mi_agent import plan_serving_canary as _plan_serving
-    if _plan_serving.handles(context):
-        served = _governed_serving_attempt(result)
-        if served is not None:
-            result = served
-    else:
+    # For a canary principal the governed attempt was made above, before the
+    # parse, and this result is one it declined — `serve` returning None (off,
+    # ineligible, clarify, refuse, any failure) leaves the legacy path to build
+    # the answer exactly as it always did. Outside the canary, the shadow
+    # observes as before.
+    if not _canary:
         # THE SHADOW STAYS WHERE IT WAS, on this branch only. Extending it to
         # routed questions would buy a live interpretation for every
         # non-canary caller who asked a trend question — a change to the

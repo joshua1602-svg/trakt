@@ -1532,3 +1532,64 @@ call included — and keeps as the fallback, before the governed attempt runs.
   * Legacy first: the governed attempt could run first and the legacy answer
     be computed only when it declines — the step towards switching legacy
     off, and most of the remaining time and model cost per question.
+
+## 23. Governed first; scale at £250MM; when the pipeline completes (2026-09-30)
+
+Owner decisions (2026-09-30), on §22's open items:
+
+    1  ERE is an ESTABLISHED client; scale for an established client is £250MM
+       (was £200MM).
+    2  The governed attempt runs FIRST; the legacy path only when it declines.
+    3  "When are pipeline cases expected to complete?" is a DATE, from the
+       book's own history of how long cases take to complete.
+
+### 23.1 Scale (D9, amended)
+
+`config/system/scale_policy.yaml`: `established` threshold 250,000,000. The
+authored client configuration records `portfolio.stage: established`. The
+live service reads the configuration OCC ACTIVATED (`currency.
+client_config_path`), never the repository copy — so [122, 128] answer in
+production once OCC activates a configuration carrying the stage. The
+threshold itself ships with the deploy.
+
+### 23.2 Governed first
+
+`mi_service._run_analysis` made the governed attempt AFTER the legacy parse
+(its own model call) and the legacy answer, which it handed over as the
+fallback and recorded beside the governed value. §22 measured the cost: the
+model is a fifth of a question's time; the legacy path is most of the rest.
+
+The attempt needs nothing the legacy path computes, so it now runs once,
+before the legacy parse, for an allow-listed principal. A question it answers
+returns at once — no legacy parse, no router, no legacy computation. A
+question it declines is answered by exactly the legacy path it always was,
+from the parse on; the attempt is not repeated. The fallback is still
+incapable of failing; it is computed only when used, and a governed answer's
+evidence record says `legacy_result_available: false`. Pinned by
+`test_slice2_serving_repair.py` (`test_a_governed_answer_never_runs_the_
+legacy_path`; a declined request keeps the legacy answer unchanged).
+
+This is the step before switching the legacy path off: when the governed path
+declines only what should be declined, the fallback is a refusal.
+
+### 23.3 When the live pipeline is expected to complete
+
+The history owner already measured, per stage, the median days from a case
+first being seen at the stage to completing (`historicalCompletionTiming
+ByStage`, over the cases that DID complete). It now applies that to every live
+case at the latest extract and publishes `expectedCompletionByStage` (median
+expected date, live cases, median days, completions measured, live cases
+already past it, sufficiency) and `expectedCompletion` (the median over all
+live cases). The stage-movement semantic model declares
+`expected_completion_date` (unit `date`); the one engine reads it:
+
+    Expected completion date: 2026-06-08 — the median over the 5 live cases of
+    the date each was first seen at its stage plus the book's median time to
+    complete from that stage, measured on the cases that did complete — a date
+    for the cases that complete, not a promise that they will.
+
+It is conditional on completing, and says so; the share that complete is
+`stage_completion_rate`. The extract's own expected-completion month keeps
+'by expected completion month/date' and no longer claims 'when are cases
+expected to complete'. Vocabulary 2.14.0. Pinned by
+`test_expected_completion_date.py`.

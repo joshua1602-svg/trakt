@@ -1343,7 +1343,8 @@ _STAGE_AXES = frozenset({"origin_stage", "destination_stage"})
 def _shown_in(unit: str, value: Any) -> str:
     """A figure in its semantic-model unit. Presentation only."""
     if value is None:
-        return "no date" if unit == "month" else "n/a"
+        return {"month": "no date",
+                "date": "no completion observed"}.get(unit, "n/a")
     if unit == "gbp":
         return _money(value)
     if unit == "gbp_per_month":
@@ -1356,6 +1357,8 @@ def _shown_in(unit: str, value: Any) -> str:
         return _standard.percent(value)
     if unit == "ratio":
         return _standard.percent(value, fraction=True)
+    if unit == "days":
+        return _standard.plural(value, "day")
     return str(value)
 
 
