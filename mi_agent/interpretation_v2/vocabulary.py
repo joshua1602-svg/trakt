@@ -113,7 +113,15 @@ from mi_agent import semantic_model as _semantic_model
 #: ONE call instead of retrieving it through lookup tools — so the orientation
 #: block's "how to find a concept" and the named-book axis point at the
 #: catalogue and the per-request CLIENT CONTEXT.
-VOCABULARY_VERSION = "2.12.0"
+#:
+#: 2.13.0 (the 2026-09-30 full bank, P0 design §22): 'the expected funded
+#: balance' is named as the forecast funded balance and ruled out of the
+#: pipeline's weighted amount ([87] was answered with the latter); the
+#: weighting exclusion says it covers the WHOLE extract, so a live/active
+#: restriction is kept, not dropped ([102]); the completion run-rate says it
+#: is measured over the forecast's own window, so an 8- or 12-week run-rate
+#: keeps its window ([125, 126]).
+VOCABULARY_VERSION = "2.13.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -643,8 +651,11 @@ SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
         "weighted pipeline or the expected completions from the pipeline. It is "
         "the pipeline part of the forecast funded balance. It is NOT the "
         "pipeline amount (unweighted), and NOT the forecast funded balance "
-        "(which adds the funded book). It can be broken down by stage, broker, "
-        "product, LTV band or expected completion month."),
+        "(which adds the funded book): 'the expected funded BALANCE' is the "
+        "forecast funded balance — a balance the book is expected to hold — "
+        "while this is the AMOUNT expected from the pipeline alone. It can be "
+        "broken down by stage, broker, product, LTV band or expected "
+        "completion month."),
 }
 
 #: WHAT A SPECIALIST DIMENSION IS, where its name does not say it, and the

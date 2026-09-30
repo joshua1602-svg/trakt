@@ -142,6 +142,57 @@ def test_correct_readings_of_a_held_shape_are_held_too(replay):
         assert (name, ok, why) == ("forecast", False, forecast_rt.AMBIGUOUS_READING)
 
 
+_LATEST = json.loads((_FIXTURE.parent / "qb_recorded_intents_20260930.json")
+                     .read_text())["cases"]
+
+
+def _in_the_run_rate_shape(case):
+    payload = case["raw_model_payload"] or {}
+    return (payload.get("operation") == "point_in_time"
+            and [m.get("concept") for m in payload.get("measures") or ()]
+            == ["forecast_completion_rate"])
+
+
+def test_why_the_run_rate_hold_stays_on_the_latest_readings():
+    """The 2026-09-30 full bank moved every reading the hold was built for to
+    its own concept — the annualised run-rate [113], the KFI-to-completion
+    rate [121], the Offer pull-through [134] — and the forecast's method [98]
+    asks back. But the 8- and 12-week run-rates [125, 126] arrived in the
+    shape with their window dropped: served, they would be answered with the
+    forecast's own window. The hold stays until they carry their window
+    (vocabulary 2.13.0) and a live run shows it (P0 design §22)."""
+    latest = {case["n"]: case for case in _LATEST}
+    assert len(latest) == 135
+    shape = sorted(n for n, case in latest.items() if _in_the_run_rate_shape(case))
+    assert shape == [98, 112, 125, 126]
+    assert latest[98]["recorded"]["compile_outcome"] == "CLARIFY"
+    for n, concept in ((113, "annualised_completion_run_rate"),
+                       (121, "stage_completion_rate"),
+                       (134, "stage_pull_through")):
+        payload = latest[n]["raw_model_payload"]
+        assert [m["concept"] for m in payload["measures"]] == [concept], n
+    assert ("point_in_time", "forecast_completion_rate") in forecast_rt.HELD_READINGS
+
+
+def test_a_run_rate_that_keeps_its_window_is_declined_not_answered():
+    """What 2.13.0 asks the model to do with "the 8-week run-rate": keep the
+    window. The runtime owns one window, so a stated other one is refused."""
+    result = DeterministicCompiler(CompilerContext()).compile(parse_candidate_intent({
+        "schema_version": "candidate_intent/1.0", "capability": "forecast",
+        "operation": "point_in_time",
+        "measures": [{"concept": "forecast_completion_rate"}],
+        "time": {"form": "range", "labels": ["the last 8 weeks"]}}))
+    if result.plan is None:          # refused at compile: declined either way
+        return
+    plan = result.plan.to_dict()
+    assert not forecast_rt.check_eligibility(plan)[0]
+    # And with the hold off — the guard the release will rely on.
+    from mi_agent import semantic_engine as engine
+    ok, why, _ = engine.check(forecast_rt.MODEL, plan, "forecast_completion_rate",
+                              "point_in_time", held=None)
+    assert not ok and why == forecast_rt.PERIOD_NOT_SUPPORTED, why
+
+
 def test_nothing_served_on_the_governed_path_before_is_now_refused(replay):
     for n, row in replay.items():
         if row["case"]["recorded"]["serving_decision"] == "NEW" and row["route"]:

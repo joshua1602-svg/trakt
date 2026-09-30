@@ -139,7 +139,11 @@ measures:
     definition: >-
       ONE figure: today's funded balance plus the probability-weighted
       completions expected from the OPEN pipeline in the latest weekly extract —
-      the figure on the Forecast tab. It is NOT a curve or a month-by-month
+      the figure on the Forecast tab. It is what 'the expected funded
+      balance', 'the forecast balance' and 'funded balance plus weighted
+      pipeline' mean: a BALANCE the book is expected to hold, its funded book
+      included — not the amount expected from the pipeline alone. It is NOT
+      a curve or a month-by-month
       projection (that is `projected_funded_balance`), NOT the base, downside
       or upside scenario of the scale-up forecast, and NOT expected completions
       on their own. It is NOT one part of itself: for its funded part or its
@@ -188,9 +192,13 @@ measures:
       that have lapsed past their stage's window, and cases missing a stage or
       a probability. Measured over the PIPELINE population: a question about
       how much pipeline is excluded, withdrawn from the forecast, or lapsed
-      past its stage window names the pipeline. Filter or break it down by
-      `weighting_exclusion_reason` for why. It is NOT the pipeline amount, and
-      NOT the weighted pipeline.
+      past its stage window names the pipeline. It covers the WHOLE extract —
+      its completed and withdrawn cases are in it — so it is not the live
+      pipeline's exclusion: a question restricted to the live, active or open
+      pipeline keeps that restriction in the intent (the reasons other than
+      `completed` and `withdrawn`) rather than dropping it. Filter or break it
+      down by `weighting_exclusion_reason` for why. It is NOT the pipeline
+      amount, and NOT the weighted pipeline.
 
   weighting_excluded_case_count:
     label: Pipeline cases excluded from forecast weighting
@@ -264,6 +272,10 @@ measures:
       the pipeline's observed completions. It is an amount per month, NOT a
       percentage: it is NOT a conversion rate from KFI, application or offer
       to completion, and NOT a description of how the forecast is calculated.
+      It is measured over the forecast's OWN observation window, which the
+      answer states: a question naming ANOTHER window — '8-week', '12-week',
+      'over the last quarter' — asks a different figure, so keep that window
+      in `time` (a `range`, its words in `labels`) rather than dropping it.
       Filter by `forecast_scenario` for the downside or upside run-rate; the
       yearly figure is `annualised_completion_run_rate`.
 

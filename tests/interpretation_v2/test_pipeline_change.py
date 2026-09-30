@@ -103,6 +103,31 @@ def test_latest_against_the_previous_week_is_the_last_two_extracts(history):
         by_date["2026-10-29"]["metrics"]["pipeline_amount"])
 
 
+def test_latest_against_prior_with_no_grain_is_the_previous_extract(history):
+    """[82] "Compare latest pipeline with prior pipeline" on the 2026-09-30
+    full bank: read as a relative pair with no grain. The pipeline's periods
+    are its weekly extracts, so 'prior' is the previous one — and the receipt
+    says the grain was the pipeline's own, not the question's."""
+    by_date, _ = _owner(history)
+    outcome = _run(history, capability="pipeline", operation="compare",
+                   change_form="level_comparison",
+                   time={"form": "relative_pair", "labels": ["latest", "prior"],
+                         "periods_back": 1})
+    assert outcome.ok, outcome.detail
+    assert outcome.receipt["selected_periods"] == ["2025-11-27", "2026-10-29"]
+    assert outcome.receipt["change"] == engine.period_change(
+        by_date["2025-11-27"]["metrics"]["pipeline_amount"],
+        by_date["2026-10-29"]["metrics"]["pipeline_amount"])
+    assert all(pipeline_rt.NATIVE_GRAIN_RULE in row["rule"]
+               for row in outcome.receipt["period_resolution"])
+
+
+def test_a_grain_the_history_does_not_have_is_still_refused():
+    plan = _plan(time={"form": "relative_pair", "grain": "daily",
+                       "periods_back": 1})
+    assert pipeline_rt.check_eligibility(plan)[1] == pipeline_rt.PERIOD_NOT_SUPPORTED
+
+
 def test_the_change_by_stage_is_each_stages_own(history):
     outcome = _run(history, dimensions=["pipeline_stage"])
     assert outcome.ok, outcome.detail

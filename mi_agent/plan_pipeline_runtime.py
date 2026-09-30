@@ -218,6 +218,20 @@ MONTH_RULE = "D7: the last weekly extract dated within the named month"
 #: The grain the weekly extracts are on. Stated, not inferred, and carried into
 #: the receipt so a reader can see the answer is weekly rather than monthly.
 TEMPORAL_GRAIN = "weekly"
+
+#: "LATEST AGAINST PRIOR" WITH NO GRAIN NAMED is the owner's own order: the
+#: pipeline's periods ARE its weekly extracts, so "the prior pipeline" is the
+#: previous extract (2026-09-30 full bank, [82], a must-answer). The grain the
+#: pair was read on is stated on the receipt — never silently assumed.
+NATIVE_GRAIN_RULE = ("no grain was named, so 'previous' is the pipeline's own: "
+                     "its previous weekly extract")
+
+
+def _pair_grain(period: Mapping[str, Any]) -> Tuple[str, bool]:
+    """`(grain, defaulted)` a relative pair is read on: the one it states, or
+    the pipeline's own weekly extracts when it states none."""
+    stated = str(period.get("grain") or "")
+    return (stated, False) if stated else (TEMPORAL_GRAIN, True)
 TEMPORAL_BASIS = "governed_weekly_pipeline_extracts"
 
 #: The grains a pipeline SERIES can honestly be stated at. The history is
@@ -443,7 +457,7 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                     f"a change is between two dates; this plan names "
                     f"{len(period.get('labels') or ())}")
         if form == "relative_pair":
-            grain = str(period.get("grain") or "")
+            grain, _ = _pair_grain(period)
             back = period.get("periods_back")
             if grain not in DATED_GRAINS:
                 return (False, PERIOD_NOT_SUPPORTED,
@@ -1057,7 +1071,7 @@ def _dated_selection(plan: Mapping[str, Any], dates: Sequence[str]
                          "rule": MONTH_RULE})
         return rows, "", ""
 
-    grain = str(period.get("grain") or "")
+    grain, defaulted = _pair_grain(period)
     back = int(period.get("periods_back"))
     if grain == "weekly":
         if len(ordered) <= back:
@@ -1065,7 +1079,7 @@ def _dated_selection(plan: Mapping[str, Any], dates: Sequence[str]
                     f"{_plural(back, 'week')} back needs {back + 1} weekly extracts; the "
                     f"history holds {len(ordered)}")
         rule = (f"the latest weekly extract, and the one {_plural(back, 'extract')} "
-                f"before it")
+                f"before it" + (f" ({NATIVE_GRAIN_RULE})" if defaulted else ""))
         return ([{"requested": f"{_plural(back, 'week')} before the latest",
                   "extract_date": ordered[-1 - back], "rule": rule},
                  {"requested": "latest", "extract_date": ordered[-1],

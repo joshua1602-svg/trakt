@@ -38,10 +38,22 @@ STAGE = tuple(semantic_model.load("pipeline_stage_movement").measures)
 RULES_OUT = {
     "forecast_funded_balance": ("ONE figure", "latest weekly extract",
                                 "NOT a curve", "month-by-month",
-                                "base, downside or upside", "NOT one part"),
+                                "base, downside or upside", "NOT one part",
+                                # 2026-09-30 full bank: [87] read as the
+                                # pipeline's weighted amount (vocabulary 2.13.0).
+                                "'the expected funded balance'"),
+    "weighted_expected_funded_amount": ("NOT the forecast funded balance",
+                                        "'the expected funded BALANCE'"),
+    # 2026-09-30 full bank: [102] dropped 'active' and answered the whole
+    # extract's exclusion (vocabulary 2.13.0).
+    "weighting_excluded_amount": ("WHOLE extract",
+                                  "keeps that restriction in the intent"),
     "forecast_completion_rate": ("per MONTH", "NOT a percentage",
                                  "NOT a conversion rate",
-                                 "how the forecast is calculated"),
+                                 "how the forecast is calculated",
+                                 # 2026-09-30 full bank: [125, 126] dropped
+                                 # their 8- and 12-week window.
+                                 "ANOTHER window", "rather than dropping it"),
     "forecast_milestone_date": ("ONE", "`target` is `forecast_funded_balance`",
                                 "`gte`", "NOT a table of dates"),
 }
@@ -83,7 +95,7 @@ def test_the_definition_reaches_the_model_through_both_lookups(concept, tools):
     assert row["definition"] == SPECIALIST_MEASURE_DEFINITIONS[concept]
 
 
-@pytest.mark.parametrize("concept", FORECAST_2_3)
+@pytest.mark.parametrize("concept", sorted(RULES_OUT))
 def test_each_definition_rules_out_the_production_misreads(concept):
     definition = SPECIALIST_MEASURE_DEFINITIONS[concept]
     for phrase in RULES_OUT[concept]:

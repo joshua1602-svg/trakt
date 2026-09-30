@@ -239,3 +239,11 @@ intents added beside the baseline's.
                 (last night 64, credits exhausted from [68]; yesterday
                 morning 51). After the run MI_AGENT_PLAN_SERVE set to off —
                 operator confirmed. Read back from this START TIME
+    2026-09-30  the 07:10:30 run read back by run 36689644793: must answer
+                83/88, nice to have 21/31, fine to decline 6/16 on the
+                governed path; one model call on all 135 (5.5s median model
+                time; cost per question 13.1k -> 7.4k). Wrong: [87] expected
+                funded balance (weighted pipeline answered), [102] 'active'
+                dropped. Fixed in vocabulary 2.13.0 with [82] 'prior' = the
+                previous extract; the run-rate hold stays ([125, 126] dropped
+                their window). Design §22

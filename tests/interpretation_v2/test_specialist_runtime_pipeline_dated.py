@@ -150,10 +150,14 @@ def test_a_month_back_that_the_history_lacks_is_refused(history):
     assert outcome.reason == pipeline_rt.PERIOD_NOT_AVAILABLE
 
 
-def test_a_pair_with_no_grain_is_refused_at_the_perimeter():
+def test_a_pair_with_no_grain_is_read_on_the_pipelines_own_extracts():
+    """It was refused; [82] "latest against prior" (a must-answer) arrived in
+    exactly this shape on the 2026-09-30 full bank. The pipeline's periods are
+    its weekly extracts, so 'previous' with no grain is the previous extract
+    (`test_pipeline_change.py` pins the figures and the stated rule)."""
     plan = _plan(time={"form": "relative_pair", "periods_back": 1})
     plan["period"]["grain"] = None
-    assert pipeline_rt.check_eligibility(plan)[1] == pipeline_rt.PERIOD_NOT_SUPPORTED
+    assert pipeline_rt.check_eligibility(plan) == (True, "", "")
 
 
 # --------------------------------------------------------------------------- #

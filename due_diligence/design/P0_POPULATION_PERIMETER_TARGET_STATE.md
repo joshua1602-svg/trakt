@@ -1462,3 +1462,73 @@ must be > 0." A redeemed loan's balance is zeroed on purpose
 Pinned by `test_smallest_loan_has_a_balance.py`,
 `test_governed_metadata_access.py` (the catalogue is the tools' own views; one
 call) and `test_model_sees_no_data.py`.
+
+## 22. The one-call full bank (2026-09-30)
+
+622351a2 (vocabulary 2.12.0, one model call), 135 questions, read back by run
+36689644793 (`qb_recorded_intents_20260930.json` keeps the model's readings,
+no figures).
+
+    served by the governed path   110 / 135   (last night 64; yesterday 51)
+    must answer                    83 / 88
+    nice to have                   21 / 31
+    fine to decline                 6 / 16    (10 declined or asked back)
+
+The measurement of §21.2:
+
+    model calls per question       1  (all 135)
+    model time                     5.5s median, 7.2s p90
+    fresh input tokens             5,520 -> 352 (median)
+    output tokens                  784 -> 383
+    relative cost per question     13.1k -> 7.4k input-token equivalents
+    end to end, same 63 questions  30.3s -> 24.0s median
+
+The model is now a fifth of a question's time. The rest is the legacy answer,
+which `mi_service` still computes FIRST on every question — its own model
+call included — and keeps as the fallback, before the governed attempt runs.
+
+### 22.1 What was wrong, and fixed at its definition (vocabulary 2.13.0)
+
+  * [87] "What is the expected funded balance?" (must answer) was read as the
+    pipeline's weighted amount (£6.9m) where the retrieval-loop interpreter
+    had read the forecast funded balance (£94.1m). Neither definition named
+    the phrase; the forecast funded balance's now does, and the weighted
+    amount's rules it out.
+  * [102] "How much ACTIVE pipeline is excluded from weighting?" (fine to
+    decline) dropped 'active' and was answered with the whole extract's
+    exclusion (£1.17bn, more than the live pipeline). The definition now says
+    the figure covers the whole extract, so a live restriction is kept — and
+    the runtime declines it.
+  * [125, 126] the 8- and 12-week run-rates arrived in the held run-rate shape
+    with their window dropped. The run-rate's definition now says it is
+    measured over the forecast's own window; a question naming another keeps
+    it in `time`, and the runtime refuses it (pinned with the hold off).
+
+### 22.2 What changed in the runtimes
+
+  * [82] "Compare latest pipeline with prior pipeline" (must answer) was a
+    relative pair with no grain, refused. The pipeline's periods ARE its
+    weekly extracts, so 'prior' with no grain is the previous extract, and
+    the receipt says the grain was the pipeline's own
+    (`NATIVE_GRAIN_RULE`).
+  * The run-rate hold is NOT released. Every reading it was built for moved
+    to its own concept ([113], [121], [134]; [98] asks back), but [125, 126]
+    arrived in the shape with their window dropped — served, they would be
+    answered with the forecast's own window. It comes off when a live run
+    shows the shape arriving for [112] alone
+    (`test_why_the_run_rate_hold_stays_on_the_latest_readings`). Legacy
+    answers [112] correctly meanwhile.
+
+### 22.3 Open
+
+  * [122, 128] time to scale — D9 needs ERE's `portfolio.stage`
+    (`pre_securitisation_spv`: scale £100m; `established`: £200m). An owner
+    fact, not a code change.
+  * [135] "When are pipeline cases expected to complete?" was read as the
+    amount AND the case count by expected completion month; the pipeline
+    runtime serves one figure per answer, and legacy refused it too. Two
+    figures on one axis is answer composition (P1, D4/D5), not a pipeline
+    branch.
+  * Legacy first: the governed attempt could run first and the legacy answer
+    be computed only when it declines — the step towards switching legacy
+    off, and most of the remaining time and model cost per question.
