@@ -10,6 +10,15 @@
 #     for d in $(ls -td /tmp/*/ ); do [ -f "$d/mi_agent_api/app.py" ] && cd "$d" && break; done
 #     bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...>
 #     bash mi_agent_api/run_production_bank.sh <principal object id> all
+#     bash mi_agent_api/run_production_bank.sh <principal object id> variants-recent
+#     bash mi_agent_api/run_production_bank.sh <principal object id> variants
+#
+# `variants-recent` asks the held-out variants of the questions changed for
+# since 2026-09-29, each after the bank question it varies (~42 questions), so
+# one run holds both sides of every comparison. `variants` asks all 105
+# variants, to compare with an `all` run on the same deploy (P0 design §25):
+#     python due_diligence/evidence/qb_plan_readback/score_variants.py \
+#         --variants <variants>.jsonl --bank <bank>.jsonl
 #
 # The second argument is REQUIRED: the named bank questions (a spot check of
 # particular changes), or `all` for the whole bank. The whole bank is never the
@@ -30,14 +39,22 @@ set -euo pipefail
 PRINCIPAL="${1:-}"
 SELECTION="${2:-}"
 if [[ -z "${PRINCIPAL}" || -z "${SELECTION}" || $# -gt 2 ]]; then
-  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...|all>" >&2
-  echo "  <id,id,...>  only the named bank questions, comma-separated, no spaces" >&2
-  echo "  all          the whole bank (~135 model interpretations)" >&2
+  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...|all|variants-recent|variants>" >&2
+  echo "  <id,id,...>      only the named bank questions, comma-separated, no spaces" >&2
+  echo "  all              the whole bank (~135 model interpretations)" >&2
+  echo "  variants-recent  the recently changed questions and their held-out variants (~42)" >&2
+  echo "  variants         all 105 held-out variants (compare with an 'all' run)" >&2
   echo "Nothing was asked." >&2
   exit 2
 fi
 IDS=""
-[[ "${SELECTION}" != "all" ]] && IDS="${SELECTION}"
+HOLDOUT=""
+case "${SELECTION}" in
+  all) ;;
+  variants-recent) HOLDOUT="recent" ;;
+  variants) HOLDOUT="all" ;;
+  *) IDS="${SELECTION}" ;;
+esac
 CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,forecast_scale"
 EXPECTED_QUESTIONS=135
 # The oldest vocabulary the next measurement is for (2.10.0: conversion and
@@ -69,11 +86,11 @@ if [[ -n "${PYTHONPATH:-}" ]]; then
 fi
 
 echo "app directory: ${APP_ROOT}"
-python - "${PRINCIPAL}" "${CATEGORIES}" "${EXPECTED_QUESTIONS}" "${MINIMUM_VOCABULARY}" "${IDS}" <<'PY'
+python - "${PRINCIPAL}" "${CATEGORIES}" "${EXPECTED_QUESTIONS}" "${MINIMUM_VOCABULARY}" "${IDS}" "${HOLDOUT}" <<'PY'
 import json, os, sys
 from pathlib import Path
 
-principal, categories, expected, vocabulary, ids = sys.argv[1:6]
+principal, categories, expected, vocabulary, ids, holdout = sys.argv[1:7]
 problems = []
 
 build = Path("build_info.json")
@@ -103,9 +120,12 @@ if not listed:
 if not sink:
     problems.append(f"{evidence.SINK_ENV_VAR} is unset: nothing would be recorded")
 
-from mi_agent_api.question_bank import DEFAULT_BANKS, load_bank
+from mi_agent_api.question_bank import DEFAULT_BANKS, holdout_rows, load_bank
 rows = load_bank(DEFAULT_BANKS)
-if ids:
+if holdout:
+    print(f"questions selected: {len(holdout_rows(holdout))} "
+          f"(held-out variants: {holdout})")
+elif ids:
     wanted_ids = {i.strip() for i in ids.split(",") if i.strip()}
     count = sum(1 for r in rows if r.get("id") in wanted_ids)
     missing = sorted(wanted_ids - {r.get("id") for r in rows})
@@ -125,8 +145,10 @@ sys.exit(1 if problems else 0)
 PY
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-LOG="/home/qb_plan_rerun_${STAMP}.log"
-OUT="/home/qb_plan_rerun_${STAMP}.jsonl"
+KIND="qb_plan_rerun"
+[[ -n "${HOLDOUT}" ]] && KIND="qb_variants_${HOLDOUT}"
+LOG="/home/${KIND}_${STAMP}.log"
+OUT="/home/${KIND}_${STAMP}.jsonl"
 START="$(date -u +%Y-%m-%dT%H:%M:%S)"
 {
   echo "START TIME (UTC): ${START}"
@@ -134,7 +156,7 @@ START="$(date -u +%Y-%m-%dT%H:%M:%S)"
   echo
 } > "${LOG}"
 nohup python -m mi_agent_api.question_bank \
-  --principal "${PRINCIPAL}" $([[ -n "${IDS}" ]] && echo "--ids ${IDS}" || echo "--categories ${CATEGORIES}") --out "${OUT}" \
+  --principal "${PRINCIPAL}" $(if [[ -n "${HOLDOUT}" ]]; then echo "--holdout ${HOLDOUT}"; elif [[ -n "${IDS}" ]]; then echo "--ids ${IDS}"; else echo "--categories ${CATEGORIES}"; fi) --out "${OUT}" \
   >> "${LOG}" 2>&1 &
 
 echo

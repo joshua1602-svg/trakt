@@ -32,6 +32,9 @@ _ROOT = Path(__file__).resolve().parents[1]
 _BANK_DIR = _ROOT / "config" / "mi" / "golden_questions"
 DEFAULT_BANKS = [_BANK_DIR / "ere_mi_questions.yaml",
                  _BANK_DIR / "ere_capability_supplement.yaml"]
+#: The held-out variants (P0 design §25): each asks what one bank question
+#: asks, in other words, and is compared with it on the same deploy.
+HOLDOUT_BANK = _BANK_DIR / "holdout_variants_20260930.yaml"
 #: Funded, pipeline, forecast and limits (current and forward).
 DEFAULT_CATEGORIES = ["funded_kpi", "funded_breakdown_1d", "pipeline",
                       "pipeline_evolution", "forecast", "forecast_scale",
@@ -94,6 +97,26 @@ def _ask(question: str, *, portfolio: Optional[str], lens: Optional[str],
                        source_portfolio_lens=lens), ctx)
 
 
+def holdout_rows(mode: str) -> List[Dict[str, Any]]:
+    """The held-out variants to ask.
+
+    ``all``: every variant — compared with a whole-bank run on the same
+    deploy. ``recent``: the variants of the questions changed for since
+    2026-09-29, each after the bank question it varies, so one run holds both
+    sides of every comparison.
+    """
+    variants = load_bank([HOLDOUT_BANK])
+    if mode == "all":
+        return variants
+    recent = [v for v in variants if v.get("category") == "holdout_recent"]
+    bank = {r.get("id"): r for r in load_bank(DEFAULT_BANKS)}
+    rows: List[Dict[str, Any]] = []
+    for original in dict.fromkeys(v["variant_of"] for v in recent):
+        rows.append(bank[original])
+        rows.extend(v for v in recent if v["variant_of"] == original)
+    return rows
+
+
 def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
             lens: Optional[str], principal: str = "question-bank") -> Dict[str, Any]:
     from trakt_core import perf as _perf
@@ -141,6 +164,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="actor id to ask as; name one listed in "
                          "MI_AGENT_PLAN_SERVE_PRINCIPALS to exercise the "
                          "governed-plan path (MI_AGENT_PLAN_SERVE=canary)")
+    ap.add_argument("--holdout", choices=("all", "recent"), default=None,
+                    help="ask the held-out variants (all), or the recently "
+                         "changed questions' variants each after its bank "
+                         "question (recent), instead of a bank")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("question_bank_results.jsonl"))
     args = ap.parse_args(argv)
@@ -155,13 +182,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         os.environ.get("MI_AGENT_PLAN_SERVE_PRINCIPALS", "").split(",")}
     print(f"MI_AGENT_PLAN_SERVE={mode}; principal {args.principal!r} "
           f"{'IS' if listed else 'is NOT'} on the allow-list", flush=True)
-    rows = load_bank(args.bank or DEFAULT_BANKS)
-    if args.ids:
-        wanted = {s.strip() for s in args.ids.split(",") if s.strip()}
-        rows = [r for r in rows if r.get("id") in wanted]
-    elif args.categories != "all":
-        cats = {s.strip() for s in args.categories.split(",") if s.strip()}
-        rows = [r for r in rows if r.get("category") in cats]
+    if args.holdout:
+        rows = holdout_rows(args.holdout)
+    else:
+        rows = load_bank(args.bank or DEFAULT_BANKS)
+        if args.ids:
+            wanted = {s.strip() for s in args.ids.split(",") if s.strip()}
+            rows = [r for r in rows if r.get("id") in wanted]
+        elif args.categories != "all":
+            cats = {s.strip() for s in args.categories.split(",") if s.strip()}
+            rows = [r for r in rows if r.get("category") in cats]
     if args.limit:
         rows = rows[: args.limit]
     print(f"{len(rows)} question(s)\n", flush=True)
