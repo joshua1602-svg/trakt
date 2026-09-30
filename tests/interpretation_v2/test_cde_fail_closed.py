@@ -164,13 +164,31 @@ def test_a_breakdown_with_nothing_to_group_by_refuses(compiler):
     assert "UNSUPPORTED_COMPOSITION" in result.codes()
 
 
-def test_a_point_in_time_with_a_grouping_refuses_rather_than_reinterpreting(compiler):
-    """A grouped point-in-time is a breakdown. Silently promoting it would be
-    the compiler deciding what the question meant."""
+def test_a_point_in_time_with_a_grouping_is_the_breakdown_it_names_and_says_so(
+        compiler):
+    """A grouped point-in-time IS a breakdown. Until normal form 1.1 this
+    refused, so the compiler would not decide what the question meant. The
+    slots already decide it: the grouping is stated, and the only plan they
+    admit is that breakdown — nothing is substituted, nothing is silent (the
+    rewrite is in provenance, the model's label in `intent_claims`), and a
+    split the figure's owner does not publish is still refused, by the owner
+    (P0 design §24.1; `test_grouped_figure_is_a_breakdown.py`)."""
     intent = build_intent(operation="point_in_time", dimensions=["product_type"])
     result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN
+    assert result.plan.operation == "breakdown"
+    assert result.intent.operation == "point_in_time"
+    assert any("grouped_figure" in n for n in result.plan.provenance.notes)
+
+
+def test_a_grouped_point_in_time_still_refuses_where_no_breakdown_exists(compiler):
+    """Where the capability makes no breakdown, nothing can be named, so the
+    refusal stands."""
+    intent = build_intent(capability="limit_assessment", operation="point_in_time",
+                          dimensions=["product_type"])
+    result = compiler.compile(intent)
     assert result.outcome == OUTCOME_REFUSE
-    assert "UNSUPPORTED_COMPOSITION" in result.codes()
+    assert result.plan is None
 
 
 def test_a_movement_over_a_single_period_refuses(compiler):

@@ -1624,6 +1624,23 @@ a reading to correct:
         ungrouped output the unsupported one).
 
 It adds no dimension, drops no filter, picks no member and infers no ranking.
+It is not reached for the one question: over the whole catalogue — 75
+breakdowns across the funded book, the pipeline, the forecast and stage
+movement — the grouped single figure compiles to exactly the plan the stated
+breakdown does, and where the breakdown does not compile neither does the
+label (`test_every_breakdown_the_catalogue_can_make_reads_the_same_labelled_a_
+figure`).
+
+It SUPERSEDES an earlier fail-closed position (`test_cde_fail_closed.py`): "a
+grouped point-in-time is a breakdown; silently promoting it would be the
+compiler deciding what the question meant". The slots decide it — the grouping
+is stated and admits one plan — and the rewrite is not silent. The replay of
+the 2026-09-28 run shows what that refusal was also doing: [105, 106]
+"forecast balance by stage" are now plans, and are refused by the forecast
+runtime, whose owner publishes no split by pipeline stage — the refusal moved
+from a label to the owner of the figure, which is where it belongs. [100,
+101], stage groupings with no measure and a blocking ambiguity, now ask back
+rather than refuse. Both pinned in `test_production_bank_perimeter.py`.
 A question about one member keeps its filter, so its breakdown is that
 member's row. The model's label still travels in `intent_claims`; the rewrite
 is recorded in plan provenance. Normal form 1.1; the plan identity is
@@ -1666,3 +1683,73 @@ per-stage timing (85c3fd41), now with each governed input timed on its own —
 trend question after a deploy (346s on [82]) builds the weekly history cold;
 precomputing it when an extract arrives is the next step once the timings name
 the order of the remaining costs.
+
+## 25. No bank wording in the model's view; held-out variants (2026-09-30)
+
+Owner direction, 2026-09-30: "you must not make local / tactical fixes just to
+pass the 135 bank. These MUST be supportive of other natural language
+variants."
+
+### 25.1 The audit
+
+Everything the model sees — rules, orientation, the governed catalogue with
+every definition, CLIENT CONTEXT and the intent tool — was checked against
+every question bank in the repository (15 files, 1,184 questions).
+
+    verbatim   three bank questions were quoted word for word, each put
+               there by a definition fix: 'how much pipeline is overdue' and
+               'how much pipeline is current month' (the pipeline's timing,
+               2.11.0), 'what completion rate is assumed from KFI to
+               completion' (the stage completion rate), 'when are pipeline
+               cases expected to complete' (2.14.0).
+    restated   six more reproduced a bank question with a word or two
+               changed: 'how much of the forecast comes from the funded
+               book', 'funded vs pipeline contribution', 'milestone dates to
+               funding thresholds', 'project the funded balance over the next
+               N months', 'how much pipeline has lapsed past its stage
+               window', 'funded balance plus weighted pipeline'.
+
+A definition that quotes the question teaches the model the sentence, and the
+next reader who words it differently gets whatever the definition said
+before. Each now states the meaning it rests on, keeping term-level synonyms
+('current month pipeline', 'the expected funded balance') — the names a
+reader uses for a figure, which a catalogue must carry. Vocabulary 2.15.0.
+
+The other changes since 2026-09-29 were checked the same way. Each is at the
+level of meaning, not of a sentence: a statistic's scope on the registry (D14),
+a runtime rule for a relative pair with no grain (§22.2), a restriction the
+weighting exclusion must keep ([102]), a run-rate window kept ([125, 126]),
+normalisation rule 7 over the whole catalogue (§24.1), a new governed measure
+the owner decided (§23.3).
+
+### 25.2 The guards
+
+`test_no_bank_question_is_in_the_models_view.py`, over every bank:
+
+    - no bank question of four words or more appears in the model's view;
+    - no phrase in it carries 85% of a bank question's meaning-bearing words
+      with at most two others, once the governed concepts' own names (label,
+      id, aliases) are taken out — a question that IS a concept's name is not
+      quoted by naming the concept;
+    - both checks are shown to catch what 2.14.0 said.
+
+### 25.3 Held-out variants
+
+`mi_agent/interpretation_v2/banks/holdout_variants_20260930.yaml`: 105
+questions, each asking exactly what one bank question asks in other words
+(other verbs and nouns, order, form, contractions, a reader's synonyms) — one
+for every must-answer question, two or three for the questions a definition,
+rule or runtime was changed for since 2026-09-29 (`holdout_recent`), and a
+sample of nice-to-have and fine-to-decline. Written after vocabulary 2.14.0
+and normal form 1.1, and not consulted building either; the guard keeps every
+one of them out of the model's view.
+
+The test is paraphrase invariance, not a second bank to fit:
+`score_variants.py` compares each variant with its bank question on the same
+deploy — SAME outcome, path and headline figure, or a finding (DIFFERENT,
+PATH, LOST). A finding is fixed at the meaning it exposes, and once one is
+fixed the file is spent: the next proof needs variants written after that fix.
+
+The proof the pass mark (D13) asks for is then both: every must-answer bank
+question answered correctly, nothing wrong, AND the held-out variants
+answering as their bank questions do.

@@ -289,3 +289,13 @@ intents added beside the baseline's.
                 fetched only by a plan that reads it; per-input timing on
                 every bank question. Design §24. OCC suite on main with and
                 without PR #510: the same 34 failures, none new (PR comment)
+    2026-09-30  owner direction: no local / tactical fixes to pass the bank;
+                fixes must hold for other wordings. Audit (design §25): three
+                bank questions quoted verbatim in the model's view and six
+                restated — all reworded as meanings (vocabulary 2.15.0), and
+                guarded. Rule 7 proven over 75 catalogue breakdowns; it
+                supersedes the fail-closed refusal (the owner now refuses a
+                split it does not publish). 105 held-out variants
+                (holdout_variants_20260930.yaml) + score_variants.py: run them
+                beside the bank on the next deploy; findings = a variant not
+                answering as its bank question does

@@ -126,7 +126,14 @@ from mi_agent import semantic_model as _semantic_model
 #: is expected to complete, from the book's own history — the stage-movement
 #: capability's `expected_completion_date` — and the extract's own
 #: expected-completion month no longer claims that question ([135]).
-VOCABULARY_VERSION = "2.14.0"
+#:
+#: 2.15.0 (owner direction 2026-09-30, P0 design §25): NO QUESTION FROM ANY
+#: BANK IN WHAT THE MODEL SEES. Three definitions quoted a bank question
+#: word for word (the pipeline's timing, the assumed completion rate, the
+#: expected completion date); each now states the meaning it rests on, with
+#: term-level synonyms only, so a reworded question reads the same as the
+#: bank's. Guarded by `test_no_bank_question_is_in_the_models_view.py`.
+VOCABULARY_VERSION = "2.15.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -679,15 +686,15 @@ SPECIALIST_DIMENSION_DEFINITIONS: Mapping[str, str] = {
         "Where a live pipeline case's expected completion month falls against "
         "the month of the pipeline extract: `overdue` (an earlier month — the "
         "case is past its expected completion), `current_month` (this month) "
-        "or `next_month` (the first month after). Filter on ONE value for "
-        "'how much pipeline is overdue', 'expected to complete this month' or "
-        "'next month'. A month named AS the pipeline's own attribute — "
-        "'current month pipeline', 'how much pipeline is current month', "
-        "'this month's pipeline', 'next month's pipeline' — is this timing, "
-        "NOT a reporting period: the pipeline is always read at its latest "
-        "weekly extract, so reading 'current month' as the period would "
-        "return the whole pipeline. It is about the PIPELINE; overdue LOANS "
-        "are arrears, a different question."),
+        "or `next_month` (the first month after). Filter on ONE value when "
+        "the pipeline asked about is overdue, due this month or due next "
+        "month. A month used to describe the PIPELINE ITSELF — 'current month "
+        "pipeline', 'this month's pipeline', 'next month's pipeline', the "
+        "pipeline due in or completing in a month — is this timing, NOT a "
+        "reporting period: the pipeline is always read at its latest weekly "
+        "extract, so reading such a month as the period would return the "
+        "whole pipeline. It is about the PIPELINE; overdue LOANS are arrears, "
+        "a different question."),
     **{name: d.definition for name, d in _FORECAST_MODEL.dimensions.items()},
     **{name: d.definition for name, d in _STAGE_MODEL.dimensions.items()},
 }

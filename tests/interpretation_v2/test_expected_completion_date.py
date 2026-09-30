@@ -97,7 +97,7 @@ def test_the_model_is_told_it_is_a_date_from_history_and_not_the_records():
         SPECIALIST_DIMENSION_DEFINITIONS, load_governed_vocabulary)
     concept = load_governed_vocabulary().concepts["expected_completion_date"]
     assert concept.owning_capability == "pipeline_stage_movement"
-    assert "when are pipeline cases expected to complete" in concept.description
+    assert "WHEN live cases will complete" in concept.description
     assert "NOT the completion date each case's own" in concept.description
     month = SPECIALIST_DIMENSION_DEFINITIONS["expected_completion_month"]
     assert "when are cases expected to complete" not in month

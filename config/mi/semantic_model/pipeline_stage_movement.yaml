@@ -124,8 +124,8 @@ measures:
     definition: >-
       Of the cases observed at a stage, the share that went on to complete —
       the historical rate the forecast weights a live case at that stage with,
-      so 'what completion rate is assumed from KFI to completion' is
-      origin_stage KFI. Filter on ONE origin_stage; break it down by
+      so the completion rate ASSUMED from a stage (from KFI, say) is that
+      origin_stage. Filter on ONE origin_stage; break it down by
       origin_stage for every stage. It is NOT the pull-through to the NEXT
       stage, NOT the cohort conversion, and NOT the completion run-rate in £
       per month.
@@ -164,10 +164,10 @@ measures:
       WHEN the live pipeline is expected to complete, from the book's own
       history: for each live case, the date it was
       first seen at its current stage plus the median time this book's cases
-      have taken to complete from that stage. It answers 'when are pipeline
-      cases expected to complete', 'when will the pipeline complete' and 'how
-      long until the offers complete' — a date, by origin_stage for each
-      stage. It is conditional on completing: the share that complete is
+      have taken to complete from that stage. It is the answer to WHEN live
+      cases will complete, or how long until they do — a date, for the whole
+      live pipeline or by origin_stage for each stage. It is conditional on
+      completing: the share that complete is
       stage_completion_rate. It is NOT the completion date each case's own
       record carries (group by expected_completion_month for that), and NOT
       the forecast's completion run-rate.

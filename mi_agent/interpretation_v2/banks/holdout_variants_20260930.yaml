@@ -1,0 +1,146 @@
+# HELD-OUT VARIANTS of the production bank (owner direction 2026-09-30:
+# "you must not make local / tactical fixes just to pass the 135 bank. These
+# MUST be supportive of other natural language variants"). P0 design §25.
+#
+# Each question asks for EXACTLY what the bank question it is a variant of
+# asks, in other words: other verbs and nouns, other word order, instruction
+# for question and question for instruction, contractions, synonyms a
+# reader uses. So each has the same right answer as its bank question, and
+# the same D13 bucket (`bucket`), and a variant that answers differently
+# from its bank question is a finding against whatever the bank question
+# was fixed with.
+#
+# RULES FOR THIS FILE
+#   - Written 2026-09-30 after vocabulary 2.14.0 and normal form 1.1, and
+#     not consulted while building either. Nothing in production may be
+#     tuned against a row of it. `test_no_bank_question_is_in_the_models_
+#     view.py` fails if any of these sentences reaches what the model sees.
+#   - Once a finding from this file has been FIXED, the file has been used
+#     to build with and is spent: the next proof needs variants written
+#     after that fix (the same discipline as mi_agent/tests/
+#     test_a_fresh_blind_holdout.py).
+#   - Categories: `holdout_recent` = variants of the questions a definition,
+#     rule or runtime change was made for since 2026-09-29 (the ones most at
+#     risk of having been fitted); `holdout_must` / `holdout_nice` /
+#     `holdout_decline` = the rest, by bucket.
+#
+# Run (the bank runner, with the canary's principal):
+#   python -m mi_agent_api.question_bank \
+#     --bank mi_agent/interpretation_v2/banks/holdout_variants_20260930.yaml \
+#     --categories all --principal <allow-listed principal>
+# Compare with the bank questions' answers from the same deploy:
+#   python due_diligence/evidence/qb_plan_readback/score_variants.py \
+#     --variants <variants.jsonl> --bank <bank.jsonl>
+version: 1
+client: ERE
+questions:
+  # ---- holdout_recent: questions changed for since 2026-09-29 ----------
+  - {id: hv_pipeline_003_1, variant_of: pipeline_003, bucket: must_answer, category: holdout_recent, question: "What do we expect the pipeline to fund once it's weighted for the chance of completing?"}
+  - {id: hv_pipeline_009_1, variant_of: pipeline_009, bucket: must_answer, category: holdout_recent, question: "Split the pipeline value by the month each case is due to complete."}
+  - {id: hv_pipeline_012_1, variant_of: pipeline_012, bucket: must_answer, category: holdout_recent, question: "What's due to complete out of the pipeline next month?"}
+  - {id: hv_pipeline_013_1, variant_of: pipeline_013, bucket: must_answer, category: holdout_recent, question: "How much of the pipeline is past its expected completion date?"}
+  - {id: hv_pipeline_013_2, variant_of: pipeline_013, bucket: must_answer, category: holdout_recent, question: "What value of pipeline cases are running late against their completion date?"}
+  - {id: hv_pipeline_014_1, variant_of: pipeline_014, bucket: must_answer, category: holdout_recent, question: "What's the pipeline for this month?"}
+  - {id: hv_pipeline_014_2, variant_of: pipeline_014, bucket: must_answer, category: holdout_recent, question: "How much pipeline is due to complete in the current month?"}
+  - {id: hv_pipeline_016_1, variant_of: pipeline_016, bucket: must_answer, category: holdout_recent, question: "Give me the pipeline broken down by when each case is expected to complete."}
+  - {id: hv_pipeline_024_1, variant_of: pipeline_024, bucket: must_answer, category: holdout_recent, question: "How much do we expect to complete from the pipeline this month?"}
+  - {id: hv_pipeline_evolution_013_1, variant_of: pipeline_evolution_013, bucket: must_answer, category: holdout_recent, question: "How has the pipeline changed since the previous extract?"}
+  - {id: hv_pipeline_evolution_013_2, variant_of: pipeline_evolution_013, bucket: must_answer, category: holdout_recent, question: "Latest pipeline against the one before it: what moved?"}
+  - {id: hv_forecast_001_1, variant_of: forecast_001, bucket: must_answer, category: holdout_recent, question: "What do we forecast the funded balance to be?"}
+  - {id: hv_forecast_003_1, variant_of: forecast_003, bucket: must_answer, category: holdout_recent, question: "What's our expected funded book balance?"}
+  - {id: hv_forecast_003_2, variant_of: forecast_003, bucket: must_answer, category: holdout_recent, question: "Where do we expect the funded balance to land?"}
+  - {id: hv_forecast_scale_016_1, variant_of: forecast_scale_016, bucket: must_answer, category: holdout_recent, question: "How long until we're big enough to securitise?"}
+  - {id: hv_forecast_scale_022_1, variant_of: forecast_scale_022, bucket: must_answer, category: holdout_recent, question: "When will the portfolio get to securitisation scale?"}
+  - {id: hv_forecast_runoff_004_1, variant_of: forecast_runoff_004, bucket: must_answer, category: holdout_recent, question: "When will the cases in the pipeline today complete?"}
+  - {id: hv_forecast_runoff_004_2, variant_of: forecast_runoff_004, bucket: must_answer, category: holdout_recent, question: "Roughly when should the live pipeline cases fund?"}
+  - {id: hv_forecast_runoff_004_3, variant_of: forecast_runoff_004, bucket: must_answer, category: holdout_recent, question: "For each stage, when are the open cases likely to complete?"}
+  - {id: hv_funded_kpi_016_1, variant_of: funded_kpi_016, bucket: nice_to_have, category: holdout_recent, question: "What's the lowest loan balance in the book?"}
+  - {id: hv_forecast_scale_015_1, variant_of: forecast_scale_015, bucket: nice_to_have, category: holdout_recent, question: "Which KFI-to-completion rate does the forecast use?"}
+  - {id: hv_forecast_scale_019_1, variant_of: forecast_scale_019, bucket: nice_to_have, category: holdout_recent, question: "What's the completion run rate over the last eight weeks?"}
+  - {id: hv_forecast_scale_020_1, variant_of: forecast_scale_020, bucket: nice_to_have, category: holdout_recent, question: "Completion run rate across the past 12 weeks?"}
+  - {id: hv_forecast_018_1, variant_of: forecast_018, bucket: fine_to_decline, category: holdout_recent, question: "How much live pipeline is left out of the weighting?"}
+
+  # ---- holdout_must: the other must-answer questions -------------------
+  - {id: hv_funded_kpi_001_1, variant_of: funded_kpi_001, bucket: must_answer, category: holdout_must, question: "What's the total balance of our funded loans?"}
+  - {id: hv_funded_kpi_002_1, variant_of: funded_kpi_002, bucket: must_answer, category: holdout_must, question: "Tell me today's outstanding balance on the funded book."}
+  - {id: hv_funded_kpi_003_1, variant_of: funded_kpi_003, bucket: must_answer, category: holdout_must, question: "Add up all the current outstanding balances for me."}
+  - {id: hv_funded_kpi_004_1, variant_of: funded_kpi_004, bucket: must_answer, category: holdout_must, question: "How many loans are on the funded book at the moment?"}
+  - {id: hv_funded_kpi_005_1, variant_of: funded_kpi_005, bucket: must_answer, category: holdout_must, question: "Loan count for the book?"}
+  - {id: hv_funded_kpi_006_1, variant_of: funded_kpi_006, bucket: must_answer, category: holdout_must, question: "What's the balance-weighted LTV across the book today?"}
+  - {id: hv_funded_kpi_007_1, variant_of: funded_kpi_007, bucket: must_answer, category: holdout_must, question: "Weighted LTV for the portfolio?"}
+  - {id: hv_funded_kpi_008_1, variant_of: funded_kpi_008, bucket: must_answer, category: holdout_must, question: "What rate are we charging on average, weighted by balance?"}
+  - {id: hv_funded_kpi_009_1, variant_of: funded_kpi_009, bucket: must_answer, category: holdout_must, question: "Balance-weighted current interest rate?"}
+  - {id: hv_funded_kpi_011_1, variant_of: funded_kpi_011, bucket: must_answer, category: holdout_must, question: "How old are our borrowers on average?"}
+  - {id: hv_funded_kpi_012_1, variant_of: funded_kpi_012, bucket: must_answer, category: holdout_must, question: "Balance-weighted mean age of the borrowers?"}
+  - {id: hv_funded_kpi_013_1, variant_of: funded_kpi_013, bucket: must_answer, category: holdout_must, question: "What's the mean outstanding balance per loan?"}
+  - {id: hv_funded_kpi_015_1, variant_of: funded_kpi_015, bucket: must_answer, category: holdout_must, question: "What's our biggest loan by balance?"}
+  - {id: hv_funded_kpi_017_1, variant_of: funded_kpi_017, bucket: must_answer, category: holdout_must, question: "What was the total amount originally advanced across the book?"}
+  - {id: hv_funded_kpi_018_1, variant_of: funded_kpi_018, bucket: must_answer, category: holdout_must, question: "What are the properties currently valued at in total?"}
+  - {id: hv_funded_kpi_020_1, variant_of: funded_kpi_020, bucket: must_answer, category: holdout_must, question: "Balance-weighted average property valuation?"}
+  - {id: hv_funded_breakdown_1d_001_1, variant_of: funded_breakdown_1d_001, bucket: must_answer, category: holdout_must, question: "Break the balance down by region."}
+  - {id: hv_funded_breakdown_1d_002_1, variant_of: funded_breakdown_1d_002, bucket: must_answer, category: holdout_must, question: "Funded balance split by where the security property is."}
+  - {id: hv_funded_breakdown_1d_004_1, variant_of: funded_breakdown_1d_004, bucket: must_answer, category: holdout_must, question: "How many loans do we have in each region?"}
+  - {id: hv_funded_breakdown_1d_006_1, variant_of: funded_breakdown_1d_006, bucket: must_answer, category: holdout_must, question: "Weighted average LTV for each region?"}
+  - {id: hv_funded_breakdown_1d_009_1, variant_of: funded_breakdown_1d_009, bucket: must_answer, category: holdout_must, question: "Balance split by broker, please."}
+  - {id: hv_funded_breakdown_1d_014_1, variant_of: funded_breakdown_1d_014, bucket: must_answer, category: holdout_must, question: "How is the balance spread across LTV bands?"}
+  - {id: hv_funded_breakdown_1d_015_1, variant_of: funded_breakdown_1d_015, bucket: must_answer, category: holdout_must, question: "Number of loans in each LTV band?"}
+  - {id: hv_funded_breakdown_1d_017_1, variant_of: funded_breakdown_1d_017, bucket: must_answer, category: holdout_must, question: "Balance by the borrower's age band."}
+  - {id: hv_funded_breakdown_1d_019_1, variant_of: funded_breakdown_1d_019, bucket: must_answer, category: holdout_must, question: "What's the weighted LTV in each borrower age band?"}
+  - {id: hv_funded_breakdown_1d_021_1, variant_of: funded_breakdown_1d_021, bucket: must_answer, category: holdout_must, question: "How much balance sits in each product?"}
+  - {id: hv_funded_breakdown_1d_022_1, variant_of: funded_breakdown_1d_022, bucket: must_answer, category: holdout_must, question: "Split the balance by the status of the account."}
+  - {id: hv_funded_breakdown_1d_023_1, variant_of: funded_breakdown_1d_023, bucket: must_answer, category: holdout_must, question: "Balance for single versus joint borrowers?"}
+  - {id: hv_funded_breakdown_1d_024_1, variant_of: funded_breakdown_1d_024, bucket: must_answer, category: holdout_must, question: "What's the balance for each type of property?"}
+  - {id: hv_pipeline_001_1, variant_of: pipeline_001, bucket: must_answer, category: holdout_must, question: "How much is in the pipeline?"}
+  - {id: hv_pipeline_002_1, variant_of: pipeline_002, bucket: must_answer, category: holdout_must, question: "Number of cases in the pipeline?"}
+  - {id: hv_pipeline_004_1, variant_of: pipeline_004, bucket: must_answer, category: holdout_must, question: "What's the conversion rate for the pipeline?"}
+  - {id: hv_pipeline_005_1, variant_of: pipeline_005, bucket: must_answer, category: holdout_must, question: "Break down the pipeline value by stage."}
+  - {id: hv_pipeline_006_1, variant_of: pipeline_006, bucket: must_answer, category: holdout_must, question: "How many cases are at each stage of the pipeline?"}
+  - {id: hv_pipeline_007_1, variant_of: pipeline_007, bucket: must_answer, category: holdout_must, question: "Pipeline value per broker?"}
+  - {id: hv_pipeline_008_1, variant_of: pipeline_008, bucket: must_answer, category: holdout_must, question: "Pipeline split by region."}
+  - {id: hv_pipeline_010_1, variant_of: pipeline_010, bucket: must_answer, category: holdout_must, question: "Who's the biggest broker in the pipeline?"}
+  - {id: hv_pipeline_011_1, variant_of: pipeline_011, bucket: must_answer, category: holdout_must, question: "Which pipeline stage holds the most value?"}
+  - {id: hv_pipeline_017_1, variant_of: pipeline_017, bucket: must_answer, category: holdout_must, question: "How is the pipeline spread across its stages?"}
+  - {id: hv_pipeline_018_1, variant_of: pipeline_018, bucket: must_answer, category: holdout_must, question: "Probability-weighted pipeline for each stage."}
+  - {id: hv_pipeline_020_1, variant_of: pipeline_020, bucket: must_answer, category: holdout_must, question: "Pipeline value for each product."}
+  - {id: hv_pipeline_021_1, variant_of: pipeline_021, bucket: must_answer, category: holdout_must, question: "Pipeline split by LTV band."}
+  - {id: hv_pipeline_evolution_001_1, variant_of: pipeline_evolution_001, bucket: must_answer, category: holdout_must, question: "How has the pipeline value moved week by week?"}
+  - {id: hv_pipeline_evolution_002_1, variant_of: pipeline_evolution_002, bucket: must_answer, category: holdout_must, question: "Monthly trend in pipeline value."}
+  - {id: hv_pipeline_evolution_003_1, variant_of: pipeline_evolution_003, bucket: must_answer, category: holdout_must, question: "Weekly trend in the number of pipeline cases."}
+  - {id: hv_pipeline_evolution_004_1, variant_of: pipeline_evolution_004, bucket: must_answer, category: holdout_must, question: "How has the pipeline case count changed month to month?"}
+  - {id: hv_pipeline_evolution_007_1, variant_of: pipeline_evolution_007, bucket: must_answer, category: holdout_must, question: "Expected completions month by month."}
+  - {id: hv_pipeline_evolution_008_1, variant_of: pipeline_evolution_008, bucket: must_answer, category: holdout_must, question: "Monthly trend in the weighted expected funded amount."}
+  - {id: hv_pipeline_evolution_011_1, variant_of: pipeline_evolution_011, bucket: must_answer, category: holdout_must, question: "Pipeline by stage, October against November."}
+  - {id: hv_pipeline_evolution_012_1, variant_of: pipeline_evolution_012, bucket: must_answer, category: holdout_must, question: "How did the pipeline amount differ between October and November?"}
+  - {id: hv_pipeline_evolution_014_1, variant_of: pipeline_evolution_014, bucket: must_answer, category: holdout_must, question: "How much did the pipeline grow between October and November?"}
+  - {id: hv_forecast_002_1, variant_of: forecast_002, bucket: must_answer, category: holdout_must, question: "Funded book plus the weighted pipeline: what's the total?"}
+  - {id: hv_forecast_004_1, variant_of: forecast_004, bucket: must_answer, category: holdout_must, question: "How much does the weighted pipeline add to the forecast?"}
+  - {id: hv_forecast_010_1, variant_of: forecast_010, bucket: must_answer, category: holdout_must, question: "What part of the forecast is the existing funded book?"}
+  - {id: hv_forecast_011_1, variant_of: forecast_011, bucket: must_answer, category: holdout_must, question: "What part of the forecast comes out of the pipeline?"}
+  - {id: hv_forecast_012_1, variant_of: forecast_012, bucket: must_answer, category: holdout_must, question: "Walk me from the funded balance to the forecast."}
+  - {id: hv_forecast_013_1, variant_of: forecast_013, bucket: must_answer, category: holdout_must, question: "Split the forecast between the funded book and the pipeline."}
+  - {id: hv_forecast_scale_001_1, variant_of: forecast_scale_001, bucket: must_answer, category: holdout_must, question: "By when will the funded balance hit £25m?"}
+  - {id: hv_forecast_scale_002_1, variant_of: forecast_scale_002, bucket: must_answer, category: holdout_must, question: "When will the funded book pass £50m?"}
+  - {id: hv_forecast_scale_003_1, variant_of: forecast_scale_003, bucket: must_answer, category: holdout_must, question: "What date do we get to £75m funded?"}
+  - {id: hv_forecast_scale_004_1, variant_of: forecast_scale_004, bucket: must_answer, category: holdout_must, question: "How long until we have £100m funded?"}
+  - {id: hv_forecast_scale_005_1, variant_of: forecast_scale_005, bucket: must_answer, category: holdout_must, question: "When should funded balances reach £150m?"}
+  - {id: hv_forecast_scale_006_1, variant_of: forecast_scale_006, bucket: must_answer, category: holdout_must, question: "What's our monthly completion run rate right now?"}
+  - {id: hv_forecast_scale_007_1, variant_of: forecast_scale_007, bucket: must_answer, category: holdout_must, question: "Completion run rate on a yearly basis?"}
+  - {id: hv_forecast_scale_008_1, variant_of: forecast_scale_008, bucket: must_answer, category: holdout_must, question: "Plot the projected funded balance over time."}
+  - {id: hv_forecast_scale_009_1, variant_of: forecast_scale_009, bucket: must_answer, category: holdout_must, question: "What does the scale-up projection look like?"}
+  - {id: hv_forecast_scale_010_1, variant_of: forecast_scale_010, bucket: must_answer, category: holdout_must, question: "Downside scenario for the forecast?"}
+  - {id: hv_forecast_scale_011_1, variant_of: forecast_scale_011, bucket: must_answer, category: holdout_must, question: "Base case forecast?"}
+  - {id: hv_forecast_scale_012_1, variant_of: forecast_scale_012, bucket: must_answer, category: holdout_must, question: "What's the upside case?"}
+  - {id: hv_forecast_scale_017_1, variant_of: forecast_scale_017, bucket: must_answer, category: holdout_must, question: "When do we hit each funding threshold?"}
+  - {id: hv_forecast_scale_021_1, variant_of: forecast_scale_021, bucket: must_answer, category: holdout_must, question: "Where will the funded balance be over the coming 12 months?"}
+  - {id: hv_pipeline_strat_001_1, variant_of: pipeline_strat_001, bucket: must_answer, category: holdout_must, question: "How much pipeline is there in each product?"}
+  - {id: hv_pipeline_strat_002_1, variant_of: pipeline_strat_002, bucket: must_answer, category: holdout_must, question: "Break the pipeline down by LTV band."}
+  - {id: hv_forecast_runoff_001_1, variant_of: forecast_runoff_001, bucket: must_answer, category: holdout_must, question: "What's the pipeline worth after weighting for completion probability?"}
+  - {id: hv_forecast_runoff_003_1, variant_of: forecast_runoff_003, bucket: must_answer, category: holdout_must, question: "What share of offers go on to complete?"}
+
+  # ---- holdout_nice / holdout_decline: a sample -----------------------
+  - {id: hv_funded_kpi_014_1, variant_of: funded_kpi_014, bucket: nice_to_have, category: holdout_nice, question: "Median balance per loan?"}
+  - {id: hv_funded_breakdown_1d_010_1, variant_of: funded_breakdown_1d_010, bucket: nice_to_have, category: holdout_nice, question: "How many loans has each broker written?"}
+  - {id: hv_forecast_006_1, variant_of: forecast_006, bucket: nice_to_have, category: holdout_nice, question: "Forecast balance split by region."}
+  - {id: hv_funded_breakdown_1d_003_1, variant_of: funded_breakdown_1d_003, bucket: fine_to_decline, category: holdout_decline, question: "Balance split by the borrower's home region."}
+  - {id: hv_forecast_runoff_002_1, variant_of: forecast_runoff_002, bucket: fine_to_decline, category: holdout_decline, question: "How much pipeline has gone stale beyond its stage window?"}
+  - {id: hv_forecast_020_1, variant_of: forecast_020, bucket: fine_to_decline, category: holdout_decline, question: "How much of the pipeline is left out because it was withdrawn?"}

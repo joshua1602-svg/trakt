@@ -113,3 +113,61 @@ def test_the_rule_is_idempotent():
     twice = _normalise(once)
     assert twice.intent == once and not any(
         "grouped_figure" in a for a in twice.applied)
+
+
+# --------------------------------------------------------------------------- #
+# across the whole catalogue, not the one reading that exposed it
+# --------------------------------------------------------------------------- #
+
+def _pairs():
+    """Every (capability, measure, dimension) the governed catalogue can break
+    down: the funded book's generic dimensions against its balance, and every
+    specialist measure against each axis its semantic model declares."""
+    from mi_agent import semantic_model
+    pairs = []
+    for concept in _VOCAB.concepts.values():
+        if concept.role == "dimension" and not concept.owning_capability:
+            pairs.append(("generic_analysis", "funded",
+                          {"concept": "current_outstanding_balance",
+                           "statistic": "sum"}, concept.concept_id))
+    from mi_agent import plan_pipeline_runtime as pipeline_rt
+    for measure in ("pipeline_amount", "pipeline_case_count"):
+        for axis in sorted(pipeline_rt.SUPPORTED_DIMENSIONS):
+            pairs.append(("pipeline", "pipeline", {"concept": measure}, axis))
+    for capability, base in (("forecast", "forecast"),
+                             ("pipeline_stage_movement", "pipeline")):
+        model = semantic_model.load(capability)
+        for measure in model.measures.values():
+            if "breakdown" not in measure.operations:
+                continue
+            for axis in measure.by:
+                pairs.append((capability, base, {"concept": measure.name}, axis))
+    return pairs
+
+
+_PAIRS = _pairs()
+
+
+def test_the_catalogue_offers_enough_to_prove_it():
+    capabilities = {p[0] for p in _PAIRS}
+    assert {"generic_analysis", "pipeline", "forecast",
+            "pipeline_stage_movement"} <= capabilities
+    assert len(_PAIRS) >= 20
+
+
+@pytest.mark.parametrize("capability,base,measure,dimension", _PAIRS,
+                         ids=lambda v: v if isinstance(v, str) else None)
+def test_every_breakdown_the_catalogue_can_make_reads_the_same_labelled_a_figure(
+        capability, base, measure, dimension):
+    """Wherever `breakdown` compiles, `point_in_time` with the same grouping
+    compiles to the SAME plan; wherever it does not, neither does the label."""
+    def intent(operation):
+        return _intent(capability=capability, operation=operation,
+                       population={"base": base}, measures=[measure],
+                       dimensions=[dimension])
+    stated, labelled = _compile(intent("breakdown")), _compile(intent("point_in_time"))
+    if stated.plan is None:
+        assert labelled.plan is None
+        return
+    assert labelled.plan is not None, [(r.code, r.detail) for r in labelled.reasons]
+    assert labelled.plan.plan_id == stated.plan.plan_id

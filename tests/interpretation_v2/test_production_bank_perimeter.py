@@ -106,12 +106,32 @@ def test_the_fixture_is_the_whole_run():
     assert all(case["raw_model_payload"] for case in _CASES)
 
 
+#: RECORDED OUTCOMES NORMALISATION RULE 7 MOVES (normal form 1.1, P0 design
+#: §24.1): a single figure whose every output groups IS the breakdown. Four
+#: readings of this run labelled a grouping `point_in_time`:
+#:   100, 101  "which stages use historical / config fallback rates?" — a
+#:             stage grouping with NO measure and a blocking ambiguity: no
+#:             longer refused for the label, so the ambiguity asks back
+#:             (fine to decline / ask back).
+#:   105, 106  "forecast balance by stage (and broker)" — now a plan, and
+#:             refused by the forecast runtime: its owner publishes no split
+#:             by pipeline stage (`test_rule_7_admits_nothing_an_owner_does_
+#:             not_publish`). The refusal moved from a label to the owner.
+RULE_7_MOVED = {100: ("REFUSE", "CLARIFY"), 101: ("REFUSE", "CLARIFY"),
+                105: ("REFUSE", "PLAN"), 106: ("REFUSE", "PLAN")}
+
+
 def test_todays_compiler_reproduces_the_recorded_plans(replay):
-    """Only normalisation rule 6 moves a plan, and only its base."""
+    """Only normalisation rule 6 moves a plan, and only its base; rule 7 moves
+    exactly the outcomes it names."""
     moved = {}
+    outcome_moved = {}
     for n, row in replay.items():
         recorded = row["case"]["recorded"]
-        assert str(row["result"].outcome) == recorded["compile_outcome"], n
+        now = str(row["result"].outcome)
+        if now != recorded["compile_outcome"]:
+            outcome_moved[n] = (recorded["compile_outcome"], now)
+            continue
         if row["plan"] and row["plan"]["plan_id"] != recorded["plan_id"]:
             moved[n] = row["plan"]["population"]["base"]
     # 43 ("balance by borrower structure") now binds the governed
@@ -122,6 +142,20 @@ def test_todays_compiler_reproduces_the_recorded_plans(replay):
     # balances above zero, a predicate on the plan (owner decision D14, §21.3).
     assert moved == {112: "forecast", 113: "forecast", 125: "forecast",
                      43: "funded", 83: "pipeline", 16: "funded"}
+    assert outcome_moved == RULE_7_MOVED
+    for n in RULE_7_MOVED:
+        assert any("grouped_figure" in note
+                   for note in replay[n]["result"].plan.provenance.notes) \
+            if replay[n]["result"].plan else replay[n]["case"]["raw_model_payload"][
+                "operation"] == "point_in_time"
+
+
+def test_rule_7_admits_nothing_an_owner_does_not_publish(replay):
+    for n in (105, 106):
+        plan = replay[n]["plan"]
+        assert plan["operation"] == "breakdown"
+        ok, why, _ = forecast_rt.check_eligibility(plan)
+        assert (ok, why) == (False, "DIMENSION_NOT_SUPPORTED")
 
 
 def test_exactly_the_pinned_questions_are_newly_admitted(replay):

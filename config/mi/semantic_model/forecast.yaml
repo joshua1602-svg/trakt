@@ -65,9 +65,9 @@ dimensions:
       The two parts the forecast funded balance is made of: `funded_book`
       (today's funded balance) and `weighted_pipeline` (the probability-weighted
       completions expected from the open pipeline). Filter on ONE value for
-      'how much of the forecast comes from the funded book' or 'from the
-      pipeline'; break the forecast funded balance down by it for 'the forecast
-      bridge' or 'funded vs pipeline contribution'.
+      the part of the forecast that is the funded book, or the part that is
+      the pipeline; break the forecast funded balance down by it to set the two
+      parts side by side — the forecast bridge.
     values: [funded_book, weighted_pipeline]
   forecast_scenario:
     definition: >-
@@ -81,8 +81,8 @@ dimensions:
     definition: >-
       The governed ladder of funding thresholds the scale-up forecast projects
       a milestone date for. Break `forecast_milestone_date` down by it, with no
-      target, for 'milestone dates to funding thresholds'. For ONE amount the
-      question names, use the milestone's `target` instead.
+      target, for the date the book reaches each rung of the ladder. For ONE
+      amount the question names, use the milestone's `target` instead.
     values: []
   weighting_exclusion_reason:
     definition: >-
@@ -92,9 +92,8 @@ dimensions:
       case that has sat in its current stage longer than that stage's validity
       window, measured from the book's own history — 'lapsed', 'expired' or
       'past its stage window'), `missing_stage` or `missing_probability`.
-      Filter on ONE value for 'excluded because of …' or 'how much pipeline has
-      lapsed past its stage window'; break down by it for why pipeline is
-      excluded from weighting.
+      Filter on ONE value for the pipeline excluded for one reason; break down
+      by it for why pipeline is excluded from weighting.
     values: [completed, withdrawn, not_forecast, lapsed, missing_stage, missing_probability]
 
 measures:
@@ -140,9 +139,9 @@ measures:
       ONE figure: today's funded balance plus the probability-weighted
       completions expected from the OPEN pipeline in the latest weekly extract —
       the figure on the Forecast tab. It is what 'the expected funded
-      balance', 'the forecast balance' and 'funded balance plus weighted
-      pipeline' mean: a BALANCE the book is expected to hold, its funded book
-      included — not the amount expected from the pipeline alone. It is NOT
+      balance' and 'the forecast balance' mean: a BALANCE the book is expected
+      to hold, its funded book included — not the amount expected from the
+      pipeline alone. It is NOT
       a curve or a month-by-month
       projection (that is `projected_funded_balance`), NOT the base, downside
       or upside scenario of the scale-up forecast, and NOT expected completions
@@ -242,10 +241,10 @@ measures:
       The scale-up forecast's month-by-month CURVE: the funded balance
       projected for each month ahead at the completion run-rate, with a
       downside, base and upside line — the Forecast tab's extrapolation chart.
-      Use it for 'the extrapolation curve', 'the scale-up forecast', and
-      'project the funded balance over the next N months' (state the horizon
-      as `periods_ahead`); filter by `forecast_scenario` for 'the downside /
-      base / upside forecast'. It is NOT the forecast funded balance (ONE
+      Use it for the extrapolation curve or the scale-up forecast, and for the
+      funded balance projected a stated number of months ahead (state the
+      horizon as `periods_ahead`); filter by `forecast_scenario` for one
+      scenario's line. It is NOT the forecast funded balance (ONE
       figure from today's pipeline).
 
   forecast_completion_rate:
