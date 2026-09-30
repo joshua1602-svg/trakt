@@ -361,3 +361,12 @@ intents added beside the baseline's.
                 "what moved" over its figures (vocabulary 2.17.0) — the [82]
                 variant "pipeline movement since the prior extract" is
                 answered from the movement owner's totals. Not deployed yet
+    2026-09-30  18:34 UTC ac0caf0c deployed (run 36759287297, success, no
+                retry). Vocabulary 2.17.0: D18 (a governed decline is the
+                answer; legacy never asked for a served principal), D19 (the
+                served tenant reads the single activated OCC client's
+                configuration), several figures in one answer (§28.1), what
+                moved in the whole pipeline (§28.2). Suites: no new failure
+                against 2e4ab2f2's. Next: variants-recent (the runner refuses
+                a vocabulary below 2.17.0), then the full bank with a fresh
+                held-out set for D13
