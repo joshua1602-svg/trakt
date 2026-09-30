@@ -154,6 +154,14 @@
         configured value stands in, and a figure that depends on it is not
         stated and says why. §33.
 
+    D23 LOW-RISK AMBIGUITY IS DEFAULTED, NOT ASKED            SETTLED 2026-09-30
+        "For low risk, yes default to amount." Where a question does not say
+        whether it means an amount or a number of cases, the answer is by
+        amount and says so (a count may be stated alongside, as the stage
+        distribution already does); the agent does not ask back. Applied by
+        the clarification step of the conversational agent (§34); no
+        question in the bank asks back on this today.
+
     D22 THE RUN-RATE IS MEASURED ON THE CALENDAR              SETTLED 2026-09-30
         "If possible, run rate = calendar." A run-rate over N weeks is the
         amount of the cases that completed in the N x 7 days to the latest
