@@ -41,7 +41,11 @@ def _pipeline_intent(measures, *, filters=(), dimensions=()):
 
 
 def _served(intent, monkeypatch, semantics=None):
+    # D21: the weighted figures rest on the served book's own history,
+    # measured at test-book scale (the fixture is far below production's).
+    from tests.measured_history import measured_history
     over = {"semantics": semantics} if semantics is not None else {}
+    over["pipeline_history"] = measured_history("tests/fixtures/client_001_mi_pack")
     return pipeline._served(intent, monkeypatch, **over)
 
 

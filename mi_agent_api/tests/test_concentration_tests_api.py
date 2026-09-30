@@ -353,7 +353,9 @@ class TestChatDelegation:
     def test_insufficient_history_caveat_travels_as_a_warning(
             self, approved_config, frames, pipeline_frames):
         out = self._ask("Are we breaching any concentration limits?")
-        assert any("sufficiency floor" in w for w in out["warnings"])
+        # D21: the caveat says the stage is not weighted — nothing configured.
+        assert any("too little history" in w for w in out["warnings"])
+        assert not any("configured" in w for w in out["warnings"])
 
     def test_driver_answer_names_the_leading_case(self, approved_config,
                                                   frames, pipeline_frames):
