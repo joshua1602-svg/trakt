@@ -32,7 +32,7 @@ _BANKS = sorted({
     *(_ROOT / "question_interpretation").glob("*bank*.yaml"),
     *(_ROOT / "tests/fixtures").rglob("*BANK*.yaml"),
 })
-_HOLDOUT = _ROOT / "config/mi/golden_questions/holdout_variants_20260930.yaml"
+_HOLDOUT = _ROOT / "config/mi/golden_questions/holdout_variants_20260930b.yaml"
 _MIN_WORDS = 4
 
 

@@ -1,3 +1,6 @@
+# SPENT FOR ITS `holdout_recent` ROWS (fixed as D15-D17, 2026-09-30); the
+# current set is holdout_variants_20260930b.yaml.
+#
 # HELD-OUT VARIANTS of the production bank (owner direction 2026-09-30:
 # "you must not make local / tactical fixes just to pass the 135 bank. These
 # MUST be supportive of other natural language variants"). P0 design §25.

@@ -40,7 +40,7 @@ def test_the_verdicts():
 
 
 def test_scoring_reads_the_variant_map_from_the_holdout_file():
-    out = sv.score({"hv_forecast_003_1": _rec("hv_forecast_003_1",
+    out = sv.score({"hv2_forecast_003_1": _rec("hv2_forecast_003_1",
                                               answer="Weighted: £6.9m")},
                    {"forecast_003": _BANK})
     assert out["tally"] == {"DIFFERENT": 1}

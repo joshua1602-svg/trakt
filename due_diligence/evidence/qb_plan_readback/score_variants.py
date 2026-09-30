@@ -3,7 +3,7 @@
 
 Owner direction, 2026-09-30: fixes "MUST be supportive of other natural
 language variants". The held-out variants
-(`config/mi/golden_questions/holdout_variants_20260930.yaml`) each ask
+(`config/mi/golden_questions/holdout_variants_20260930b.yaml`) each ask
 exactly what one bank question asks, in other words. So the test is
 paraphrase invariance: a variant must reach the same outcome, by the same path,
 with the same headline figure as its bank question on the same deploy.
@@ -36,7 +36,7 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
-HOLDOUT = ROOT / "config/mi/golden_questions/holdout_variants_20260930.yaml"
+HOLDOUT = ROOT / "config/mi/golden_questions/holdout_variants_20260930b.yaml"
 
 FINDINGS = ("DIFFERENT", "PATH", "LOST")
 

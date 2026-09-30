@@ -15,12 +15,12 @@ def test_recent_puts_each_bank_question_before_its_variants():
     rows = qb.holdout_rows("recent")
     variants = [r for r in yaml.safe_load(qb.HOLDOUT_BANK.read_text())["questions"]
                 if r["category"] == "holdout_recent"]
-    assert [r["id"] for r in rows if r["id"].startswith("hv_")] == \
+    assert [r["id"] for r in rows if "variant_of" in r] == \
         [v["id"] for v in sorted(variants, key=lambda v: [
             x["variant_of"] for x in variants].index(v["variant_of"]))]
     seen = set()
     for row in rows:
-        if row["id"].startswith("hv_"):
+        if "variant_of" in row:
             assert row["variant_of"] in seen, row["id"]
         else:
             seen.add(row["id"])

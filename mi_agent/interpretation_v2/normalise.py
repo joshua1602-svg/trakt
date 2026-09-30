@@ -341,11 +341,15 @@ def canonical_intent(intent: CandidateIntent,
     # there is nothing to reconcile — the form still decides the operation.
     owner_implements = bool(form and owner is not None
                             and form in CAPABILITY_CHANGE_FORMS.get(owner, ()))
-    # With no measure to name an owner, the POPULATION does: a change in the
-    # pipeline is the pipeline's to implement, where it implements the form
-    # (D15) — never the funded book's owner of the same form.
-    population_owner = POPULATION_CHANGE_OWNER.get(
-        getattr(intent.population, "base", None) or "")
+    # With NO measure named at all, the POPULATION names the owner: "what
+    # moved in the pipeline" is the pipeline's to implement, where it
+    # implements the form (D15) — never the funded book's owner of the same
+    # form. A named measure keeps rule 3's ownership: a funded measure asked of
+    # the pipeline is refused for its population, not re-homed.
+    names_a_measure = any(output.measures
+                          for output in intent.effective_outputs())
+    population_owner = (None if names_a_measure else POPULATION_CHANGE_OWNER.get(
+        getattr(intent.population, "base", None) or ""))
     if (form and owner is None and population_owner
             and form in CAPABILITY_CHANGE_FORMS.get(population_owner, ())):
         owner_implements = population_owner == intent.capability

@@ -47,7 +47,7 @@ from due_diligence.evidence.deployed_acceptance_0399a315 import (  # noqa: E402
 #: The held-out variants (P0 design §25): read back with the bank, so a
 #: variant that did not answer as its bank question did can be read the same
 #: way — what the model read, and why the compiler refused it.
-HOLDOUT = _REPO_ROOT / "config" / "mi" / "golden_questions" / "holdout_variants_20260930.yaml"
+HOLDOUT = _REPO_ROOT / "config" / "mi" / "golden_questions" / "holdout_variants_20260930b.yaml"
 
 
 def load_bank(path: Path, holdout: Optional[Path] = HOLDOUT) -> List[Dict[str, Any]]:

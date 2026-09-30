@@ -34,7 +34,7 @@ DEFAULT_BANKS = [_BANK_DIR / "ere_mi_questions.yaml",
                  _BANK_DIR / "ere_capability_supplement.yaml"]
 #: The held-out variants (P0 design §25): each asks what one bank question
 #: asks, in other words, and is compared with it on the same deploy.
-HOLDOUT_BANK = _BANK_DIR / "holdout_variants_20260930.yaml"
+HOLDOUT_BANK = _BANK_DIR / "holdout_variants_20260930b.yaml"
 #: Funded, pipeline, forecast and limits (current and forward).
 DEFAULT_CATEGORIES = ["funded_kpi", "funded_breakdown_1d", "pipeline",
                       "pipeline_evolution", "forecast", "forecast_scale",
