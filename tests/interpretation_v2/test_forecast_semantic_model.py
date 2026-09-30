@@ -330,8 +330,13 @@ def test_the_annualised_run_rate_is_the_owners(funded_root, estate):
                funded_root, estate)
     rr = _scale_up()["completionRunRateForecast"]
     assert out.value == rr["annualisedRunRate"]
-    # the run-rate's own input is its signal, not the funded book too
-    assert set(out.receipt["inputs"]) == {"pipeline"}
+    # the run-rate's own input is its signal alone: the pipeline where the
+    # history covers the run-rate's window (D22), the funded book where the
+    # owner fell back to its growth — never both
+    from mi_agent_api import forecast_extrapolation as fx
+    signal = ({"pipeline"} if rr["assumptions"]["completionSignalKind"]
+              == fx.SIGNAL_OBSERVED_COMPLETION_FLOW else {"funded"})
+    assert set(out.receipt["inputs"]) == signal
 
 
 def test_the_scenario_run_rates_are_declared_and_served(funded_root, estate):

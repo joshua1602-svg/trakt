@@ -95,10 +95,13 @@ def build_historical_completion_model(
         completion_dates = (csf["completion_date"].to_numpy()
                             if "completion_date" in csf.columns
                             else [None] * len(csf))
+        amounts = (csf["amount"].to_numpy() if "amount" in csf.columns
+                   else [None] * len(csf))
         entry_dates = [csf[f].to_numpy() if f in csf.columns else [None] * len(csf)
                        for f in _ENTRY_FIELDS]
-        for cid_raw, stage_raw, cd, *entries in zip(case_ids, stages,
-                                                    completion_dates, *entry_dates):
+        for cid_raw, stage_raw, cd, amt, *entries in zip(case_ids, stages,
+                                                         completion_dates, amounts,
+                                                         *entry_dates):
             cid = str(cid_raw).strip()
             if not cid or cid.lower() in ("nan", "none", ""):
                 continue
@@ -124,11 +127,16 @@ def build_historical_completion_model(
                 # where ``iterrows`` yielded pd.Timestamp. Normalise back to a
                 # Timestamp so the isinstance/NaT check below is unchanged.
                 cd_ts = pd.Timestamp(cd) if cd is not None and not pd.isna(cd) else None
-                done = (cd_ts.date().isoformat()
-                        if isinstance(cd_ts, pd.Timestamp) and pd.notna(cd_ts)
-                        else extract_date)
+                stated = isinstance(cd_ts, pd.Timestamp) and pd.notna(cd_ts)
+                done = cd_ts.date().isoformat() if stated else extract_date
                 if t["completed_on"] is None or (done or "") < t["completed_on"]:
                     t["completed_on"] = done
+                    t["completed_on_stated"] = bool(stated)
+                # D22: the amount the case completed at — its amount on the
+                # first extract that shows it completed.
+                if "completed_amount" not in t:
+                    t["completed_amount"] = (float(amt) if amt is not None
+                                             and not pd.isna(amt) else None)
 
     # Per active stage: observed cases, completions, elapsed-days to completion.
     observed: Dict[str, int] = {s: 0 for s in ACTIVE_STAGES}
@@ -240,6 +248,9 @@ def build_historical_completion_model(
         "trackedCaseCount": len(timelines),
         "observedCompletionCount": observed_completion_count,
         "stableIdentifierUsed": stable_identifier,
+        # D22: the completion run-rate by calendar window, from each case's
+        # own completion date and amount.
+        "completionRunRate": completion_run_rate(timelines, dates),
         "stagesUsingHistoricalRates": stages_historical,
         "stagesUsingConfigFallback": stages_config_fallback,
         "excludedStageCounts": excluded_stage_counts,
@@ -258,6 +269,85 @@ def build_historical_completion_model(
         "cohortProgression": cohort_progression,
         "cumulativeCohortConversion": cumulative_cohort_conversion,
     }
+
+
+#: D22 (owner decision 2026-09-30): the completion run-rate is measured on
+#: the CALENDAR, not per extract. The pipeline is reported ad hoc (D15), so
+#: "the last five extracts" can be three weeks or eight; a run-rate over N
+#: weeks is the amount of the cases that COMPLETED in the N x 7 days to the
+#: latest extract, by each case's own completion date (the date the extract
+#: states, or the first extract that shows it completed where it states none),
+#: at the amount it completed at — per week over those N weeks, and per month
+#: at 52/12 weeks a month. Published for every whole number of weeks the
+#: history covers, from `RUN_RATE_MIN_WEEKS` (fewer is not a rate) to the span
+#: of the extracts (an earlier completion could have left the extracts before
+#: any of them saw it). `RUN_RATE_DEFAULT_WEEKS` is the forecast's own window.
+RUN_RATE_MIN_WEEKS = 3
+RUN_RATE_DEFAULT_WEEKS = 5
+WEEKS_PER_MONTH = 52 / 12
+
+
+def completion_run_rate(timelines: Dict[str, Dict[str, Any]],
+                        dates: List[str]) -> Dict[str, Any]:
+    """The completion run-rate over every whole-week window the history
+    covers, ending at the latest extract (D22). A window holding a completion
+    whose amount the extracts do not state publishes no amount for it: a total
+    that silently leaves a case out is not the rate."""
+    known = sorted(d for d in dates if d)
+    if not known:
+        return {"available": False, "method": "calendar",
+                "reason": "no dated pipeline extracts"}
+    as_of = pd.Timestamp(known[-1])
+    start = pd.Timestamp(known[0])
+    max_weeks = int((as_of - start).days // 7)
+    completions = [(pd.Timestamp(t["completed_on"]), t.get("completed_amount"),
+                    bool(t.get("completed_on_stated")))
+                   for t in timelines.values() if t.get("completed_on")]
+    windows: List[Dict[str, Any]] = []
+    for weeks in range(RUN_RATE_MIN_WEEKS, max_weeks + 1):
+        opens = as_of - pd.Timedelta(days=7 * weeks)
+        inside = [c for c in completions if opens < c[0] <= as_of]
+        unstated = sum(1 for c in inside if c[1] is None)
+        amount = (round(sum(float(c[1]) for c in inside), 2)
+                  if not unstated else None)
+        weekly = round(amount / weeks, 2) if amount is not None else None
+        windows.append({
+            "weeks": weeks,
+            "from": (opens + pd.Timedelta(days=1)).date().isoformat(),
+            "to": as_of.date().isoformat(),
+            "cases": len(inside),
+            "casesWithoutAmount": unstated,
+            "casesDatedByExtract": sum(1 for c in inside if not c[2]),
+            "amount": amount,
+            "weeklyAmount": weekly,
+            "monthlyAmount": (round(weekly * WEEKS_PER_MONTH, 2)
+                              if weekly is not None else None),
+        })
+    return {
+        "available": bool(windows),
+        "method": "calendar",
+        "basis": ("the amount of the cases that completed in the window, by "
+                  "each case's completion date, per week over the window and "
+                  "per month at 52/12 weeks a month"),
+        "asOf": as_of.date().isoformat(),
+        "historyStart": start.date().isoformat(),
+        "minWeeks": RUN_RATE_MIN_WEEKS,
+        "maxWeeks": max_weeks,
+        "defaultWeeks": RUN_RATE_DEFAULT_WEEKS,
+        "byWindow": windows,
+        **({} if windows else {
+            "reason": (f"the extracts span {max_weeks} whole week(s); a "
+                       f"run-rate needs at least {RUN_RATE_MIN_WEEKS}")}),
+    }
+
+
+def run_rate_window(model: Optional[Dict[str, Any]],
+                    weeks: int) -> Optional[Dict[str, Any]]:
+    """The published window of `weeks` weeks, or None where the history does
+    not cover it."""
+    rr = (model or {}).get("completionRunRate") or {}
+    return next((w for w in rr.get("byWindow") or () if w.get("weeks") == weeks),
+                None)
 
 
 def _expected_completion(timelines: Dict[str, Dict[str, Any]],

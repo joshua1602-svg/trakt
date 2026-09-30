@@ -252,14 +252,23 @@ measures:
     unit: gbp_per_month
     view: scale_up
     operations: [point_in_time]
-    periods: [current]
+    periods: [current, range]
     value: completionRunRateForecast.baseMonthlyRunRate
     inputs: [signal]
     context:
       annualised_run_rate: completionRunRateForecast.annualisedRunRate
       scenario_basis: completionRunRateForecast.scenarioBasis
       completion_signal: completionRunRateForecast.assumptions.completionSignal
+      run_rate_window: completionRunRateForecast.runRateWindow
     explain: "{annualised_run_rate}/year"
+    # D22: the owner publishes the run-rate over every whole number of weeks
+    # its history covers, on the calendar (by each case's completion date).
+    window:
+      rows: completionRunRateForecast.runRateByWindow
+      key: weeks
+      value: monthlyAmount
+      grain: weekly
+      also: [from, to, cases, amount]
     by:
       forecast_scenario:
         members:
@@ -271,10 +280,12 @@ measures:
       the pipeline's observed completions. It is an amount per month, NOT a
       percentage: it is NOT a conversion rate from KFI, application or offer
       to completion, and NOT a description of how the forecast is calculated.
-      It is measured over the forecast's OWN observation window, which the
-      answer states: a question naming ANOTHER window — '8-week', '12-week',
-      'over the last quarter' — asks a different figure, so keep that window
-      in `time` (a `range`, its words in `labels`) rather than dropping it.
+      It is measured on the calendar over the forecast's OWN window (the last
+      five weeks), which the answer states. A question naming ANOTHER window of
+      weeks — '8-week', 'the last 12 weeks' — asks the same figure over that
+      window: state it in `time` as a `range` with `grain` weekly and
+      `periods_back` the number of weeks, rather than dropping it. A window stated in
+      months or quarters keeps its words in `labels` (it is not published).
       Filter by `forecast_scenario` for the downside or upside run-rate; the
       yearly figure is `annualised_completion_run_rate`.
 

@@ -95,6 +95,15 @@ def binding_for(measure: _model.Measure, plan: Any
 # the perimeter every declared figure shares
 # --------------------------------------------------------------------------- #
 
+def names_window(m: _model.Measure, period: Mapping[str, Any]) -> bool:
+    """Does the plan's period name one of the figure's published windows — a
+    `range` of a whole number of periods at the window's grain (D22)?"""
+    back = period.get("periods_back")
+    return bool(m.window) and str(period.get("form") or "") == "range" \
+        and str(period.get("grain") or "") == m.window.get("grain") \
+        and isinstance(back, int) and not isinstance(back, bool) and back >= 1
+
+
 def period_as_stated(m: _model.Measure, period: Mapping[str, Any]
                      ) -> Mapping[str, Any]:
     """The plan's period as THIS figure reads it.
@@ -136,9 +145,10 @@ def check(model: _model.SemanticModel, plan: Any, measure: str, operation: str,
     period = body.get("period") or {}
     # THE GRAIN FIRST: it is the durable refusal. "By month" asks for a figure
     # per period whatever the measure turns out to mean, so a point figure
-    # refuses it before a hold is even consulted.
+    # refuses it before a hold is even consulted. A WINDOW's grain is the unit
+    # its length is counted in, not a figure per period.
     grain = period.get("grain")
-    if grain and grain not in m.grains:
+    if grain and grain not in m.grains and not names_window(m, period):
         return (False, PERIOD_NOT_SUPPORTED,
                 f"a {grain} grain asks for a figure per period; {measure} is "
                 f"not published per {grain}")
@@ -190,6 +200,18 @@ def check(model: _model.SemanticModel, plan: Any, measure: str, operation: str,
         return (False, PERIOD_NOT_SUPPORTED,
                 f"period.form={form!r} is not how {measure} is stated "
                 f"({sorted(m.periods)})")
+    if form == "range" and m.window:
+        if not names_window(m, period):
+            return (False, PERIOD_NOT_SUPPORTED,
+                    f"{measure} is published over a window of whole "
+                    f"{m.window['grain'].replace('ly', '')}s, stated as a "
+                    f"number of them (periods_back) at grain "
+                    f"{m.window['grain']!r}; this plan states "
+                    f"{ {k: period.get(k) for k in ('grain', 'periods_back', 'labels')} }")
+        if filters:
+            return (False, FILTERS_NOT_SUPPORTED,
+                    f"{measure} over a named window is one figure; its "
+                    f"members are published for the owner's own window only")
     ahead = period.get("periods_ahead")
     if ahead is not None and not m.series:
         return (False, PERIOD_NOT_SUPPORTED,
@@ -224,6 +246,9 @@ def serve_figure(m: _model.Measure, payload: Mapping[str, Any], *,
                  ) -> Tuple[str, Any, Optional[List[Dict[str, Any]]], Any, Dict[str, Any]]:
     """`(shape, value, cells, paths read, extra receipt facts)` for the figure
     the plan resolved to — the owner's value, member, breakdown or curve."""
+    if names_window(m, period):
+        return _windowed(m, payload, int(period["periods_back"]),
+                         unavailable=unavailable)
     if m.series:
         return _series(m, payload, member=member, period=period,
                        unavailable=unavailable)
@@ -252,6 +277,36 @@ def serve_figure(m: _model.Measure, payload: Mapping[str, Any], *,
     if value is None:
         raise Refusal(unavailable, f"the owner published no {m.name} ({m.value})")
     return "scalar", value, None, m.value, {}
+
+
+def _windowed(m: _model.Measure, payload: Mapping[str, Any], length: int, *,
+              unavailable: str
+              ) -> Tuple[str, Any, None, str, Dict[str, Any]]:
+    """The figure over the window of `length` periods, as its owner published
+    it. A window the owner's history does not cover is refused, never
+    shortened, stretched or scaled from another."""
+    w = m.window
+    rows = _model.read(payload, w["rows"]) or []
+    lengths = sorted(int(r[w["key"]]) for r in rows
+                     if isinstance(r.get(w["key"]), int))
+    row = next((r for r in rows if r.get(w["key"]) == length), None)
+    unit = str(w["grain"]).replace("ly", "")
+    if row is None:
+        covered = (f"{lengths[0]} to {lengths[-1]} {unit}s" if lengths
+                   else f"no whole window of {unit}s")
+        raise Refusal(PERIOD_NOT_SUPPORTED,
+                      f"the owner's history covers {m.label.lower()} over "
+                      f"{covered}; a {length}-{unit} window is not one it can "
+                      f"state from the history it holds")
+    value = row.get(w["value"])
+    path = f"{w['rows']}[{w['key']}={length}].{w['value']}"
+    if value is None:
+        raise Refusal(unavailable,
+                      f"the owner published no {m.label.lower()} over "
+                      f"{length} {unit}s: {row}")
+    return "scalar", value, None, path, {
+        "window": {"length": length, "unit": unit,
+                   **{k: row.get(k) for k in (w.get("also") or ())}}}
 
 
 def _member(member: Tuple[str, str], payload: Mapping[str, Any],
@@ -400,7 +455,10 @@ def receipt(model: _model.SemanticModel, m: _model.Measure, plan: Any, *,
                    if member else None),
         "inputs": inputs_used(model, m, payload),
         "context": context,
-        "explain": m.explain if (shape == "scalar" and not member) else "",
+        # The explain sentence states the owner's own figure's companions; a
+        # figure over another window than the owner's has none of them.
+        "explain": (m.explain if (shape == "scalar" and not member
+                                  and "window" not in extra) else ""),
         "caveat": m.caveat,
         # The axis as THIS figure names it, where the file says: the same
         # `origin_stage` is the stage a rate is measured from and the stage a

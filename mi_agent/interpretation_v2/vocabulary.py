@@ -159,7 +159,12 @@ from mi_agent import semantic_model as _semantic_model
 #: month by month is the amount at face value, as in one month, with the
 #: weighted figure stated alongside; the weighted figure's other name ("the
 #: expected completions") is the forecast's, not a month's.
-VOCABULARY_VERSION = "2.19.0"
+#:
+#: 2.20.0 (P0 design §32): D22 — the completion run-rate is measured on the
+#: calendar and published over every whole number of weeks the history
+#: covers; a question naming its own window of weeks states it as a range of
+#: that many weekly periods (grain weekly, periods_back N).
+VOCABULARY_VERSION = "2.20.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -569,6 +574,16 @@ CHANGE_FORM_ABSENT_PERIOD_DEFAULT: Mapping[str, Optional[str]] = {
     "metric_delta": None,
     "level_comparison": None,
 }
+
+#: D20 (owner decision 2026-09-30): "over time" with no span, grain or count is
+#: every reporting date the owner holds — the whole history at the owner's own
+#: cadence (the pipeline's extracts as reported, the funded book's monthly
+#: runs). Not the latest two dates: those are "previous" (D15), a comparison,
+#: where "over time" asks for the trend. Recorded on the period binding as the
+#: default applied; the answer states the first and last date and how many.
+SERIES_ABSENT_SPAN_DEFAULT = "every_reporting_date"
+SERIES_ABSENT_SPAN_RULE = ("D20: a series stating no span is every reporting "
+                           "date the owner holds, at its own cadence")
 
 #: The operations that are linguistic variants of each form's own action, and so
 #: canonicalise to it. A form absent from this table canonicalises nothing, and

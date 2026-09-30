@@ -496,7 +496,7 @@ ACTIVE_STAGES = ("KFI", "APPLICATION", "OFFER")
 
 
 def case_stage_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Resolve ``[case_id, application_id, stage, completion_date]`` (plus the
+    """Resolve ``[case_id, application_id, stage, completion_date, amount]`` (plus the
     ``kfi_date`` / ``application_date`` / ``offer_date`` stage entry dates) from a raw
     weekly pipeline extract, reusing the contract aliases + stage normalisation.
 
@@ -517,6 +517,11 @@ def case_stage_frame(df: pd.DataFrame) -> pd.DataFrame:
                     else pd.Series("UNKNOWN", index=df.index))
     out["completion_date"] = (_parse_date(df[comp_col]) if comp_col
                               else pd.Series(pd.NaT, index=df.index))
+    # The case's amount (the same balance the funnel sums per stage), so a
+    # completion can be stated at its amount on the date it completed (D22).
+    amount_col = mapping.get("current_outstanding_balance")
+    out["amount"] = (coerce_numeric(df[amount_col]) if amount_col
+                     else pd.Series(np.nan, index=df.index))
     # Stage entry dates, for the run-off model's time-in-stage (additive).
     for fld in ("kfi_date", "application_date", "offer_date"):
         col = mapping.get(fld)

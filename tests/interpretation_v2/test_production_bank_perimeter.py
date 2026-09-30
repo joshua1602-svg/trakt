@@ -61,6 +61,12 @@ ADMITTED = {
     # longer makes them — 98 asks back and 121 reads the stage completion rate
     # (`test_the_run_rate_hold_is_released_on_the_1959_readings`).
     98: "forecast", 112: "forecast", 113: "forecast", 121: "forecast",
+    # D20 (§32.1): "over time" with no span is every reporting date held — the
+    # pipeline by stage across every extract, amount and cases.
+    74: "pipeline", 75: "pipeline",
+    # D22 (§32.3): the run-rate over a named window of weeks, read as a range
+    # of 8 weekly periods, is the history owner's calendar 8-week run-rate.
+    125: "forecast",
 }
 
 #: Plans the runtime would answer with a figure the question did not ask for.
@@ -131,6 +137,13 @@ def test_the_fixture_is_the_whole_run():
 RULE_7_MOVED = {100: ("REFUSE", "CLARIFY"), 101: ("REFUSE", "CLARIFY"),
                 105: ("REFUSE", "PLAN"), 106: ("REFUSE", "PLAN")}
 
+#: D20 (owner decision 2026-09-30, §32.1): a series stating no span is every
+#: reporting date the owner holds, not a request to ask back. 79 (broker over
+#: time) and 99 (a conversion basis over time) become plans their runtimes
+#: still refuse — neither is published over time.
+D20_MOVED = {74: ("CLARIFY", "PLAN"), 75: ("CLARIFY", "PLAN"),
+             79: ("CLARIFY", "PLAN"), 99: ("CLARIFY", "PLAN")}
+
 
 def test_todays_compiler_reproduces_the_recorded_plans(replay):
     """Only normalisation rule 6 moves a plan, and only its base; rule 7 moves
@@ -153,7 +166,10 @@ def test_todays_compiler_reproduces_the_recorded_plans(replay):
     # balances above zero, a predicate on the plan (owner decision D14, §21.3).
     assert moved == {112: "forecast", 113: "forecast", 125: "forecast",
                      43: "funded", 83: "pipeline", 16: "funded"}
-    assert outcome_moved == RULE_7_MOVED
+    assert outcome_moved == {**RULE_7_MOVED, **D20_MOVED}
+    for n in D20_MOVED:
+        assert replay[n]["plan"]["period"]["default_method"] == \
+            "every_reporting_date", n
     for n in RULE_7_MOVED:
         assert any("grouped_figure" in note
                    for note in replay[n]["result"].plan.provenance.notes) \

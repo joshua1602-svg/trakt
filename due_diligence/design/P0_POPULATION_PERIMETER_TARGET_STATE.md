@@ -139,6 +139,25 @@
         configuration; zero or several activated clients read nothing.
         §27.2.
 
+    D20 "OVER TIME"                                           SETTLED 2026-09-30
+        Every reporting date the owner holds, at its own cadence — the
+        pipeline's extracts as reported, the funded book's monthly runs. Not
+        the latest two dates: that is "previous" (D15), a comparison; "over
+        time" is the trend. The answer states the first and last date and how
+        many. §32.1.
+
+    D21 STAGE COMPLETION RATES                                SETTLED 2026-09-30
+        "Measured or decline if not enough history." A stage's chance of
+        completing is measured from the client's own history; where the
+        history is not enough, no configured rate stands in, and a weighted
+        figure that depends on it is not stated and says why. §32.2.
+
+    D22 THE RUN-RATE IS MEASURED ON THE CALENDAR              SETTLED 2026-09-30
+        "If possible, run rate = calendar." A run-rate over N weeks is the
+        amount of the cases that completed in the N x 7 days to the latest
+        extract, by each case's own completion date — published for every
+        whole number of weeks the history covers. §32.3.
+
     D12 PIPELINE "BY REGION"                                  SETTLED 2026-09-29
         The client's reporting regions, on the Pipeline tab and in an agent
         answer alike. The pipeline is harmonised with the funded book's region
@@ -2150,3 +2169,79 @@ the tab states no companion for says "n/a", never zero. Pinned in
 The origination-channel breakdown on the pipeline shows the extract's broker
 values: that is what the extract carries in the field, a data question for the
 owner, not a reading or runtime error.
+
+
+## 32. Owner decisions D20, D21, D22 (2026-09-30)
+
+Asked after the 19:59 full bank, from the declines that were not the owner's
+"fine to decline" and not a model misread (§31): 21 remained, 4 the right
+answer and 17 figures the data holds but the agent did not yet state.
+
+### 32.1 D20 — "over time" is every reporting date held
+
+"Show pipeline amount by stage over time" [74, 75]: the model read a series
+and stated no span; the compiler refused it as AMBIGUOUS_PERIOD and the agent
+asked back. The owner's rule is now the compiler's: a SERIES stating no span,
+grain or count is every reporting date the owner holds, recorded on the plan's
+period as a default (`SERIES_ABSENT_SPAN_DEFAULT`, owner the capability) and
+disclosed in the answer's source notes. A RANGE with no bounds is still an
+incomplete request. The pipeline serves it as every extract (the answer names
+the first and last extract, how many, and each stage from its first figure to
+its latest); the funded book as every monthly run (`plan_temporal_runtime`
+basis `every_reporting_date`, the same periods as "over time" in words).
+A breakdown the history does not carry over time — broker [79] — becomes a
+plan its runtime still refuses. Pinned by
+`test_over_time_is_every_reporting_date.py`.
+
+### 32.2 D21 — measured, or decline
+
+Recorded here; built in its own change (§33), because it changes what the
+Pipeline and Forecast tabs show when a stage lacks history, and the dashboard
+front end is deployed from `main`, not from this branch.
+
+### 32.3 D22 — the run-rate on the calendar, over any window of weeks
+
+The finding (reading how the 8-week run-rate [125] could be stated): the
+forecast's "5-week average" was the mean of the last five extract-to-extract
+changes in the completed stock, each counted as one week and scaled at 52/12
+weeks a month. The pipeline is reported ad hoc (D15) — the production history
+holds 90 extracts in about 54 weeks, the latest two three days apart — so each
+"week" was a few days of completions and the monthly run-rate, and every
+scale date projected from it, understated by however close the extracts were.
+The test book shows it plainly: monthly extracts, one month of completions
+counted as one week (£281k a month against £191k on the calendar).
+
+The history owner (`pipeline_history.completion_run_rate`) now states the
+run-rate from each completed case's own completion date (the date the extract
+states — "Date Funds Released" — or, where it states none, the first extract
+that shows the case completed) and the amount it completed at: the amount of
+the cases that completed in the N x 7 days to the latest extract, per week and
+per month at 52/12 weeks a month. It is published for every whole number of
+weeks from 3 (fewer is not a rate) to the span of the extracts (an earlier
+completion could have left the extracts before any of them saw it). A window
+holding a completion with no stated amount publishes no amount. The spacing of
+the extracts no longer moves the figure.
+
+The forecast (`build_extrapolation`) reads its own five-week window from it,
+as at the funnel's latest extract (a forecast for an earlier run cuts the
+history there — `build_pipeline_history(as_of=...)`, memoised per cut). Where
+the history is shorter than five weeks, the run-rate is not read from the
+pipeline and the owner's existing, disclosed fallback (funded balance growth,
+itself refused on fewer than three observations) applies. The run-rate's
+basis names its window; every published window rides on the forecast as
+`runRateByWindow`.
+
+The agent serves a question naming its own window — "8-week", "the last 12
+weeks" — as a `range` of N weekly periods (vocabulary 2.20.0 tells the model
+so). The semantic model declares the run-rate's `window` (rows, key, value,
+grain) and the one engine reads the row for N (`semantic_engine._windowed`),
+never shortening, stretching or scaling another: a window the history does not
+cover is declined naming the windows it does; a window in months or in words
+only is declined. The answer states the window's dates and what completed in
+it — and the forecast's own figure now states its window too. Pinned by
+`test_run_rate_on_the_calendar.py`; [125]'s recorded reading (range, weekly,
+8 back) is now admitted.
+
+Not changed here, the same finding: the Evolution tab's funnel cards and the
+KFI-conversion model (Model B) still average the last five extract-to-extract
+flows and call it five weeks.

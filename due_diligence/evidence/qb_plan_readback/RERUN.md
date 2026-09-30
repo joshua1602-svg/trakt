@@ -422,3 +422,13 @@ intents added beside the baseline's.
                 (qb_recorded_intents_20260930_1959.json), a projection read as
                 "now" is its owner's horizon, D16 in each month (vocabulary
                 2.19.0). Not deployed yet
+    2026-09-30  Owner decisions D20-D22 (design §32). Built: D20 "over
+                time" with no span is every reporting date held (compiler
+                default, pipeline every extract, funded every run); D22 the
+                completion run-rate on the calendar from each case's own
+                completion date, published for every whole-week window the
+                history covers — the forecast's five-week figure no longer
+                counts each extract-to-extract change as a week, and a named
+                window (8-week, 12-week) is served (vocabulary 2.20.0; the
+                runner refuses a vocabulary below 2.20.0). D21 (measured or
+                decline) recorded; built separately. Not deployed yet

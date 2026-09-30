@@ -273,14 +273,41 @@ def test_the_run_rate_is_the_owners_and_is_as_at_its_signal(funded_root):
         rr["assumptions"]["completionSignal"]
 
 
-def test_inputs_beyond_the_ceiling_are_refused_naming_both_dates(funded_root):
-    """D1 outside the ceiling: 180 days, refused, and the operator can see why."""
+@pytest.fixture(scope="module")
+def stale_root(tmp_path_factory):
+    """A pipeline history far newer than the funded book and long enough for
+    the run-rate's five-week window (D22): the five weekly extracts of
+    `_STALE` and a sixth a week later in which nothing moved."""
+    import shutil
+    root = tmp_path_factory.mktemp("stale_pipeline")
+    for folder in Path(_STALE).iterdir():
+        if folder.is_dir():
+            shutil.copytree(folder, root / folder.name)
+    last = root / "2026-05-29" / "M2L_KFI_and_Pipeline_2026_05_29.csv"
+    (root / "2026-06-05").mkdir()
+    shutil.copy(last, root / "2026-06-05" / "M2L_KFI_and_Pipeline_2026_06_05.csv")
+    return str(root)
+
+
+def test_inputs_beyond_the_ceiling_are_refused_naming_both_dates(funded_root,
+                                                                 stale_root):
+    """D1 outside the ceiling: 187 days, refused, and the operator can see why."""
     outcome = forecast_rt.execute(_plan(), output_root=funded_root,
-                                  pipeline_root=_STALE, client_id=_CLIENT)
+                                  pipeline_root=stale_root, client_id=_CLIENT)
     assert not outcome.ok
     assert outcome.reason == forecast_rt.POPULATION_VINTAGE_SKEW
-    for fragment in ("2025-11-30", "2026-05-29", "180 days", "45 days"):
+    for fragment in ("2025-11-30", "2026-06-05", "187 days", "45 days"):
         assert fragment in outcome.detail
+
+
+def test_a_history_shorter_than_the_window_is_not_the_signal(funded_root):
+    """Four weeks of extracts cannot state a five-week run-rate (D22): the
+    owner does not read the pipeline for it, so the pipeline is no input."""
+    rr = _owner(funded_root, _STALE)["completionRunRateForecast"]
+    assert rr["runRateWindow"] is None
+    assert rr["runRateWindowWeeks"]["max"] == 4
+    assert rr["assumptions"]["completionSignalKind"] != \
+        fx.SIGNAL_OBSERVED_COMPLETION_FLOW
 
 
 def test_the_ceiling_is_the_governed_policy_for_the_whole_book(funded_root):
@@ -409,9 +436,10 @@ def test_serve_answers_a_milestone_with_its_measure_and_both_vintages(
     assert coverage["unaccounted"] == []
 
 
-def test_serve_refuses_a_stale_pipeline_and_legacy_serves(monkeypatch, funded_root):
+def test_serve_refuses_a_stale_pipeline_and_legacy_serves(monkeypatch, funded_root,
+                                                        stale_root):
     payload, record = _served(_intent(), monkeypatch, funded_root,
-                              pipeline_root=_STALE)
+                              pipeline_root=stale_root)
     assert payload is None
     assert record["serving"]["reason"].endswith(forecast_rt.POPULATION_VINTAGE_SKEW)
 

@@ -123,7 +123,9 @@ def test_an_unresolved_period_refuses(compiler):
 
 
 def test_a_span_with_no_span_clarifies(compiler):
-    intent = build_intent(operation="series", time={"form": "series"})
+    """A RANGE states bounds, so one with none asks. A SERIES with none is
+    every reporting date held (D20) — `test_over_time_is_every_reporting_date`."""
+    intent = build_intent(operation="series", time={"form": "range"})
     result = compiler.compile(intent)
     assert "AMBIGUOUS_PERIOD" in result.codes()
     assert result.plan is None

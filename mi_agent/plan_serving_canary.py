@@ -922,11 +922,19 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                         for st in stages}}
                     for per in periods]
             series = [{"key": st, "label": st} for st in stages]
-            # The first and last extract, so the series says when it spans.
+            # The first and last extract, so the series says when it spans,
+            # and each stage from its first figure to its latest — largest at
+            # the latest extract first (the answer standard's leaders).
             window = (f" ({periods[0]} to {periods[-1]})"
                       if len(periods) > 1 else f" ({periods[0]})" if periods else "")
-            answer = (f"The {phrase} by stage across {span}{window}: "
-                      f"{', '.join(_stage_name(st) for st in stages)}.")
+            ranked = (sorted(stages, key=lambda st: -(rows[-1].get(st) or 0.0))
+                      if rows else stages)
+            moves = ", ".join(
+                f"{_stage_name(st)} from {_shown(rows[0].get(st))} to "
+                f"{_shown(rows[-1].get(st))}" if len(rows) > 1
+                else f"{_stage_name(st)} {_shown(rows[-1].get(st))}"
+                for st in ranked)
+            answer = f"The {phrase} by stage across {span}{window}: {moves}."
         else:
             rows = sorted(({"period": str(c["period"]), "value": c["value"]}
                            for c in outcome.cells), key=lambda r: r["period"])
@@ -952,6 +960,12 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     if receipt.get("month_rule"):
         source_notes.append({"field": "grain: monthly",
                              "note": str(receipt["month_rule"])})
+    # D20: a series stating no span was read as every reporting date held —
+    # a default the plan records, so the answer discloses it.
+    period_default = plan.get("period") or {}
+    if period_default.get("defaulted") and period_default.get("default_reason"):
+        source_notes.append({"field": "period: over time",
+                             "note": str(period_default["default_reason"])})
     # WHAT THE FIGURE LEAVES OUT, on the sentence and in the notes — the same
     # disclosure the Pipeline tab makes, in the Pipeline owner's words.
     if scope.get("note"):
@@ -1592,13 +1606,38 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
         banded = member.get("dimension") == "forecast_scenario"
     else:
         explained = _explained(receipt)
-        answer = (f"{label}: {_shown_in(unit, value)}"
+        # D22: the calendar window the figure was measured over — the one the
+        # question named, or the owner's own — with what completed in it.
+        window = (receipt.get("window")
+                  or (receipt.get("context") or {}).get("run_rate_window"))
+        answer = (f"{label}{_window_words(window)}: {_shown_in(unit, value)}"
                   + (f" — {explained}" if explained else "")
+                  + _window_evidence(window)
                   + f".{caveat} {as_at}")
     kpis = [{"field": str(receipt.get("measure_concept")), "label": label,
              "value": _shown_in(unit, value), "rawValue": value}]
     artefacts = [make("kpi", label, kpis=kpis, description="Governed forecast.")]
     return answer, artefacts, banded
+
+
+def _window_words(window: Any) -> str:
+    """' over the 8 weeks 2026-07-31 to 2026-09-24' — the calendar window a
+    run-rate was measured over (D22). Presentation only."""
+    if not isinstance(window, Mapping) or not window.get("from"):
+        return ""
+    length = window.get("length") or window.get("weeks")
+    unit = str(window.get("unit") or "week")
+    return (f" over the {_standard.plural(length, unit)} {window.get('from')} "
+            f"to {window.get('to')}")
+
+
+def _window_evidence(window: Any) -> str:
+    """'; 3 cases completed in the window, £1.2m' — what the window holds."""
+    if not isinstance(window, Mapping) or window.get("cases") is None:
+        return ""
+    amount = window.get("amount")
+    return (f"; {_standard.plural(window.get('cases'), 'case')} completed in "
+            f"the window" + (f", {_money(amount)}" if amount is not None else ""))
 
 
 def _catalogue_notes(receipt: Mapping[str, Any]) -> List[Dict[str, str]]:

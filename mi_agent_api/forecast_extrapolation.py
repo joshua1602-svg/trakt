@@ -27,6 +27,7 @@ import math
 from typing import Any, Dict, List, Optional, Tuple, Sequence
 
 from . import evolution as evolution_mod
+from . import pipeline_history as _history
 
 _THRESHOLDS = [25_000_000, 50_000_000, 75_000_000, 100_000_000, 150_000_000]
 _LOOKBACKS = (4, 5, 8, 12)
@@ -538,6 +539,32 @@ def milestone_answer(milestones: Sequence[Dict[str, Any]], threshold: float,
     return {"state": MILESTONE_PROJECTED, "milestone": m, "gap": gap}
 
 
+def _calendar_run_rate(pipeline_root, client_id: str,
+                       history_model: Optional[Dict[str, Any]],
+                       as_of: Optional[str]) -> Dict[str, Any]:
+    """The history owner's calendar run-rate as at `as_of` (D22): the history
+    the caller already holds when it ends there, otherwise the history cut to
+    that date. Nothing when there is no dated extract to end at."""
+    if not as_of:
+        return {"available": False, "method": "calendar",
+                "reason": "no dated pipeline extract"}
+    held = (history_model or {}).get("completionRunRate") or {}
+    if held.get("asOf") == as_of:
+        return held
+    if not pipeline_root:
+        return {"available": False, "method": "calendar",
+                "reason": "no pipeline history root"}
+    from . import pipeline_contract as _pipeline
+    try:
+        model = _pipeline.build_pipeline_history(pipeline_root, client_id,
+                                                 as_of=as_of)
+    except Exception as exc:  # noqa: BLE001 - the forecast must not 500 here
+        return {"available": False, "method": "calendar",
+                "reason": f"history unavailable: {type(exc).__name__}"}
+    return model.get("completionRunRate") or {"available": False,
+                                              "method": "calendar"}
+
+
 def build_extrapolation(output_root, pipeline_root, client_id: str,
                         to_run_id: Optional[str], *,
                         history_model: Optional[Dict[str, Any]] = None,
@@ -614,15 +641,25 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
     weekly_conv = (weekly_rate_pct / 100.0) if weekly_rate_pct is not None else None
 
     # Model A — completion run-rate. The signal is the completions the pipeline
-    # actually OBSERVED (its COMPLETED weekly flow, the same series the Pipeline
-    # → Evolution tab charts), so the two surfaces reconcile by construction.
-    # Month-on-month funded balance growth is only a proxy for that, and carries
-    # interest roll-up and any portfolio onboarded in one step, so it is the
-    # fallback rather than the signal.
-    completed_summary = (fsum.get("COMPLETED", {}) or {})
-    weekly_completions = completed_summary.get("fiveWeekAvgFlowValue")
-    observed_monthly = (float(weekly_completions) * _MONTHS_PER_WEEK
-                        if weekly_completions is not None and weekly_completions > 0
+    # actually OBSERVED. Month-on-month funded balance growth is only a proxy
+    # for that, and carries interest roll-up and any portfolio onboarded in one
+    # step, so it is the fallback rather than the signal.
+    #
+    # D22 (owner decision 2026-09-30): ON THE CALENDAR. The pipeline is
+    # reported ad hoc (D15), so an average of the last five extract-to-extract
+    # flows is not five weeks of completions, and scaling it at 52/12 "weeks"
+    # a month misstated the rate by however far apart the extracts were. The
+    # run-rate is the history owner's: the amount of the cases that completed
+    # in the five weeks to the funnel's latest extract, by each case's own
+    # completion date — and the same owner publishes every other whole-week
+    # window the history covers, which the Forecast tab and the agent read.
+    flow_as_of = (funnel.get("weeks") or [None])[-1]
+    run_rate = _calendar_run_rate(pipeline_root, client_id, history_model,
+                                  flow_as_of)
+    window = _history.run_rate_window(
+        {"completionRunRate": run_rate}, _history.RUN_RATE_DEFAULT_WEEKS)
+    monthly = (window or {}).get("monthlyAmount")
+    observed_monthly = (float(monthly) if monthly is not None and monthly > 0
                         else None)
     comp = completion_history(funded_periods)
     model_a = run_rate_model(
@@ -631,9 +668,19 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
         thresholds=sorted({float(t) for t in _THRESHOLDS}
                           | {float(t) for t in (extra_thresholds or ())}),
         observed_monthly_completions=observed_monthly,
-        completion_basis=("observed completion flow — 5-week average of the pipeline's "
-                          "COMPLETED stage, annualised to a month"))
+        completion_basis=(
+            f"observed completions — the amount of the cases that completed in "
+            f"the {window['weeks']} weeks {window['from']} to {window['to']}, "
+            f"by completion date, per month" if window else None))
     model_a["completionHistory"] = comp
+    # Every whole-week window the history covers, on the same calendar basis
+    # (D22) — the figure a question naming its own window reads.
+    model_a["runRateMethod"] = run_rate.get("method")
+    model_a["runRateWindow"] = window if observed_monthly is not None else None
+    model_a["runRateByWindow"] = list(run_rate.get("byWindow") or ())
+    model_a["runRateWindowWeeks"] = {"min": run_rate.get("minWeeks"),
+                                     "max": run_rate.get("maxWeeks"),
+                                     "default": run_rate.get("defaultWeeks")}
     rate_weeks = completed_conv.get("weeksInWindow")
     min_rate_weeks = completed_conv.get("minWeeks", 3)
     model_b = _withdraw_kfi_model(
@@ -663,8 +710,7 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
         # pipeline input is as at. None when the run-rate did not use the flow —
         # then the pipeline was not an input to it at all.
         "completionFlowExtractDate": (
-            (funnel.get("weeks") or [None])[-1]
-            if observed_monthly is not None else None),
+            flow_as_of if observed_monthly is not None else None),
         "currentFundedBalance": round(current_balance, 2),
         "currentWeightedPipelineForecast": current_weighted,
         "completionRunRateForecast": model_a,

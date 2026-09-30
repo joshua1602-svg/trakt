@@ -717,7 +717,10 @@ def _execute_catalogue(body: Mapping[str, Any], *, request: Mapping[str, Any],
         # The owner's companion figures the answer states beside this one,
         # named as the semantic model names them.
         "context": context,
-        "explain": m.explain if (shape == "scalar" and not member) else "",
+        # The explain sentence states the owner's own figure's companions; a
+        # figure over another window than the owner's (D22) has none of them.
+        "explain": (m.explain if (shape == "scalar" and not member
+                                  and "window" not in extra) else ""),
         **context,
         **extra,
         **notes,

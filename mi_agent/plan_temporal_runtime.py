@@ -641,6 +641,19 @@ def _resolve_span(form: str, labels: Sequence[str], periods_back: Any,
         return TemporalResolution(ok=True, shape=SHAPE_SERIES,
                                   basis="cadence", selector=selector,
                                   headers=tuple(chosen), requested=requested)
+    # D20 (owner decision 2026-09-30): a series stating NOTHING of its span —
+    # no count, no label, no grain: "over time" — is every reporting date the
+    # book holds, at the book's own cadence. The compiler records the default
+    # on the plan; the window is the whole catalogue, which is the only one
+    # the request names. A stated grain the catalogue does not keep still
+    # fails closed above and below.
+    if form == "series" and not grain:
+        selector = SnapshotSelector.range(client_id, None, None, route=route)
+        chosen = selector.resolve(store)
+        return TemporalResolution(ok=True, shape=SHAPE_SERIES,
+                                  basis="every_reporting_date",
+                                  selector=selector, headers=tuple(chosen),
+                                  requested=requested)
 
     return _fail(PERIOD_LABEL_UNRESOLVED,
                  "the plan states a span with no period count, no period label "

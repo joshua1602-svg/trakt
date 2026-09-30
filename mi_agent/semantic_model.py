@@ -77,6 +77,13 @@ class Measure:
     series: Mapping[str, str] = field(default_factory=dict)
     by: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     decision: str = ""
+    #: A figure the owner publishes for every whole WINDOW its history covers
+    #: (the completion run-rate over N weeks, D22): the rows, the key naming
+    #: the window's length, the value, the grain the length is counted in, and
+    #: the facts carried with it. A plan names one window as a `range` of
+    #: `periods_back` at that grain; the row is found by its key, never
+    #: computed.
+    window: Mapping[str, Any] = field(default_factory=dict)
     #: The population the figure is measured over — the one a plan asking for
     #: it must name, and the one its receipt proves. The capability's own
     #: population unless the file says otherwise (see `_validate`).
@@ -202,6 +209,14 @@ def _validate(doc: Mapping[str, Any], capability: str) -> SemanticModel:
                     f"governed values {sorted(governed)}")
         if not (row.get("value") or row.get("series") or by):
             raise SemanticModelError(f"{where} publishes no value, series or breakdown")
+        window = dict(row.get("window") or {})
+        if window:
+            missing = [k for k in ("rows", "key", "value", "grain") if not window.get(k)]
+            if missing:
+                raise SemanticModelError(f"{where} declares a window without {missing}")
+            if "range" not in _tuple(row.get("periods")):
+                raise SemanticModelError(
+                    f"{where} declares a window, so it is stated for a `range`")
         # A figure measured over ANOTHER population than the capability's is one
         # of the view's dated inputs, read alone: the pipeline's exclusions from
         # forecast weighting are a property of the pipeline extract, not of the
@@ -221,7 +236,8 @@ def _validate(doc: Mapping[str, Any], capability: str) -> SemanticModel:
             context=dict(row.get("context") or {}), explain=_text(row.get("explain")),
             caveat=_text(row.get("caveat")),
             series=dict(row.get("series") or {}), by=by,
-            decision=str(row.get("decision") or ""), population=population)
+            decision=str(row.get("decision") or ""), window=window,
+            population=population)
     return SemanticModel(capability=capability, population=home, views=views,
                          dimensions=dimensions, measures=measures)
 

@@ -85,6 +85,8 @@ from .plan import (
 )
 from .vocabulary import (
     CHANGE_FORM_ABSENT_PERIOD_DEFAULT,
+    SERIES_ABSENT_SPAN_DEFAULT,
+    SERIES_ABSENT_SPAN_RULE,
     CAPABILITY_CHANGE_FORMS,
     CHANGE_FORM_CAPABILITY,
     CHANGE_FORM_MODE,
@@ -724,7 +726,15 @@ class DeterministicCompiler:
             reasons.append(CompileReason(
                 PERIOD_UNRESOLVED, "time.labels",
                 "an explicit period was claimed but no period was named"))
-        if time.form in ("range", "series") and not (
+        # D20 (owner decision 2026-09-30): a SERIES stating no span, grain or
+        # count — "over time", "the trend" — is every reporting date the owner
+        # holds, at the owner's own cadence; the answer states the first and
+        # last date and how many. Recorded on the binding as a default, never
+        # silently assumed. A RANGE states bounds by definition, so one with
+        # none is still an incomplete request.
+        open_series = time.form == "series" and not (
+            time.labels or time.periods_back or time.grain)
+        if time.form == "range" and not (
                 time.labels or time.periods_back or time.grain):
             reasons.append(CompileReason(
                 AMBIGUOUS_PERIOD, "time",
@@ -758,6 +768,13 @@ class DeterministicCompiler:
         if not time.stated and intent.change_form:
             default_method = CHANGE_FORM_ABSENT_PERIOD_DEFAULT.get(
                 intent.change_form) or ""
+        default_owner = intent.change_form or ""
+        default_reason = ("no temporal form was stated; the analytical form "
+                          "owns the comparison window")
+        if open_series:
+            default_method = SERIES_ABSENT_SPAN_DEFAULT
+            default_owner = intent.capability or ""
+            default_reason = SERIES_ABSENT_SPAN_RULE
         # The record lives ON THE BINDING — `defaulted`, `default_reason`,
         # `default_method`, `default_owner` — which is where `GeographyBinding`
         # keeps the same fact and which travels with the plan. This function owns
@@ -769,12 +786,10 @@ class DeterministicCompiler:
                               resolved=settled, owned_by_capability=owned,
                               stated=time.stated,
                               defaulted=bool(default_method),
-                              default_reason=(
-                                  "no temporal form was stated; the analytical "
-                                  "form owns the comparison window"
-                                  if default_method else ""),
+                              default_reason=(default_reason
+                                              if default_method else ""),
                               default_method=default_method,
-                              default_owner=(intent.change_form or ""
+                              default_owner=(default_owner
                                              if default_method else "")),
                 reasons)
 

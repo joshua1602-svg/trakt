@@ -579,9 +579,15 @@ def _extract_set_identity(extracts: List[Dict[str, Any]]) -> Optional[List[Any]]
 
 
 def build_pipeline_history(root: str | os.PathLike,
-                           client_id: str) -> Dict[str, Any]:
+                           client_id: str, *,
+                           as_of: Optional[str] = None) -> Dict[str, Any]:
     """Build the historical completion model from a client's UNIQUE weekly pipeline
     extracts, annotated with the dedup provenance (scanned vs used vs excluded).
+
+    ``as_of`` builds it from the extracts dated on or before that date only —
+    the history as it stood then (a forecast for an earlier run measures its
+    run-rate to that run's last extract, D22). The extract set is the cache
+    identity, so each cut is memoised on its own.
 
     Memoised on the immutable identity of the ordered extract set (path + date +
     ``mtime_ns:size`` per file) plus the tenant and the methodology version. The
@@ -592,6 +598,10 @@ def build_pipeline_history(root: str | os.PathLike,
     from .pipeline_history import build_historical_completion_model
     from .pipeline_prep import runoff_settings as _prep_runoff_settings
     inv = weekly_extract_inventory(root, client_id)
+    if as_of:
+        inv = dict(inv, extracts=[e for e in inv["extracts"]
+                                  if str(e.get("pipeline_extract_date") or "")
+                                  <= str(as_of)])
     key = _serving_cache.key_for(
         tenant=_serving_cache.resolved_tenant(),
         # The client is the scope component here: a model is per-client, and a
