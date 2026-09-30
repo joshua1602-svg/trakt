@@ -1,5 +1,5 @@
 {
  "what_this_is": "Committing a change to this file runs qb-plan-readback.yml once, reading the recorded plans written since `since` (UTC). Set `since` to the start of the bank run you want read back.",
- "label": "held-out variants, second set (42) \u2014 2026-09-30 on 2e4ab2f2 (vocabulary 2.16.0, D15-D17; ERE stage activated)",
- "since": "2026-09-30T15:53:05"
+ "label": "full bank (135) \u2014 2026-09-30 on 8463fd03 (vocabulary 2.18.0, D18, D19, \u00a728-\u00a730)",
+ "since": "2026-09-30T19:59:06"
 }
