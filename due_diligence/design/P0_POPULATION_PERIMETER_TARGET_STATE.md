@@ -1537,20 +1537,24 @@ call included — and keeps as the fallback, before the governed attempt runs.
 
 Owner decisions (2026-09-30), on §22's open items:
 
-    1  ERE is an ESTABLISHED client; scale for an established client is £250MM
-       (was £200MM).
+    1  Scale for an ESTABLISHED client is £250MM (was £200MM). ERE is NOT
+       established: it is a new SPV before securitisation, at scale at £100MM
+       (owner correction, same day — the stage was briefly recorded as
+       established in a1da9582's parent commits).
     2  The governed attempt runs FIRST; the legacy path only when it declines.
     3  "When are pipeline cases expected to complete?" is a DATE, from the
        book's own history of how long cases take to complete.
 
 ### 23.1 Scale (D9, amended)
 
-`config/system/scale_policy.yaml`: `established` threshold 250,000,000. The
-authored client configuration records `portfolio.stage: established`. The
-live service reads the configuration OCC ACTIVATED (`currency.
-client_config_path`), never the repository copy — so [122, 128] answer in
-production once OCC activates a configuration carrying the stage. The
-threshold itself ships with the deploy.
+`config/system/scale_policy.yaml`: `established` threshold 250,000,000; a
+pre-securitisation SPV stays at 100,000,000. ERE's authored configuration
+records `portfolio.stage: pre_securitisation_spv`. The live service reads the
+configuration OCC ACTIVATED (`currency.client_config_path`), never the
+repository copy — production answered [122, 128] "scale not configured"
+because the activated configuration carries no stage. They answer (against
+£100MM) once OCC activates one that does: Client onboarding → Amend →
+Securitisation stage "New SPV before securitisation" → Approve → Activate.
 
 ### 23.2 Governed first
 

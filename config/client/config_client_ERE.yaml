@@ -63,14 +63,13 @@ portfolio:
   country: GB
   base_currency: GBP
   static_reporting_date: "2025-11-30"
-  # WHAT "SCALE" MEANS FOR THIS BOOK (owner decision D9): an ESTABLISHED
-  # client, at scale once its assets under management reach
-  # config/system/scale_policy.yaml's threshold for that stage (£250MM).
-  # Owner-confirmed for ERE on 2026-09-30, superseding 2026-09-29's
-  # pre_securitisation_spv. The live service reads the ACTIVATED client
-  # configuration (OCC), so this takes effect in production when OCC
-  # activates a configuration carrying it.
-  stage: established
+  # WHAT "SCALE" MEANS FOR THIS BOOK (owner decision D9): a new SPV BEFORE
+  # SECURITISATION, whose scale is config/system/scale_policy.yaml's threshold
+  # for that stage (£100MM). Owner-confirmed for ERE on 2026-09-29 and again
+  # on 2026-09-30 (an established client — £250MM — is a different stage).
+  # The live service reads the ACTIVATED client configuration (OCC), so this
+  # takes effect in production when OCC activates a configuration carrying it.
+  stage: pre_securitisation_spv
 
 # default_regime = client default preference for regulatory output.
 default_regime: ESMA_Annex2

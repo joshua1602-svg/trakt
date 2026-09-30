@@ -259,3 +259,7 @@ intents added beside the baseline's.
                 [122, 128]
     2026-09-30  10:10 UTC b43cd904 deployed (run 36700450236, success, no
                 retry). Vocabulary 2.14.0
+    2026-09-30  owner correction: ERE is a pre-securitisation SPV (scale
+                £100MM), not established; £250MM is the established stage's
+                threshold. Authored stage reverted; OCC must activate
+                portfolio.stage: pre_securitisation_spv for [122, 128]
