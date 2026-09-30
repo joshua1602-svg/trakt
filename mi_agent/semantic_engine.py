@@ -39,7 +39,7 @@ __all__ = ["Refusal", "check", "binding_for", "member_of", "requires_met",
            "PERIOD_NOT_SUPPORTED", "TARGET_NOT_SUPPORTED",
            "DIMENSION_NOT_SUPPORTED", "FILTERS_NOT_SUPPORTED",
            "GEOGRAPHY_NOT_SUPPORTED", "AMBIGUOUS_READING", "FIELD_UNAVAILABLE",
-           "FIGURE_UNAVAILABLE"]
+           "FIGURE_UNAVAILABLE", "FIGURE_WITHHELD"]
 
 # Reasons. Stable strings: the evidence ledger groups by them, and each
 # capability's runtime re-exports the ones it states.
@@ -58,6 +58,9 @@ AMBIGUOUS_READING = "AMBIGUOUS_READING"
 FIELD_UNAVAILABLE = "FIELD_UNAVAILABLE"
 #: The owner published no value for the figure itself.
 FIGURE_UNAVAILABLE = "FIGURE_UNAVAILABLE"
+#: The owner does not state the figure, and says why (D21: it depends on a
+#: stage rate the client's history cannot yet measure).
+FIGURE_WITHHELD = "FIGURE_WITHHELD"
 
 
 class Refusal(Exception):
@@ -259,6 +262,9 @@ def serve_figure(m: _model.Measure, payload: Mapping[str, Any], *,
                           f"the owner published no {m.name} by {axis}")
         extra = ({"axis_basis": _model.read(payload, binding["basis"])}
                  if binding.get("basis") else {})
+        withheld = _withheld(m, payload)
+        if withheld and any(c.get("value") is None for c in cells):
+            extra["withheld"] = withheld
         flag = binding.get("provisional_unless")
         if flag:
             extra["provisional_members"] = [
@@ -268,15 +274,24 @@ def serve_figure(m: _model.Measure, payload: Mapping[str, Any], *,
         return "grouped", None, cells, path, extra
     if member:
         value, path = _member(member, payload, binding)
+        if value is None and _withheld(m, payload):
+            raise Refusal(FIGURE_WITHHELD, _withheld(m, payload))
         if value is None:
             raise Refusal(FIELD_UNAVAILABLE,
                           f"the owner published no {m.name} for "
                           f"{member[0]}={member[1]!r}")
         return "scalar", value, None, path, _evidence(member, payload, binding)
     value = _model.read(payload, m.value)
+    if value is None and _withheld(m, payload):
+        raise Refusal(FIGURE_WITHHELD, _withheld(m, payload))
     if value is None:
         raise Refusal(unavailable, f"the owner published no {m.name} ({m.value})")
     return "scalar", value, None, m.value, {}
+
+
+def _withheld(m: _model.Measure, payload: Mapping[str, Any]) -> str:
+    """The owner's own reason for not stating the figure, if it gives one."""
+    return str(_model.read(payload, m.withheld) or "") if m.withheld else ""
 
 
 def _windowed(m: _model.Measure, payload: Mapping[str, Any], length: int, *,

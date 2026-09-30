@@ -175,11 +175,14 @@ def test_a_case_settled_before_observation_began_is_not_timed(tmp_path):
     assert model["stages"]["OFFER"]["windowEvidence"] == 1
 
 
-def test_thin_history_falls_back_to_the_configured_windows():
+def test_thin_history_measures_no_window_and_configures_none():
+    """D21 (owner decision 2026-09-30): a validity window is measured from the
+    client's history or there is none — no configured window stands in."""
     model = runoff.fit_runoff([], None, None)
-    for st, days in {"KFI": 14, "APPLICATION": 28, "OFFER": 126}.items():
-        assert model["stages"][st]["windowBasis"] == "fallback"
-        assert model["stages"][st]["windowDays"] == days
+    for st in ("KFI", "APPLICATION", "OFFER"):
+        assert model["stages"][st]["windowBasis"] == "insufficient_history"
+        assert model["stages"][st]["windowDays"] is None
+        assert "fallbackWindowDays" not in model["stages"][st]
     assert model["available"] is False
 
 

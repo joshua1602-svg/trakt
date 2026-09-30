@@ -213,6 +213,9 @@ def build_historical_completion_model(
         if c:
             excluded_stage_counts[term] = c
     stages_historical = sorted(stage_rates.keys())
+    # Stages with cases but too little history to measure a rate. The key
+    # (`stagesUsingConfigFallback`) is kept for its readers; since D21 nothing
+    # stands in for the missing rate — the stage's cases are not weighted.
     stages_config_fallback = sorted(s for s in ACTIVE_STAGES
                                     if observed[s] > 0 and s not in stage_rates)
 
@@ -384,6 +387,10 @@ def _expected_completion(timelines: Dict[str, Dict[str, Any]],
     by_stage: Dict[str, Any] = {}
     every: List[str] = []
     live_total = lapsed_total = 0
+    # D21: a stage whose validity window the history cannot yet measure — its
+    # live cases cannot be told lapsed or not, so none is dated, and no date
+    # over all live cases is stated without them.
+    undetermined: List[str] = []
     if not latest:
         return by_stage, {"medianDate": None, "liveCases": 0, "lapsedCases": 0,
                           "datedCases": 0, "asOf": None}
@@ -395,6 +402,15 @@ def _expected_completion(timelines: Dict[str, Dict[str, Any]],
         if not live:
             continue
         window = windows.get(stage)
+        if window is None:
+            live_total += len(live)
+            undetermined.append(stage)
+            by_stage[stage] = {"liveCases": len(live), "lapsedCases": None,
+                               "datedCases": 0, "windowDays": None,
+                               "windowBasis": ((window_basis or {}).get(stage)
+                                               or "insufficient_history"),
+                               "sufficient": False, "undetermined": True}
+            continue
         entry_field = STAGE_ENTRY_FIELD.get(stage)
 
         def lapsed(t: Dict[str, Any]) -> bool:
@@ -431,9 +447,10 @@ def _expected_completion(timelines: Dict[str, Dict[str, Any]],
                 every.extend(expected)
         by_stage[stage] = row
     return by_stage, {"medianDate": (statistics.median_low(sorted(every))
-                                     if every else None),
+                                     if every and not undetermined else None),
                       "liveCases": live_total, "lapsedCases": lapsed_total,
-                      "datedCases": len(every), "asOf": latest}
+                      "datedCases": len(every), "asOf": latest,
+                      "undeterminedStages": undetermined}
 
 
 # Origination funnel milestone order (entry -> exit). Funded == COMPLETED.

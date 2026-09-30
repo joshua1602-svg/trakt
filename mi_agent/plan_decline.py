@@ -62,6 +62,14 @@ _SPECIFIC: Mapping[str, str] = {
                             "client, so 'scale' has no threshold to measure "
                             "against",
     "FIELD_NOT_IN_BOOK": "this book does not record the information it needs",
+    # D21: not a failure to read — the figure is not stated until the history
+    # it depends on is enough, so "try again" would be wrong.
+    "RATE_NOT_MEASURED": "the client's history is not yet enough to measure "
+                         "the stage rates it depends on, and no configured "
+                         "rate is used in their place",
+    "FIGURE_WITHHELD": "the client's history is not yet enough to measure "
+                       "the stage rates it depends on, and no configured "
+                       "rate is used in their place",
     "FIELD_UNAVAILABLE": "the figure it needs is not one this analysis "
                          "publishes",
     "PERIOD_NOT_A_PAIR": "a change needs two points in time, and the question "

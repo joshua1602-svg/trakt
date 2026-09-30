@@ -26,8 +26,12 @@ from mi_agent.interpretation_v2.vocabulary import (
     SPECIALIST_DIMENSION_VALUES, SPECIALIST_MEASURE_DEFINITIONS, VOCABULARY_VERSION,
     load_governed_vocabulary)
 from mi_agent_api import pipeline_contract as pc
+from tests.measured_history import measured_history
 
 _EXTRACT = sorted(glob.glob("tests/fixtures/client_001_mi_pack/pipeline/*/*"))[0]
+#: The book's own history, measured at test-book scale (D21): the weighted
+#: figures below rest on measured stage rates and windows, never configured.
+_HISTORY = measured_history("tests/fixtures/client_001_mi_pack")
 _AS_OF = "2025-10-01"
 _OVERDUE = {"schema_version": "candidate_intent/1.0", "capability": "pipeline",
             "operation": "point_in_time", "population": {"base": "pipeline"},
@@ -49,7 +53,7 @@ def _source():
 
 
 def _tab():
-    frame, report = pc.load_prepared_pipeline(_source())
+    frame, report = pc.load_prepared_pipeline(_source(), historical_model=_HISTORY)
     return pc.compute_pipeline_snapshot(frame, report, {}, client_id="client_001",
                                         run_id="fixture", source=_source())
 
@@ -59,7 +63,7 @@ def overdue_case(monkeypatch):
     """The October extract with one of its forecast cases expected in
     SEPTEMBER — overdue as at the extract. The agent and the tab both read this
     frame, so the comparison is still the tab's figure against the agent's."""
-    frame, report = pc.load_prepared_pipeline(_source())
+    frame, report = pc.load_prepared_pipeline(_source(), historical_model=_HISTORY)
     frame = frame.copy()
     first = pc.forecast_rows(frame).index[0]
     frame.loc[first, "expected_completion_month"] = "2025-09"
@@ -83,7 +87,7 @@ def _run(plan, semantics):
     ok, why, detail = pipeline_rt.check_eligibility(plan)
     assert ok, (why, detail)
     out = pipeline_rt.execute_current(plan, source=_source(),
-                                      semantics=semantics)
+                                      semantics=semantics, history_model=_HISTORY)
     assert out.ok, (out.reason, out.detail)
     return out
 
@@ -127,7 +131,7 @@ def test_the_model_is_shown_the_three_concepts():
 def test_the_weighted_pipeline_is_the_tabs_and_the_forecasts_pipeline_part(semantics):
     out = _run(_plan(measures=_WEIGHTED), semantics)
     tab = _tab()
-    _frame, report = pc.load_prepared_pipeline(_EXTRACT)
+    _frame, report = pc.load_prepared_pipeline(_EXTRACT, historical_model=_HISTORY)
     assert out.value == pytest.approx(tab["weightedExpectedFundedAmount"])
     # One weighted figure, not two: the forecast bridge reads the same total.
     assert out.value == pytest.approx(report["weighted_expected_funded_amount"])
@@ -222,12 +226,13 @@ def test_the_weekly_history_breaks_down_by_stage_only():
 
 
 def test_a_missing_column_is_refused_not_invented(semantics, monkeypatch):
-    frame, report = pc.load_prepared_pipeline(_EXTRACT)
+    frame, report = pc.load_prepared_pipeline(_EXTRACT, historical_model=_HISTORY)
     stripped = frame.drop(columns=["product_type"])
     monkeypatch.setattr(pc, "load_prepared_pipeline",
                         lambda *a, **k: (stripped, report))
     plan = _plan(operation="breakdown", dimensions=["erm_product_type"])
-    out = pipeline_rt.execute_current(plan, source=_source(), semantics=semantics)
+    out = pipeline_rt.execute_current(plan, source=_source(), semantics=semantics,
+                                      history_model=_HISTORY)
     assert (out.ok, out.reason) == (False, pipeline_rt.FIELD_UNAVAILABLE)
 
 

@@ -168,9 +168,17 @@ class TestPipelineRuntimeMaterialisation(unittest.TestCase):
         self.assertGreater(b["pipelineCaseCount"], 0)
         self.assertTrue(b["pipelineAvailable"])
         self.assertIn(b["forecastReadiness"]["status"], ("ready", "partial"))
-        self.assertAlmostEqual(
-            b["forecastFundedBalance"],
-            round(b["fundedBalance"] + b["weightedExpectedFundedAmount"], 2), places=2)
+        # D21: the forecast is funded + weighted pipeline where the history
+        # measures the stage rates; this generated book is too small to, so
+        # both are withheld with the owner's reason — never taken as zero.
+        if b["weightedExpectedFundedAmount"] is None:
+            self.assertIsNone(b["forecastFundedBalance"])
+            self.assertIn("D21", b["forecastWithheldReason"])
+        else:
+            self.assertAlmostEqual(
+                b["forecastFundedBalance"],
+                round(b["fundedBalance"] + b["weightedExpectedFundedAmount"], 2),
+                places=2)
         # Funded vs pipeline dates kept distinct.
         self.assertEqual(b["fundedReportingDate"], "2025-11-30")
         self.assertEqual(b["pipelineAsOfDate"], "2025-12-01")

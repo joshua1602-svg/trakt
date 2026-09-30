@@ -35,20 +35,22 @@ export interface PipelineStageBucket {
 /** One month of the expected-completion breakdown. */
 export interface ExpectedCompletionBucket {
   month: string;
-  caseCount: number;
-  expectedFundedAmount: number;
+  /** D21: null when a case's stage has no measured validity window, so
+   *  whether it has lapsed is unknown — never counted as zero. */
+  caseCount: number | null;
+  expectedFundedAmount: number | null;
   weightedExpectedFundedAmount: number | null;
 }
 
 /** Completion-month classification relative to the pipeline as-of month. */
 export interface ExpectedCompletionSummary {
   asOfMonth: string | null;
-  overdueExpectedCompletionCount: number;
+  overdueExpectedCompletionCount: number | null;
   overdueExpectedCompletionWeightedAmount: number | null;
-  currentMonthExpectedCompletionCount: number;
+  currentMonthExpectedCompletionCount: number | null;
   currentMonthExpectedCompletionWeightedAmount: number | null;
   nextExpectedCompletionMonth: string | null;
-  nextExpectedCompletionCount: number;
+  nextExpectedCompletionCount: number | null;
   nextExpectedCompletionWeightedAmount: number | null;
 }
 

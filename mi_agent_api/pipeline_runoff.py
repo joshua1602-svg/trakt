@@ -119,8 +119,6 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
     """
     cfg = dict(DEFAULTS)
     cfg.update({k: v for k, v in (settings or {}).items() if v is not None})
-    fallback = dict(DEFAULTS["fallback_validity_days"])
-    fallback.update(cfg.get("fallback_validity_days") or {})
     min_events = int(cfg["min_events"])
     q = float(cfg["window_quantile"])
     max_weeks = int(cfg["max_weeks"])
@@ -176,11 +174,12 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
         window_measured = len(dwell_adv) >= min_events and measured_window is not None
         sufficient = advanced >= min_events
         stages[stage] = {
-            "windowDays": int(measured_window if window_measured else fallback[stage]),
-            "windowBasis": "measured" if window_measured else "fallback",
+            # D21 (owner decision 2026-09-30): measured, or none — no
+            # configured window stands in for history that is not there.
+            "windowDays": int(measured_window) if window_measured else None,
+            "windowBasis": "measured" if window_measured else "insufficient_history",
             "windowQuantile": q,
             "windowEvidence": len(dwell_adv),
-            "fallbackWindowDays": int(fallback[stage]),
             "sufficient": bool(sufficient),
             "advanced": advanced,
             "fellOut": fell_out,
@@ -219,7 +218,7 @@ def evidence(model: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "offerToCompletionPullThrough": m.get("offerToCompletionPullThrough"),
         "stages": {
             st: {k: sm.get(k) for k in ("windowDays", "windowBasis", "windowQuantile",
-                                        "fallbackWindowDays", "sufficient", "advanced",
+                                        "sufficient", "advanced",
                                         "fellOut", "stillOpen", "pullThrough")}
             for st, sm in (m.get("stages") or {}).items()},
     }

@@ -1195,12 +1195,21 @@ def forecast_evolution(output_root: str | os.PathLike,
     # lineage, not arithmetic: no figure changes, an existing value stops being
     # thrown away. D1 (P0 design §4.1) needs it to state both input vintages.
     extract_by_month: Dict[str, Optional[str]] = {}
+    # D21: a month whose latest extract states no weighted amount (a live case
+    # in a stage the history cannot yet rate) has no forecast — it is not a
+    # month without a pipeline extract, whose forecast is the funded balance.
+    withheld_months: set = set()
     for p in pipe["periods"]:
         ym = (p.get("period") or "")
         w = p["metrics"].get("weighted_expected_funded_amount")
         if ym and w is not None:
             weighted_by_month[ym] = float(w)  # later extract overwrites -> latest wins
             extract_by_month[ym] = p.get("extract_date")
+            withheld_months.discard(ym)
+        elif ym:
+            weighted_by_month.pop(ym, None)
+            extract_by_month[ym] = p.get("extract_date")
+            withheld_months.add(ym)
 
     periods: List[Dict[str, Any]] = []
     for fp in funded["periods"]:
@@ -1214,7 +1223,9 @@ def forecast_evolution(output_root: str | os.PathLike,
             "metrics": {
                 "funded_balance": round(float(funded_bal), 2),
                 "weighted_expected_pipeline": (round(wpipe, 2) if wpipe is not None else None),
-                "forecast_funded_balance": round(float(funded_bal) + float(wpipe or 0.0), 2),
+                "forecast_funded_balance": (
+                    None if ym in withheld_months
+                    else round(float(funded_bal) + float(wpipe or 0.0), 2)),
             },
             "reconciliation": fp.get("reconciliation"),
             "source_file": fp.get("source_file"),

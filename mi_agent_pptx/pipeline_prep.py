@@ -60,7 +60,7 @@ _EXTRA_ALIASES: Dict[str, List[str]] = {
     "expected_completion_date": ["expected_completion_date", "offer_date"],
     "pipeline_reference_date": ["snapshot_date", "application_submitted_date",
                                 "kfi_submitted_date"],
-    "completion_probability": ["completion_probability", "stage_conversion_probability"],
+    "completion_probability": ["completion_probability"],
     "weighted_expected_funded_amount": ["weighted_expected_funded_amount"],
 }
 _DOB_ALIASES = ["dob_app_1", "dob_app_2", "date_of_birth"]

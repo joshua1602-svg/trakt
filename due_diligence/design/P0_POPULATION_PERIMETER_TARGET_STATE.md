@@ -146,11 +146,13 @@
         time" is the trend. The answer states the first and last date and how
         many. §32.1.
 
-    D21 STAGE COMPLETION RATES                                SETTLED 2026-09-30
-        "Measured or decline if not enough history." A stage's chance of
-        completing is measured from the client's own history; where the
-        history is not enough, no configured rate stands in, and a weighted
-        figure that depends on it is not stated and says why. §32.2.
+    D21 STAGE COMPLETION RATES AND VALIDITY WINDOWS           SETTLED 2026-09-30
+        "Measured or decline if not enough history" — and, the owner's
+        follow-up, "apply measured or decline to validity windows too". A
+        stage's chance of completing and its validity window are measured
+        from the client's own history; where the history is not enough, no
+        configured value stands in, and a figure that depends on it is not
+        stated and says why. §33.
 
     D22 THE RUN-RATE IS MEASURED ON THE CALENDAR              SETTLED 2026-09-30
         "If possible, run rate = calendar." A run-rate over N weeks is the
@@ -2195,9 +2197,9 @@ plan its runtime still refuses. Pinned by
 
 ### 32.2 D21 — measured, or decline
 
-Recorded here; built in its own change (§33), because it changes what the
-Pipeline and Forecast tabs show when a stage lacks history, and the dashboard
-front end is deployed from `main`, not from this branch.
+Built in its own change (§33), because it changes what the Pipeline and
+Forecast tabs show when a stage lacks history, and the dashboard front end is
+deployed from `main`, not from this branch.
 
 ### 32.3 D22 — the run-rate on the calendar, over any window of weeks
 
@@ -2245,3 +2247,73 @@ it — and the forecast's own figure now states its window too. Pinned by
 Not changed here, the same finding: the Evolution tab's funnel cards and the
 KFI-conversion model (Model B) still average the last five extract-to-extract
 flows and call it five weeks.
+
+
+## 33. D21 — measured, or declined (2026-09-30)
+
+"Measured or decline if not enough history", for each stage's chance of
+completing and — the owner's follow-up — for each stage's validity window.
+
+### 33.1 The owner
+
+    RATES      `pipeline_prep._derive_probabilities_and_amounts`: the
+               configured-stage-rate tier is gone, and so is the configured
+               Offer probability an earlier stage's run-off borrowed. A case in
+               a weighted stage no measured rate covers is
+               `insufficient_history_<stage>`: no probability, not weighted,
+               not excluded — undetermined.
+    WINDOWS    `pipeline_runoff.fit_runoff` publishes a window only where it is
+               measured (`windowBasis: insufficient_history` otherwise, no
+               configured fallback); `stage_validity_windows` returns measured
+               windows only. A case in a weighted stage with no measured window
+               is `insufficient_history_<stage>_window`: whether it has lapsed
+               is unknown, so it is neither weighted nor lapsed. The expected
+               completion date (D17) dates no case in such a stage and states no
+               date over all live cases without them (`undeterminedStages`).
+    TOTALS     every weighted sum goes through `pipeline_prep.weighted_sum`,
+               which is None where any case in the group is undetermined — the
+               tab's total, stage / dimension / month breakdowns and timing
+               buckets, the capped "Other" row, the forecast breakdowns by
+               region, LTV and month, and the weekly series. A month holding a
+               case whose lapse is undetermined states no count or face value
+               either. The forecast bridge withholds the weighted pipeline and
+               the forecast funded balance (`forecastWithheldReason`), and the
+               forecast series withholds a month whose extract it cannot weight
+               — never the funded balance, which is a month with no extract.
+    DISCLOSURE the report and the snapshot state `weighting_complete` and the
+               reason, naming the stage and what is unmeasured ("the validity
+               window for OFFER (3 cases)").
+
+The configured `stage_conversion_probability` column is no longer published.
+A face-value figure that needs no rate (the pipeline amount, case counts) is
+answered as before.
+
+### 33.2 The agent and the dashboard
+
+The pipeline runtime declines a withheld figure `RATE_NOT_MEASURED`; the
+semantic model declares where the forecast owner says why it withholds a
+figure (`withheld`), and the engine declines it `FIGURE_WITHHELD`. Both read
+"the client's history is not yet enough to measure the stage rates it depends
+on" — not "the data could not be read; try again". A breakdown with some groups
+withheld shows them as n/a and says why. The dashboard shows a withheld figure
+as "n/a" with the reason (commit 4d2e5fff), never formatted as zero; it ships
+from `main`.
+
+### 33.3 Production
+
+With 90 extracts and thousands of cases per stage, the production history is
+expected to measure every rate and window, and then nothing changes. The
+read-only check before deploying (`stagesUsingHistoricalRates`,
+`stagesUsingConfigFallback`, each run-off stage's `windowBasis`) says so; a
+stage without enough history would be shown as n/a on the API, which the
+dashboard renders correctly only once `main` carries 4d2e5fff.
+
+### 33.4 Tests
+
+The test books hold a handful of cases, far below the production thresholds,
+so read as production reads them they rightly measure nothing. Tests that
+check a weighted figure is the dashboard's read the same book's history
+measured at test-book scale (`tests/measured_history.py`: the history owner's
+own thresholds set to one — still measured from the book's extracts, never
+configured); tests of D21 read the book without it and assert the withholding
+(`test_measured_or_declined.py` and the owners' own suites).

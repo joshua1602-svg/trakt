@@ -137,12 +137,14 @@ export function PipelineSnapshotPanel({
   const completionByMonth: BarDatum[] = snapshot.expectedCompletionBreakdown.map((m) => ({
     label: m.month,
     value: m.weightedExpectedFundedAmount ?? 0,
-    count: m.caseCount,
+    count: m.caseCount ?? undefined,
   }));
   // D21: a month whose weighted amount is withheld is not charted as zero —
   // the weighted view says why instead (the case counts still chart).
   const completionWithheld = snapshot.expectedCompletionBreakdown.some(
     (m) => m.weightedExpectedFundedAmount == null);
+  const countsWithheld = snapshot.expectedCompletionBreakdown.some(
+    (m) => m.caseCount == null);
   const byBroker: BarDatum[] = (snapshot.brokerBreakdown ?? []).map((b) => ({
     label: b.key,
     value: b.pipelineAmount,
@@ -235,7 +237,7 @@ export function PipelineSnapshotPanel({
         )}
         {nextCompletion ? (
           <StatTile label="Next expected completions" value={nextCompletion.month}
-            hint={`${nextCompletion.caseCount} cases · ${formatGBPOrNA(nextCompletion.weightedExpectedFundedAmount)} weighted`} />
+            hint={`${nextCompletion.caseCount ?? "n/a"} cases · ${formatGBPOrNA(nextCompletion.weightedExpectedFundedAmount)} weighted`} />
         ) : (
           <StatTile label="Next expected completions" value="None"
             hint="no future expected completions" />
@@ -286,7 +288,7 @@ export function PipelineSnapshotPanel({
           <Panel title={measure === "count"
             ? "Expected completions by month · cases"
             : "Weighted expected funded by completion month"}>
-            {measure !== "count" && completionWithheld ? (
+            {(measure === "count" ? countsWithheld : completionWithheld) ? (
               <p className="text-[11px] text-ink-400">
                 Not stated{weightingNote ? `: ${weightingNote}` : "."}
               </p>

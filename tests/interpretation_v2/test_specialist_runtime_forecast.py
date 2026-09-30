@@ -470,6 +470,15 @@ def estate(funded_root, monkeypatch):
     # endpoint is called in-process, not through an authenticated client.
     monkeypatch.setenv("MI_AGENT_AUTH_ENABLED", "false")
     from mi_agent_api import datasets as ds
+    # D21: the forecast weights the pipeline only by MEASURED stage rates and
+    # windows. The fixture book is far below the production thresholds, so the
+    # request reads its own history measured at test-book scale — the Forecast
+    # tab (`app`) and the governed context (`datasets`) alike.
+    from mi_agent_api import app as app_mod
+    from tests.measured_history import measured_history
+    history = lambda client_id: measured_history(_NEAR, client_id)  # noqa: E731
+    monkeypatch.setattr(ds, "_pipeline_history", history)
+    monkeypatch.setattr(app_mod, "_pipeline_history", history)
 
     def funded_frame(client_id, run_id):
         """What `mi_service._routed_frame` does, verbatim in effect."""

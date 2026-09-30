@@ -39,9 +39,10 @@ def history(tmp_path_factory):
     return str(root)
 
 
-def _owner(history):
+def _owner(history, model=None):
     from mi_agent_api import evolution
-    series = evolution.pipeline_evolution(history, _CLIENT, None)
+    series = evolution.pipeline_evolution(history, _CLIENT, None,
+                                          historical_model=model)
     return {p["extract_date"]: p for p in series["periods"]}, series
 
 
@@ -251,12 +252,13 @@ def test_serve_refuses_an_ambiguous_month_and_legacy_serves(monkeypatch, history
 _MONTHLY = ["2025-10-30", "2025-11-27", "2026-10-29"]
 
 
-def _series(history, grain, operation="series", **over):
+def _series(history, grain, operation="series", model=None, **over):
     plan = _plan(operation=operation,
                  time={"form": "series", "grain": grain}, **over)
     assert pipeline_rt.check_eligibility(plan) == (True, "", ""), \
         pipeline_rt.check_eligibility(plan)
-    return pipeline_rt.execute_temporal(plan, root=history, client_id=_CLIENT)
+    return pipeline_rt.execute_temporal(plan, root=history, client_id=_CLIENT,
+                                        history_model=model)
 
 
 def test_a_monthly_series_is_the_last_weekly_extract_of_each_month(history):
@@ -287,9 +289,12 @@ def test_a_monthly_stage_series_keeps_only_those_extracts(history):
 
 def test_the_weighted_series_is_the_evolution_charts_weighted_line(history):
     """Catalogue batch 1: "weighted expected funded amount by month" is the
-    weekly owner's own weighted figure for each month's extract."""
-    by_date, _ = _owner(history)
-    outcome = _series(history, "monthly",
+    weekly owner's own weighted figure for each month's extract — weighted by
+    the book's own history, measured at test-book scale (D21)."""
+    from tests.measured_history import measured_history
+    model = measured_history(str(history), _CLIENT)
+    by_date, _ = _owner(history, model)
+    outcome = _series(history, "monthly", model=model,
                       measures=[{"concept": "weighted_expected_funded_amount"}])
     assert outcome.ok, outcome.detail
     assert [c["value"] for c in outcome.cells] == [
@@ -318,3 +323,12 @@ def test_the_monthly_answer_says_it_is_monthly(monkeypatch, history):
     assert payload is not None, record.get("execution")
     assert "3 months, at the last weekly extract of each" in payload["answer"]
     assert any(n["field"] == "grain: monthly" for n in payload["sourceNotes"])
+
+
+
+def test_the_weighted_series_is_not_stated_without_measured_rates(history):
+    """D21: read with the production thresholds, the book's few cases measure
+    no stage rate, so each extract's weighted amount is not stated — never 0."""
+    by_date, _ = _owner(history)
+    assert all(p["metrics"]["weighted_expected_funded_amount"] is None
+               for p in by_date.values())

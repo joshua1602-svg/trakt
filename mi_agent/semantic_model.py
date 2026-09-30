@@ -84,6 +84,10 @@ class Measure:
     #: `periods_back` at that grain; the row is found by its key, never
     #: computed.
     window: Mapping[str, Any] = field(default_factory=dict)
+    #: Where the owner says why it does NOT state this figure, when it does not
+    #: (D21: a weighted figure on a stage the history cannot yet rate). A figure
+    #: the owner withholds is declined with that reason, never taken as zero.
+    withheld: str = ""
     #: The population the figure is measured over — the one a plan asking for
     #: it must name, and the one its receipt proves. The capability's own
     #: population unless the file says otherwise (see `_validate`).
@@ -237,7 +241,7 @@ def _validate(doc: Mapping[str, Any], capability: str) -> SemanticModel:
             caveat=_text(row.get("caveat")),
             series=dict(row.get("series") or {}), by=by,
             decision=str(row.get("decision") or ""), window=window,
-            population=population)
+            withheld=str(row.get("withheld") or ""), population=population)
     return SemanticModel(capability=capability, population=home, views=views,
                          dimensions=dimensions, measures=measures)
 

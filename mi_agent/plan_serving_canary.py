@@ -966,6 +966,14 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     if period_default.get("defaulted") and period_default.get("default_reason"):
         source_notes.append({"field": "period: over time",
                              "note": str(period_default["default_reason"])})
+    # D21: a weighted amount the owner does not state (a stage whose rate or
+    # validity window the history cannot yet measure) is "n/a" above; the
+    # answer says why, in the owner's words.
+    if receipt.get("weighting_withheld"):
+        answer = (f"{answer} Figures shown as n/a are not stated: "
+                  f"{receipt['weighting_withheld']}.")
+        source_notes.append({"field": "weighting",
+                             "note": str(receipt["weighting_withheld"])})
     # WHAT THE FIGURE LEAVES OUT, on the sentence and in the notes — the same
     # disclosure the Pipeline tab makes, in the Pipeline owner's words.
     if scope.get("note"):
@@ -1585,6 +1593,10 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
                 unplaced_amount=float(basis.get("unplacedForecastAmount") or 0.0),
                 unplaced_of="the forecast")
             answer = f"{answer} {note}."
+        # D21: a group the owner does not state is "n/a" above; say why.
+        if receipt.get("withheld"):
+            answer = (f"{answer} Groups shown as n/a are not stated: "
+                      f"{receipt['withheld']}.")
         answer = f"{answer}{caveat} {as_at}"
         also = [k for k in (rows[0] if rows else {}) if k not in (axis, "value")]
         columns = ([{"key": str(axis), "label": axis_label.capitalize()},

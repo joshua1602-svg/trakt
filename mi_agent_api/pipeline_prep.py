@@ -30,7 +30,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -617,9 +617,15 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
       4. past the stage's validity window -> lapsed, weight 0    -> ``expired_<stage>``
       5. run-off model: P(complete | weeks in stage)            -> ``historical_runoff``
       6. empirical historical stage rate (sufficient history)  -> ``historical_stage_rate``
-      7. configured stage probability                          -> ``configured_stage_rate``
+      7. a weighted stage the history cannot yet rate -> none  -> ``insufficient_history_<stage>``
       8. UNKNOWN / unmapped stage -> no probability             -> ``missing_stage``
       9. otherwise no probability                               -> ``unavailable``
+
+    D21 (owner decision 2026-09-30): a stage's probability is MEASURED from the
+    client's own history, or there is none — no configured stage rate stands
+    in for history that is not there. A case in a stage the history cannot yet
+    rate is not weighted and not excluded: it is undetermined, so any weighted
+    figure that includes it is not stated (`weighted_sum`) and says why.
 
     Tiers 3-5 are the stage run-off method (see ``pipeline_runoff``); the
     validity window is measured from history where there is enough of it and
@@ -668,12 +674,22 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
     # 4-5. Validity windows and the run-off model.
     dwell = _stage_dwell_days(out, stage, rep_ts)
     windows = stage_validity_windows(runoff)
+    # D21: a weighted stage whose validity window the history cannot yet
+    # measure — whether its cases have lapsed is undetermined, so they are
+    # neither weighted nor lapsed.
+    tier_no_window = remaining & stage.isin(WINDOWED_STAGES) & ~stage.isin(list(windows))
+    source[tier_no_window] = (INSUFFICIENT_HISTORY + stage[tier_no_window].str.lower()
+                              + "_window")
+    remaining &= ~tier_no_window
     if dwell is not None:
         out["pipeline_stage_dwell_days"] = dwell
         out["pipeline_stage_validity_days"] = stage.map(windows)
         past_window = (stage.isin(list(windows)) & dwell.notna()
                        & (dwell > stage.map(windows)))
-        out["pipeline_stage_expired"] = past_window
+        # Lapsed is True/False where the stage's window is measured, and
+        # undetermined (None) where it is not (D21).
+        out["pipeline_stage_expired"] = past_window.astype(object).where(
+            stage.isin(list(windows)), None)
         expired = remaining & past_window
         prob[expired] = 0.0
         source[expired] = "expired_" + stage[expired].str.lower()
@@ -684,7 +700,9 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
                 derived.append(f)
     if runoff and runoff.get("available") and rep_ts is not None:
         from . import pipeline_runoff as _runoff
-        config_offer = (stage_probs.get("OFFER"), (days_to_fund or {}).get("OFFER"))
+        # D21: an earlier stage's route through Offer uses Offer's MEASURED
+        # run-off or nothing — never a configured Offer probability.
+        config_offer = (None, None)
         candidates = remaining & stage.isin(_runoff.FORECAST_STAGES)
         for idx in out.index[candidates]:
             d = dwell.at[idx] if dwell is not None else None
@@ -708,11 +726,11 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
         source[tier_historical] = "historical_stage_rate"
     remaining &= ~tier_historical
 
-    tier_configured = remaining & stage.isin(list(stage_probs))
-    if tier_configured.any():
-        prob[tier_configured] = stage[tier_configured].map(stage_probs).astype("float64")
-        source[tier_configured] = "configured_stage_rate"
-    remaining &= ~tier_configured
+    # D21: a stage the forecast weights, with no measured rate — undetermined,
+    # never weighted at a configured rate.
+    tier_unrated = remaining & stage.isin(list(stage_probs))
+    source[tier_unrated] = INSUFFICIENT_HISTORY + stage[tier_unrated].str.lower()
+    remaining &= ~tier_unrated
 
     tier_missing = remaining & stage.isin(("UNKNOWN", "", "nan", "None"))
     source[tier_missing] = "missing_stage"
@@ -720,9 +738,9 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
 
     out["completion_probability"] = prob
     out["completion_probability_source"] = source
-    out["stage_conversion_probability"] = stage.map(stage_probs)
-    for f in ("completion_probability", "completion_probability_source",
-              "stage_conversion_probability"):
+    # D21: no configured stage probability is published beside the measured
+    # one (`stage_conversion_probability` was the config lookup per row).
+    for f in ("completion_probability", "completion_probability_source"):
         if f not in derived:
             derived.append(f)
 
@@ -736,8 +754,10 @@ def _derive_probabilities_and_amounts(out: pd.DataFrame, stage_probs: Dict[str, 
                 derived.append(f)
 
     used = set(source.unique())
+    if any(str(u).startswith(INSUFFICIENT_HISTORY) for u in used):
+        return "insufficient_history"
     has_hist = bool(used & {"historical_stage_rate", "historical_runoff"})
-    has_cfg = "configured_stage_rate" in used or "row_level" in used
+    has_cfg = "row_level" in used
     if has_hist and has_cfg:
         return "mixed_historical_and_config"
     if has_hist:
@@ -774,20 +794,17 @@ def _stage_dwell_days(out: pd.DataFrame, stage: pd.Series,
 
 
 def stage_validity_windows(runoff: Optional[Dict[str, Any]]) -> Dict[str, int]:
-    """Validity window (days) per stage: the run-off model's measured window
-    where history supports it, else the configured fallback.
+    """Validity window (days) per stage: the run-off model's MEASURED window.
+    A stage the history cannot yet measure has none (D21) — no configured
+    window stands in, so whether its cases have lapsed is undetermined.
 
     THE ONE DEFINITION of when an open case has LAPSED: past this window it
     carries no forecast weight (tier 4 below), and the expected completion
     date leaves it out (owner decision D17, `pipeline_history`)."""
-    from . import pipeline_runoff as _runoff
-    fallback = dict(_runoff.DEFAULTS["fallback_validity_days"])
-    fallback.update((runoff_settings().get("fallback_validity_days") or {}))
-    windows = {str(k).upper(): int(v) for k, v in fallback.items()}
-    for st, sm in ((runoff or {}).get("stages") or {}).items():
-        if sm.get("windowDays") is not None:
-            windows[str(st).upper()] = int(sm["windowDays"])
-    return windows
+    return {str(st).upper(): int(sm["windowDays"])
+            for st, sm in ((runoff or {}).get("stages") or {}).items()
+            if sm.get("windowDays") is not None
+            and sm.get("windowBasis") == "measured"}
 
 
 def _derive_durations(out: pd.DataFrame, rep_ts: Optional[pd.Timestamp],
@@ -974,6 +991,61 @@ EXCLUSION_REASONS: Tuple[str, ...] = (
     "missing_probability")
 
 
+#: D21: the source label of a case in a stage the history cannot yet rate
+#: (`insufficient_history_<stage>`) or whose validity window it cannot yet
+#: measure (`insufficient_history_<stage>_window`).
+INSUFFICIENT_HISTORY = "insufficient_history_"
+
+#: The open stages a validity window governs — the stages the run-off model
+#: measures. KFI is not forecast (tier 3), so only its lapse is reported.
+WINDOWED_STAGES = ("APPLICATION", "OFFER")
+
+
+def weighting_gap(frame: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """The cases, by stage, that no measured rate weights (D21): count and
+    amount. Empty when every weighted stage is measured."""
+    if frame is None or "completion_probability_source" not in frame.columns:
+        return {}
+    src = frame["completion_probability_source"].astype(str)
+    mask = src.str.startswith(INSUFFICIENT_HISTORY)
+    if not mask.any():
+        return {}
+    amount = (coerce_numeric(frame["current_outstanding_balance"])
+              if "current_outstanding_balance" in frame.columns
+              else pd.Series(0.0, index=frame.index))
+    labels = src[mask].str[len(INSUFFICIENT_HISTORY):]
+    stages = labels.str.replace(r"_window$", "", regex=True).str.upper()
+    what = labels.str.endswith("_window").map(
+        {True: "validity window", False: "completion rate"})
+    return {st: {"count": int((stages == st).sum()),
+                 "amount": round(float(amount[mask][stages == st].sum()), 2),
+                 "unmeasured": sorted(set(what[stages == st]))}
+            for st in sorted(stages.unique())}
+
+
+def weighting_gap_reason(gap: Mapping[str, Mapping[str, Any]]) -> str:
+    """The sentence a withheld weighted figure carries (D21)."""
+    parts = ", ".join(
+        f"the {' and '.join(g.get('unmeasured') or ['completion rate'])} for "
+        f"{st} ({g['count']:,} case{'s' if g['count'] != 1 else ''})"
+        for st, g in gap.items())
+    return (f"the client's history is not yet enough to measure {parts}, "
+            f"and no configured value is used in its place (D21)")
+
+
+def weighted_sum(frame: pd.DataFrame) -> Optional[float]:
+    """The weighted expected funded amount of `frame`'s cases — or None where
+    any of them is in a stage the history cannot yet rate (D21): a total that
+    leaves undetermined cases out is not the figure. Cases excluded from
+    weighting by rule (settled, withdrawn, not forecast, lapsed) add nothing,
+    as before."""
+    if frame is None or "weighted_expected_funded_amount" not in frame.columns:
+        return None
+    if weighting_gap(frame):
+        return None
+    return float(coerce_numeric(frame["weighted_expected_funded_amount"]).sum())
+
+
 def exclusion_reason(source: Any) -> Optional[str]:
     """The governed reason a ``completion_probability_source`` carries no
     weight, or None for a weighted case. The same prefixes the summary's
@@ -1034,13 +1106,20 @@ def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
     gross = float(amount.sum())
     excluded_amount = float(amount[excluded_mask].sum())
     active_gross = gross - excluded_amount
-    weighted_total = float(weighted.sum())
+    gap = weighting_gap(out)
+    weighted_total = weighted_sum(out)
     return {
         "by_source": by_source,
         "gross_pipeline_amount": round(gross, 2),
         "excluded_amount": round(excluded_amount, 2),
         "active_gross_amount": round(active_gross, 2),
-        "weighted_expected_funded_amount": round(weighted_total, 2),
+        "weighted_expected_funded_amount": (round(weighted_total, 2)
+                                            if weighted_total is not None else None),
+        # D21: the cases no measured rate weights, and whether every weighted
+        # figure can therefore be stated.
+        "weighting_complete": not gap,
+        "insufficient_history": gap,
+        "weighting_incomplete_reason": weighting_gap_reason(gap) if gap else None,
         "amount_weighted_historical": round(float(
             amount[src.isin({"historical_stage_rate", "historical_runoff"})].sum()), 2),
         "amount_weighted_runoff": round(float(
@@ -1051,9 +1130,10 @@ def completion_probability_summary(out: pd.DataFrame) -> Dict[str, Any]:
         "not_forecast_amount": round(float(
             amount[src.str.startswith("not_forecast_")].sum()), 2),
         "amount_weighted_config": round(float(
-            amount[src.isin({"configured_stage_rate", "row_level"})].sum()), 2),
+            amount[src.isin({"row_level"})].sum()), 2),
         "blended_weighted_conversion": (round(weighted_total / active_gross, 4)
-                                        if active_gross > 0 else None),
+                                        if active_gross > 0
+                                        and weighted_total is not None else None),
         "excluded_count": int(excluded_mask.sum()),
         "excluded_by_reason": excluded_by_reason,
     }
@@ -1085,8 +1165,9 @@ def _build_report(out: pd.DataFrame, mapping: Dict[str, str], unmatched: List[st
                     if PIPELINE_AMOUNT_FIELD in out.columns else 0.0)
     expected_funded = (float(coerce_numeric(out["expected_funded_amount"]).sum())
                        if "expected_funded_amount" in out.columns else 0.0)
-    weighted_expected = (float(coerce_numeric(out["weighted_expected_funded_amount"]).sum())
-                         if "weighted_expected_funded_amount" in out.columns else None)
+    # D21: None where a weighted stage has no measured rate (see weighted_sum).
+    weighted_expected = weighted_sum(out)
+    gap = weighting_gap(out)
 
     return {
         "preparation_applied": True,
@@ -1106,6 +1187,8 @@ def _build_report(out: pd.DataFrame, mapping: Dict[str, str], unmatched: List[st
         "expected_funded_amount": round(expected_funded, 2),
         "weighted_expected_funded_amount": (round(weighted_expected, 2)
                                             if weighted_expected is not None else None),
+        "weighting_complete": not gap,
+        "weighting_incomplete_reason": weighting_gap_reason(gap) if gap else None,
         "completion_probability_basis": prob_basis,
         "completion_probability_summary": completion_probability_summary(out),
         "historical_completion_model": historical_model or {"available": False},

@@ -97,6 +97,10 @@ NOT_SINGLE_OUTPUT = "NOT_SINGLE_OUTPUT"
 SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
 HISTORY_UNAVAILABLE = "HISTORY_UNAVAILABLE"
 EXECUTION_FAILED = "EXECUTION_FAILED"
+#: D21 (owner decision 2026-09-30): a weighted figure that depends on a stage
+#: whose completion rate or validity window the client's history cannot yet
+#: measure is not stated — no configured value stands in.
+RATE_NOT_MEASURED = "RATE_NOT_MEASURED"
 #: A named month the plan's label does not read as one, one that the weekly
 #: history holds in more than one year, and one it does not hold at all.
 PERIOD_LABEL_UNRESOLVED = "PERIOD_LABEL_UNRESOLVED"
@@ -827,6 +831,12 @@ def execute_current(plan: Any, *, source: Any,
     totals = pipeline_mod.open_totals(frame)
     value = {_AMOUNT: totals["amount"], _COUNT: totals["cases"],
              _WEIGHTED: totals["weighted"]}[kind]
+    if value is None and kind == _WEIGHTED:
+        withheld = _weighting_withheld(pipeline_mod.open_pipeline(frame))
+        if withheld:
+            return PipelineOutcome(ok=False, reason=RATE_NOT_MEASURED,
+                                   detail=f"the weighted pipeline is not stated: "
+                                          f"{withheld}")
     if value is None:
         return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
                                detail=f"the pipeline report carried no "
@@ -837,6 +847,14 @@ def execute_current(plan: Any, *, source: Any,
     receipt["pipeline_scope"] = _noted(live_scope)
     return PipelineOutcome(ok=True, value=float(value), cells=None,
                            receipt=receipt)
+
+
+def _weighting_withheld(frame: Any) -> str:
+    """Why the owner states no weighted amount for some of `frame`'s cases
+    (D21), in its own words; empty when every weighted stage is measured."""
+    from mi_agent_api import pipeline_prep as prep_mod
+    gap = prep_mod.weighting_gap(frame)
+    return prep_mod.weighting_gap_reason(gap) if gap else ""
 
 
 #: The weekly series' totals are already the live pipeline: `pipeline_evolution`
@@ -895,6 +913,14 @@ def _execute_tab_breakdown(body: Mapping[str, Any], *, measure: str, kind: str,
     receipt = _receipt(body, measure=measure, kind=kind, dimensions=[dimension],
                        dataset=dataset, result_shape="grouped", owner=owner)
     receipt["pipeline_scope"] = _noted(live_scope)
+    # D21: a group holding a case no measured rate weights states no weighted
+    # amount ("n/a"); the answer says why.
+    withheld = _weighting_withheld(live)
+    if withheld:
+        if all(c["value"] is None for c in cells):
+            return PipelineOutcome(ok=False, reason=RATE_NOT_MEASURED,
+                                   detail=f"the figure is not stated: {withheld}")
+        receipt["weighting_withheld"] = withheld
     if owner == OWNER_TAB_COMPLETION:
         receipt["completion_basis"] = COMPLETION_BASIS
         # D16 BY MONTH (§31): the tab publishes each month's amount at face
@@ -931,6 +957,12 @@ def _execute_timing(body: Mapping[str, Any], *, measure: str, kind: str,
     summary = pipeline_mod._expected_completion_summary(
         pipeline_mod._expected_completion_breakdown(live), as_of)
     value = summary.get(_TAB_TIMING_KEY[(timing, kind)])
+    withheld = _weighting_withheld(live)
+    if value is None and withheld:
+        return PipelineOutcome(
+            ok=False, reason=RATE_NOT_MEASURED,
+            detail=f"the figure {timing.replace('_', ' ')} is not stated: "
+                   f"{withheld}")
     if value is None:
         return PipelineOutcome(
             ok=False, reason=EXECUTION_FAILED,
@@ -952,6 +984,8 @@ def _execute_timing(body: Mapping[str, Any], *, measure: str, kind: str,
             if summary.get(_TAB_TIMING_KEY[(timing, k)]) is not None else None)
         for k in (_AMOUNT, _COUNT, _WEIGHTED)}
     receipt["completion_basis"] = COMPLETION_BASIS
+    if withheld:
+        receipt["weighting_withheld"] = withheld
     receipt["pipeline_scope"] = _noted(live_scope)
     return PipelineOutcome(ok=True, value=float(value), cells=None,
                            receipt=receipt)

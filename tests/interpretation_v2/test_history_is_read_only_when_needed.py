@@ -13,7 +13,16 @@ from mi_agent import plan_serving_canary as canary
 from tests.interpretation_v2 import test_funded_breadth as funded
 from tests.interpretation_v2 import test_stage_conversion as stage
 from tests.interpretation_v2.test_funded_breadth import book, semantics  # noqa: F401
-from tests.interpretation_v2.test_stage_conversion import history  # noqa: F401
+from tests.measured_history import measured_history
+
+import pytest
+
+
+@pytest.fixture(scope="module")
+def history():
+    """A history that dates the live pipeline: measured at test-book scale on
+    the book whose live cases sit inside their stages' windows (D21)."""
+    return measured_history("tests/fixtures/client_001_mi_pack")
 
 
 class _Provider:

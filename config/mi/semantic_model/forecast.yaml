@@ -106,6 +106,8 @@ measures:
     operations: [point_in_time, forecast_projection, breakdown]
     periods: [current, forward_looking]
     value: forecastBridge.forecastFundedBalance
+    # D21: not stated where a live case's stage has no measured rate or window.
+    withheld: forecastBridge.forecastWithheldReason
     inputs: [funded, pipeline]
     context:
       current_funded_balance: forecastBridge.fundedBalance

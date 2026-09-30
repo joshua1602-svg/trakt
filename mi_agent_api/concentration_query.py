@@ -191,11 +191,14 @@ def answer(question: str, envelope: Dict[str, Any]) -> Dict[str, Any]:
     states_available = bool((envelope.get("states") or {}).get("available"))
     warnings: List[str] = []
     if forecast.get("stagesUsingConfigFallback"):
+        # D21: nothing falls back to a configured rate any more — a stage with
+        # too little history is not weighted, and what needs it is not stated.
         warnings.append(
             "Forecast caveat: stage(s) "
             + ", ".join(forecast["stagesUsingConfigFallback"])
-            + " fall back to configured assumptions — the observed sample is "
-              "below the sufficiency floor.")
+            + " have too little history to measure a completion rate, so their "
+              "cases are not weighted and the forecast figures that need them "
+              "are not stated.")
     if envelope.get("source") == "legacy_extracted":
         warnings.append(
             "These are extracted limits pending operator approval — not yet "

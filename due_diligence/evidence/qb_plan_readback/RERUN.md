@@ -432,3 +432,10 @@ intents added beside the baseline's.
                 window (8-week, 12-week) is served (vocabulary 2.20.0; the
                 runner refuses a vocabulary below 2.20.0). D21 (measured or
                 decline) recorded; built separately. Not deployed yet
+    2026-09-30  D21 built (design §33): stage completion rates AND validity
+                windows are measured from the client's history or not used —
+                no configured value stands in; every weighted figure (and the
+                forecast on it) depending on an unmeasured stage is withheld
+                with the reason; the agent declines it (RATE_NOT_MEASURED /
+                FIGURE_WITHHELD). Dashboard shows n/a (ships from main). Before
+                deploying: read-only check that production measures every stage

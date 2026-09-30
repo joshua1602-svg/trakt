@@ -336,22 +336,39 @@ def _dim_sum(df: Optional[pd.DataFrame], dim: str, col: str) -> Dict[str, float]
             if str(k).strip() and str(k) not in ("nan", "NaT", "None")}
 
 
+def _withheld_keys(df: Optional[pd.DataFrame], dim: str) -> set:
+    """The `dim` values holding a case whose stage the history cannot yet rate
+    (D21): their weighted amount — and any forecast on it — is not stated."""
+    from .pipeline_prep import INSUFFICIENT_HISTORY
+    if (df is None or dim not in df.columns
+            or "completion_probability_source" not in df.columns):
+        return set()
+    unrated = df["completion_probability_source"].astype(str).str.startswith(
+        INSUFFICIENT_HISTORY)
+    return {str(k) for k in df.loc[unrated, dim].astype(str).unique()}
+
+
 def forecast_dimension_breakdown(funded_df: Optional[pd.DataFrame],
                                  pipeline_df: Optional[pd.DataFrame],
                                  dim: str) -> List[Dict[str, Any]]:
     """``[{key, fundedAmount, weightedPipelineAmount, forecastAmount}]`` for one
     dimension — funded exposure + weighted expected pipeline = forecast. Derived
-    by aggregate composition (no row merge), ordered by forecast amount desc."""
+    by aggregate composition (no row merge), ordered by forecast amount desc.
+    A group holding a case no measured rate weights states neither its
+    weighted pipeline nor its forecast (D21)."""
     funded = _dim_sum(funded_df, dim, "current_outstanding_balance")
     pipe = _dim_sum(pipeline_df, dim, "weighted_expected_funded_amount")
-    keys = set(funded) | set(pipe)
+    withheld = _withheld_keys(pipeline_df, dim)
+    keys = set(funded) | set(pipe) | (withheld - {"", "nan", "NaT", "None"})
     rows = []
     for k in keys:
         fa = round(funded.get(k, 0.0), 2)
-        wp = round(pipe.get(k, 0.0), 2)
+        wp = None if k in withheld else round(pipe.get(k, 0.0), 2)
         rows.append({"key": k, "fundedAmount": fa, "weightedPipelineAmount": wp,
-                     "forecastAmount": round(fa + wp, 2)})
-    rows.sort(key=lambda r: r["forecastAmount"], reverse=True)
+                     "forecastAmount": (round(fa + wp, 2) if wp is not None
+                                        else None)})
+    rows.sort(key=lambda r: (r["forecastAmount"] is None,
+                             -(r["forecastAmount"] or 0.0)))
     return rows
 
 
@@ -404,8 +421,12 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
     from .pipeline_contract import forecast_rows
     month = _dim_sum(forecast_rows(pipeline_df), "expected_completion_month",
                      "weighted_expected_funded_amount")
-    by_month = [{"month": k, "weightedExpectedFundedAmount": round(v, 2)}
-                for k, v in sorted(month.items())]
+    # D21: a month holding a case no measured rate weights is not stated.
+    held_months = _withheld_keys(pipeline_df, "expected_completion_month") - {
+        "", "nan", "NaT", "None"}
+    by_month = [{"month": k, "weightedExpectedFundedAmount":
+                 (None if k in held_months else round(month.get(k, 0.0), 2))}
+                for k in sorted(set(month) | held_months)]
     # Re-cap region/ltv to top 10 for the visual, keyed on forecastAmount.
     def _cap(rows):
         capped = cap_breakdown(
