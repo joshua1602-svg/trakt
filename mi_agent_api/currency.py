@@ -112,11 +112,36 @@ def client_config_path(client_id: Optional[str] = None) -> Optional[str]:
         return configured
     if not client_id:
         return None
+    # Once per request: every reader of the client layer (currency, geography,
+    # stage, the cache fingerprint) asks, and the answer cannot change mid-way.
+    from . import request_scope as _request_scope
+    return _request_scope.memo(f"client_config_path:{client_id}",
+                               lambda: _activated_config_uri(client_id))
+
+
+def _activated_config_uri(client_id: str) -> Optional[str]:
+    """The activated OCC configuration for ``client_id``.
+
+    The client's own activation first. Failing that — and ONLY for the one
+    tenant a single-tenant deployment serves — the estate's single activated
+    client (owner decision D19, 2026-09-30: "There should only be one single
+    activated client in trakt - it's already plugged into the mi dashboard").
+    The MI deployment knows its tenant by a deployment identifier
+    (``client_001``) and OCC keys the activation by the client's own
+    (``ERE``); before D19 that difference meant MI read NONE of the activated
+    configuration — no stage, so "scale" had no threshold. Any other client
+    still resolves to its own activation or to nothing, and zero or several
+    activated clients resolve to nothing (``get_single_activated_client_config``).
+    """
     try:
         from operations_control.configuration.client_config import (
-            get_active_client_config,
+            get_active_client_config, get_single_activated_client_config,
         )
         active = get_active_client_config(client_id)
+        if active is None:
+            from .dependencies import serves_only
+            if serves_only(client_id):
+                active = get_single_activated_client_config()
     except Exception:  # noqa: BLE001 — configuration must never break MI
         logger.info("the activated configuration for %s could not be resolved",
                     client_id, exc_info=True)

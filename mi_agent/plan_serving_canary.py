@@ -90,6 +90,10 @@ FORBIDDEN_PRINCIPAL_TOKENS = frozenset({
 #: What the response that reached the caller actually came from.
 SERVED_NEW = "NEW"
 SERVED_LEGACY = "LEGACY_FALLBACK"
+#: The governed path's own decline served (owner decision D18, `respond`): what
+#: the question was understood as and why it is not answered — never the legacy
+#: path's answer in its place.
+SERVED_DECLINED = "DECLINED"
 
 # Why legacy served instead. Stable strings: the evidence groups by them.
 INTERPRETER_FAILED = "INTERPRETER_FAILURE"
@@ -412,6 +416,12 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           output_root: Optional[str] = None,
           tenant_id: Optional[str] = None,
           authorised_portfolio_ids: Tuple[str, ...] = (),
+          # WHAT A PLAN THIS PATH DOES NOT SERVE BECOMES. False: None, and the
+          # caller's legacy envelope serves — the canary's original contract,
+          # kept for the harnesses that measure the governed attempt on its
+          # own. True: the governed decline (`plan_decline`), and legacy never
+          # answers. Production asks through `respond`, which is D18.
+          decline: bool = False,
           ) -> Optional[Dict[str, Any]]:
     """The new envelope to serve, or None meaning "legacy serves".
 
@@ -467,6 +477,16 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
         body["orchestration_error"] = f"{type(exc).__name__}: {exc}"[:300]
         logger.warning("serving canary failed; legacy serves", exc_info=True)
 
+    # D18: A PLAN THIS PATH DOES NOT SERVE IS DECLINED HERE, IN WORDS, and the
+    # legacy path is never asked. Built before the record so the record states
+    # what the caller was handed.
+    declined: Optional[Dict[str, Any]] = None
+    if payload is None and decline:
+        declined = _declined(body, question=question, reason=reason, view=view)
+    served_from = (SERVED_NEW if payload is not None
+                   else SERVED_DECLINED if declined is not None
+                   else SERVED_LEGACY)
+
     # RECORDING CANNOT COST THE ANSWER. `evidence.write` swallows its own
     # faults, but this tail is still guarded: a recorder that raises anyway —
     # a future sink, a patched one — must not turn a good answer into a 500.
@@ -480,14 +500,16 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             "principal_id": principal_of(context),
             "new_path_eligible": bool(
                 (body.get("eligibility") or {}).get("eligible")),
-            "decision": SERVED_NEW if payload is not None else SERVED_LEGACY,
+            "decision": served_from,
             "reason": "" if payload is not None else reason,
             "plan_id": (body.get("compiler") or {}).get("plan_id"),
             # WHICH ENVELOPE THE CALLER ACTUALLY RETURNED. Recorded as the
             # decision this module made and the caller honours unconditionally,
             # so the record states the served provenance rather than implying it.
-            "response_served_from": (SERVED_NEW if payload is not None
-                                     else SERVED_LEGACY),
+            "response_served_from": served_from,
+            # The sentence a declined reader was given, so the audit reads the
+            # decline itself rather than reconstructing it.
+            "decline_message": (declined or {}).get("answer"),
             "legacy_result_available": legacy_ok,
             "legacy_value": adapter._old_value(legacy_result),
             "legacy_ok": legacy_ok,
@@ -497,7 +519,36 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
     except Exception:                                                # noqa: BLE001
         logger.warning("the serving record could not be completed; the answer "
                        "stands", exc_info=True)
-    return payload
+    return payload if payload is not None else declined
+
+
+def respond(**kwargs: Any) -> Optional[Dict[str, Any]]:
+    """THE PRODUCTION ENTRY POINT (owner decision D18, 2026-09-30: "Do not use
+    the old system"). For a principal this path serves, the answer is the
+    governed answer or the governed decline, and never the legacy path's: a
+    question the governed path understood and declined was, until this, handed
+    to a path that answered a different question.
+
+    None only when this path does not serve the principal at all (`handles`),
+    which is the one case the caller's legacy path still answers.
+    """
+    kwargs["decline"] = True
+    return serve(**kwargs)
+
+
+def _declined(body: Mapping[str, Any], *, question: str, reason: str,
+              view: Optional[str]) -> Dict[str, Any]:
+    """The governed decline for `reason`. Never raises and never returns None:
+    wording that cannot be built from the record is still a decline."""
+    from mi_agent import plan_decline
+    try:
+        return plan_decline.envelope(question=question, body=body,
+                                     reason=reason, view=view)
+    except Exception:                                                # noqa: BLE001
+        logger.warning("the decline could not be worded from the record",
+                       exc_info=True)
+        return plan_decline.fallback_envelope(question=question, reason=reason,
+                                              view=view)
 
 
 def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],

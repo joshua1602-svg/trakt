@@ -83,28 +83,39 @@ def governed_envelope():
                                   "group_field_keys": []}]}}}}
 
 
+#: What the governed path returns when it declines (owner decision D18): its
+#: own decline, built by the product's own `plan_decline` — never None, which
+#: would hand the question to the legacy path.
+def declined_envelope():
+    from mi_agent import plan_decline
+    return plan_decline.envelope(question=S2_P1, body={},
+                                 reason="INELIGIBLE:PERIOD_NOT_SUPPORTED",
+                                 view="funded")
+
+
 class _Routed:
     """The legacy router claims this question; the canary is configured or not.
 
     Patches the two seams and nothing else: what the router returns, and whether
     the principal is allow-listed. The serving-order decision under test is the
-    product's own.
+    product's own. The governed attempt is `respond` — the service's entry
+    point — which returns the answer or the decline and never None for a member.
     """
 
     def __init__(self, *, handles=True, served=governed_envelope):
         self.handles, self._served = handles, served
         self.calls = []
 
-    def _serve(self, **kwargs):
+    def _respond(self, **kwargs):
         self.calls.append(kwargs)
-        return None if self._served is None else self._served()
+        return self._served()
 
     def __enter__(self):
         self._patches = [
             mock.patch.object(mi_service.chat_routing_mod, "try_route",
                               return_value=routed_envelope()),
             mock.patch.object(canary, "handles", return_value=self.handles),
-            mock.patch.object(canary, "serve", side_effect=self._serve),
+            mock.patch.object(canary, "respond", side_effect=self._respond),
         ]
         for patch in self._patches:
             patch.start()
@@ -173,7 +184,12 @@ class TestTheGovernedPathIsOfferedARoutedQuestion(unittest.TestCase):
 
 
 class TestLegacyBehaviourIsUnchanged(unittest.TestCase):
-    """Controls 7-8: everyone else, and a request the governed path declines."""
+    """Controls 7-8: everyone else, and a request the governed path declines.
+
+    Control 8 was "a declined request keeps the routed answer". Owner decision
+    D18 (2026-09-30, "Do not use the old system") reverses it: for a member,
+    the decline IS the answer and the legacy router is never run.
+    """
 
     def test_7_a_non_canary_principal_never_reaches_the_governed_path(self):
         with _Routed(handles=False) as cfg:
@@ -182,22 +198,46 @@ class TestLegacyBehaviourIsUnchanged(unittest.TestCase):
         self.assertNotEqual(body.get("answer"), "the governed temporal answer")
         self.assertEqual((body.get("metadata") or {}).get("route"), "evolution")
 
-    def test_8_a_declined_request_keeps_the_routed_answer(self):
-        """Ineligible, unresolvable, or any failure: `serve` returns None."""
-        with _Routed(served=None) as cfg:
+    def test_8_a_declined_request_is_answered_by_the_decline(self):
+        """Ineligible, unresolvable, or any failure: the governed decline is
+        served, and neither the legacy parse nor the legacy router runs."""
+        with _Routed(served=declined_envelope) as cfg, \
+                mock.patch("mi_agent.parsed_question.ParsedQuestion.parse",
+                           side_effect=AssertionError("the legacy parse ran")), \
+                mock.patch.object(mi_service.chat_routing_mod, "try_route",
+                                  side_effect=AssertionError("the router ran")):
             body = ask(S2_P1)
         self.assertEqual(len(cfg.calls), 1, "the attempt was not made")
-        self.assertNotEqual(body.get("answer"), "the governed temporal answer",
-                            "a declined attempt still served the governed path")
-        self.assertEqual((body.get("metadata") or {}).get("route"), "evolution")
+        self.assertNotEqual(body.get("answer"), "the legacy routed answer")
+        self.assertFalse(body.get("ok"))
+        self.assertIn("Nothing was guessed", body.get("answer") or "")
+        self.assertEqual((body.get("metadata") or {}).get("parserMode"),
+                         "governed_plan_declined")
 
-    def test_the_routed_answer_is_identical_with_and_without_the_canary(self):
-        with _Routed(handles=False):
+    def test_a_decline_is_recorded_as_unsupported_not_as_a_breakage(self):
+        """The operator's record: "not answerable yet" is UNSUPPORTED_QUESTION,
+        the same code the coverage gate's own decline carries."""
+        from trakt_core.errors import ErrorCode
+        self.assertEqual(mi_service._classify_analytical_failure(
+            declined_envelope()), ErrorCode.UNSUPPORTED_QUESTION)
+
+    def test_a_decline_is_not_re_read_by_the_legacy_coverage_owner(self):
+        """Nothing was answered, so nothing is measured — and the sentence is
+        not handed to the legacy concept reader it replaces."""
+        envelope = declined_envelope()
+        with mock.patch("question_interpretation.completeness.coverage_report",
+                        side_effect=AssertionError("the sentence was re-read")):
+            mi_service._stamp_semantic_coverage(
+                envelope, question=S2_P1, semantics={}, frame=None)
+        self.assertNotIn("semanticCoverage", envelope["metadata"])
+
+    def test_a_non_member_still_gets_the_routed_answer(self):
+        with _Routed(handles=False) as cfg:
             without = ask(S2_P1)
-        with _Routed(served=None):
-            declined = ask(S2_P1)
-        for key in ("ok", "answer", "artifacts"):
-            self.assertEqual(without.get(key), declined.get(key), key)
+        self.assertEqual(cfg.calls, [])
+        self.assertTrue((without.get("answer") or "").startswith(
+            "the legacy routed answer"))
+        self.assertEqual((without.get("metadata") or {}).get("route"), "evolution")
 
 
 # --------------------------------------------------------------------------- #

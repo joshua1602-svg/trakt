@@ -73,7 +73,9 @@ def _answered(rec: Dict[str, Any]) -> bool:
 
 
 def _path(rec: Dict[str, Any]) -> str:
-    return "governed" if rec.get("served") == "NEW" else "legacy"
+    # DECLINED is the governed path's own decline (owner decision D18): the
+    # governed path answered, with "not yet", and legacy was never asked.
+    return "governed" if rec.get("served") in ("NEW", "DECLINED") else "legacy"
 
 
 def verdict(variant: Dict[str, Any], bank: Optional[Dict[str, Any]]) -> str:

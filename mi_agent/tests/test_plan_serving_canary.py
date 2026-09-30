@@ -588,6 +588,152 @@ class TestIRecorderErrorStillAnswers(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# D18 — `respond`: the governed answer or the governed decline, never legacy's
+# --------------------------------------------------------------------------- #
+def respond(question=ELIGIBLE_SCALAR, principal=CANARY_PRINCIPAL, frame=None):
+    """Call exactly what `mi_service` calls now (owner decision D18)."""
+    return canary.respond(
+        question=question, context=Principal(principal), client_id="acme",
+        run_id="2026-03", legacy_result=None,
+        frame=_BOOK if frame is None else frame, semantics=_SEMANTICS,
+        view="funded", portfolio_id="acme/2026-03",
+        render_portfolio_id="acme/2026-03", as_of=None)
+
+
+class TestD18RespondNeverHandsTheQuestionToLegacy(unittest.TestCase):
+    """Owner, 2026-09-30: "Do not use the old system." Every path on which
+    `serve` returns None for legacy to answer, `respond` answers with the
+    governed decline instead — in words, with no figure, and recorded as
+    DECLINED."""
+
+    def _declined(self, cfg, served, *, kind):
+        from mi_agent import plan_decline
+        self.assertIsNotNone(served, "the question was handed to legacy")
+        self.assertFalse(served["ok"])
+        meta = served["metadata"]
+        self.assertEqual(meta["parserMode"], plan_decline.DECLINED_MODE)
+        self.assertEqual(meta["governedDecline"]["kind"], kind)
+        self.assertEqual(served["answer"], served["error"])
+        self.assertIn("Nothing was guessed", served["answer"])
+        # no figure, and nothing of the legacy answer
+        self.assertNotIn("£", served["answer"])
+        self.assertNotIn("legacy", served["answer"].lower())
+        self.assertEqual(served["artifacts"], [])
+        row = cfg.rows()[-1]
+        self.assertEqual(row["serving"]["decision"], canary.SERVED_DECLINED)
+        self.assertEqual(row["serving"]["response_served_from"],
+                         canary.SERVED_DECLINED)
+        self.assertEqual(row["serving"]["decline_message"], served["answer"])
+        return row
+
+    def test_an_answer_is_served_exactly_as_serve_serves_it(self):
+        with _Canary() as cfg:
+            served = respond()
+            self.assertTrue(served["ok"])
+            self.assertEqual(served["metadata"]["parserMode"], "governed_plan")
+            self.assertEqual(cfg.rows()[-1]["serving"]["decision"], "NEW")
+            self.assertIsNone(cfg.rows()[-1]["serving"]["decline_message"])
+
+    def test_a_non_member_is_not_answered_here_at_all(self):
+        with _Canary() as cfg:
+            self.assertIsNone(respond(principal=OTHER_PRINCIPAL))
+            self.assertEqual(cfg.rows(), [])
+            self.assertEqual(cfg.interpreters_built, 0)
+
+    def test_a_perimeter_refusal_is_declined_and_says_what_was_understood(self):
+        with _Canary() as cfg:
+            with mock.patch.object(canary.adapter, "check_eligibility",
+                                   return_value=(False, adapter.GEOGRAPHY_REQUESTED,
+                                                 "an axis this slice cannot carry")):
+                served = respond()
+            self._declined(cfg, served, kind="unsupported")
+            self.assertIn("I understood this as", served["answer"])
+            self.assertIn("geography", served["answer"])
+            self.assertEqual(served["metadata"]["governedDecline"]["reason"],
+                             f"INELIGIBLE:{adapter.GEOGRAPHY_REQUESTED}")
+
+    def test_a_clarification_is_asked_not_handed_to_legacy(self):
+        from mi_agent.interpretation_v2 import outcomes as _outcomes
+        with _Canary() as cfg:
+            with mock.patch.object(
+                    canary.wiring, "build_plan",
+                    _compiling_to(_outcomes.MISSING_REQUIRED_SLOT)):
+                served = respond()
+            self._declined(cfg, served, kind="clarify")
+            self.assertTrue(served["answer"].startswith(
+                "I need one more detail"))
+
+    def test_a_compiler_refusal_is_declined(self):
+        from mi_agent.interpretation_v2 import outcomes as _outcomes
+        with _Canary() as cfg:
+            with mock.patch.object(
+                    canary.wiring, "build_plan",
+                    _compiling_to(_outcomes.UNSUPPORTED_OPERATION)):
+                served = respond()
+            self._declined(cfg, served, kind="unsupported")
+            self.assertIn("that kind of analysis", served["answer"])
+
+    def test_an_unavailable_model_is_declined_and_says_try_again(self):
+        with _Canary(interpreter="unavailable") as cfg:
+            served = respond()
+            self._declined(cfg, served, kind="model_unavailable")
+            self.assertIn("try again", served["answer"])
+
+    def test_an_interpreter_that_raises_is_declined(self):
+        with _Canary(interpreter="raises") as cfg:
+            served = respond()
+            self._declined(cfg, served, kind="failed")
+
+    def test_an_executor_that_raises_is_declined_not_guessed(self):
+        with _Canary() as cfg:
+            def boom(*_a, **_k):
+                raise RuntimeError("executor exploded")
+
+            with mock.patch("mi_agent.mi_query_executor.execute_mi_query", boom):
+                served = respond()
+            self._declined(cfg, served, kind="failed")
+            self.assertIn("withheld", served["answer"])
+
+    def test_an_unreconciled_figure_is_withheld(self):
+        with _Canary() as cfg:
+            with mock.patch.object(canary, "reconcile",
+                                   return_value=(False, "predicate lost")):
+                served = respond()
+            self._declined(cfg, served, kind="failed")
+
+    def test_a_decline_that_cannot_be_worded_is_still_a_decline(self):
+        from mi_agent import plan_decline
+        with _Canary() as cfg:
+            real = plan_decline.envelope
+            calls = []
+
+            def once_broken(**kwargs):
+                calls.append(1)
+                if len(calls) == 1:
+                    raise RuntimeError("wording exploded")
+                return real(**kwargs)
+
+            with mock.patch.object(canary.adapter, "check_eligibility",
+                                   return_value=(False, adapter.GEOGRAPHY_REQUESTED,
+                                                 "x")), \
+                    mock.patch.object(plan_decline, "envelope", once_broken):
+                served = respond()
+            self._declined(cfg, served, kind="unsupported")
+
+    def test_serve_keeps_its_contract_for_the_harnesses(self):
+        """`serve` on its own still hands a decline back as None — the
+        contract the offline harnesses measure the attempt with. Only the
+        service's entry point changed."""
+        with _Canary() as cfg:
+            with mock.patch.object(canary.adapter, "check_eligibility",
+                                   return_value=(False, adapter.GEOGRAPHY_REQUESTED,
+                                                 "x")):
+                self.assertIsNone(serve())
+            self.assertEqual(cfg.rows()[-1]["serving"]["decision"],
+                             "LEGACY_FALLBACK")
+
+
+# --------------------------------------------------------------------------- #
 # J — a non-canary user of the SAME client is untouched
 # --------------------------------------------------------------------------- #
 class TestJNonCanaryClientMemberUnchanged(unittest.TestCase):
@@ -774,14 +920,23 @@ class TestTheCallSiteIsWiredExclusively(unittest.TestCase):
         raise AssertionError("_governed_serving_attempt was not found")
 
     def test_serve_is_called_from_exactly_one_place(self):
-        """Two call sites would be two chances to forget the membership test."""
+        """Two call sites would be two chances to forget the membership test.
+
+        The production entry point is `respond` (owner decision D18: the
+        governed answer or the governed decline, never legacy's), and
+        `serve` — the attempt on its own, which hands a decline back as None
+        for the legacy path to answer — is not called from the service at all.
+        """
         tree = self._run_analysis_tree()
         sites = [n for n in ast.walk(tree)
                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                 and n.func.attr == "serve"]
+                 and n.func.attr == "respond"]
         self.assertEqual(len(sites), 1,
-                         "`serve` is reachable from more than one call site")
-        self.assertIn("serve", self._calls([self._attempt_helper()]))
+                         "`respond` is reachable from more than one call site")
+        self.assertIn("respond", self._calls([self._attempt_helper()]))
+        self.assertNotIn("serve", self._calls([tree]),
+                         "the service calls `serve`, whose decline lets legacy "
+                         "answer")
 
     def test_serve_is_only_reachable_under_the_membership_test(self):
         """The guard is the helper's first statement, and it RETURNS."""
@@ -793,14 +948,14 @@ class TestTheCallSiteIsWiredExclusively(unittest.TestCase):
                       and isinstance(n.test.operand, ast.Call)
                       and getattr(n.test.operand.func, "attr", "") == "handles"),
                      None)
-        self.assertIsNotNone(guard, "the membership test does not guard `serve`")
+        self.assertIsNotNone(guard, "the membership test does not guard `respond`")
         self.assertEqual([a.id for a in guard.test.operand.args
                           if isinstance(a, ast.Name)], ["context"],
                          "the membership test is not given the trusted context")
         self.assertTrue(any(isinstance(n, ast.Return) for n in guard.body),
-                        "a non-member falls through to `serve`")
+                        "a non-member falls through to `respond`")
         # And nothing is called before it.
-        self.assertNotIn("serve", self._calls(
+        self.assertNotIn("respond", self._calls(
             helper.body[:helper.body.index(guard)]))
 
     def test_the_attempt_is_made_once_under_the_membership_test(self):

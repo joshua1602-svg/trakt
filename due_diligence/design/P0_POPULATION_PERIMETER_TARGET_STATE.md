@@ -125,6 +125,20 @@
         stage's validity window carries no weight and is not dated; the
         answer says how many are lapsed. §26.3.
 
+    D18 NO LEGACY FALLBACK                                    SETTLED 2026-09-30
+        "Do not use the old system." For a principal the governed path
+        serves, the answer is the governed answer or the governed decline —
+        what the question was understood as and why it is not answered, with
+        no figure — and the legacy path is never asked. §27.1.
+
+    D19 ONE ACTIVATED CLIENT                                  SETTLED 2026-09-30
+        "There should only be one single activated client in trakt — it's
+        already plugged into the mi dashboard. Any clients that are not
+        active are just test / dummy runs." The tenant a single-tenant MI
+        deployment serves reads the estate's single activated OCC
+        configuration; zero or several activated clients read nothing.
+        §27.2.
+
     D12 PIPELINE "BY REGION"                                  SETTLED 2026-09-29
         The client's reporting regions, on the Pipeline tab and in an agent
         answer alike. The pipeline is harmonised with the funded book's region
@@ -1826,3 +1840,74 @@ Pinned by `test_expected_completion_date.py`.
 
 Vocabulary 2.16.0. The variants that exposed D15–D17 are now spent: the next
 proof needs variants written after this build.
+
+
+## 27. The second held-out check; D18, D19 (2026-09-30)
+
+The 15:53 check on 2e4ab2f2 (vocabulary 2.16.0): 18 of 21 variants answered
+exactly as their bank question. Two findings are the subject of this section.
+
+    hv2_pipeline_013_1  "Is any of the pipeline overdue to complete, and how
+                        much?" — read correctly (the count and the amount of
+                        the overdue cases), declined by the pipeline runtime
+                        for asking two figures at once, and then ANSWERED BY
+                        THE LEGACY PATH with the whole pipeline (£969.8m),
+                        "overdue" dropped. The right answer is £0.
+    [122] and variants  "scale" declined as not configured: the MI knows its
+                        tenant as `client_001`, OCC activated the client as
+                        `ERE`, and the MI read none of the activated
+                        configuration.
+
+### 27.1 D18 — a decline is the answer
+
+`plan_serving_canary.respond` is the service's entry point: the governed
+answer, or the governed decline (`mi_agent/plan_decline.py`), and None only
+for a principal the governed path does not serve. `mi_service` calls it
+before the legacy parse, and for a served principal returns whatever it
+gives — the legacy parse, router and runner are not reached.
+(`serve` keeps its contract — None for a decline — for the offline harnesses
+that measure the attempt on its own; the service does not call it.)
+
+The decline reads the evidence record the attempt already wrote, and nothing
+else: "I understood this as pipeline case count and pipeline amount, for the
+pipeline, where expected completion timing is overdue, but I have not
+answered it: that figure, or that combination of figures, is not one I can
+produce in a single answer yet. Nothing was guessed, and no other figure was
+put in its place." A runtime's reason is worded by its FAMILY (the leading
+word of the code — MEASURE, PERIOD, POPULATION, …), so a reason added later
+is still worded truthfully; a test fails for any declared reason that falls
+through to the generic sentence. Each decline carries its kind for the
+operator's record — `unsupported`, `clarify`, `model_unavailable`,
+`unavailable`, `failed` — which `mi_service` maps to UNSUPPORTED_QUESTION,
+AMBIGUOUS_QUESTION, SEMANTIC_MODEL_UNAVAILABLE and CALCULATION_FAILED, all at
+HTTP 200. A decline is not measured by the legacy coverage reader (it
+answered nothing). The record states `DECLINED` and the sentence given.
+
+Principals the governed path does not yet serve are unchanged: the legacy
+path answers them. Moving everybody is a serving-mode change, taken
+separately.
+
+### 27.2 D19 — the served tenant reads the one activated client
+
+`client_config.get_single_activated_client_config`: the clients OCC holds an
+activated configuration for (onboarded, with a current version — OCC's own
+"active"); exactly one resolves, zero or several resolve to nothing and are
+logged. `currency.client_config_path` — the MI's one locator — uses it when
+the client asked about has no activation of its own AND is the one tenant a
+single-tenant deployment serves (`dependencies.serves_only`: no explicit
+tenancy registry, and the deployment's `default_tenant_id`). Any other
+client resolves to its own activation or to nothing, exactly as before. The
+resolution is made once per request.
+
+What changes for the served tenant, which until now read no client
+configuration at all: the portfolio stage (so "scale" has its D9
+threshold), the governed reporting currency, the client-level asset class
+and geography basis where the portfolio registry does not state one, and the
+cache fingerprint (one invalidation on deploy). The dashboard's client NAME
+is unchanged: `client_identity` names a tenant only from a configuration
+addressed to it, and the activated configuration declares its own client id
+(`ere_funding_uk`), not `client_001`.
+
+Pinned by `test_governed_decline.py`, the D18 class in
+`test_plan_serving_canary.py`, `test_slice2_serving_repair.py` and
+`test_single_activated_client.py`.

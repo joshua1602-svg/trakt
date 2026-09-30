@@ -62,8 +62,9 @@ def load_bank(paths: List[Path]) -> List[Dict[str, Any]]:
 
 
 #: The governed-plan serving decision for the question being asked — captured
-#: from the canary's evidence record (NEW = the plan path answered;
-#: LEGACY_FALLBACK = the legacy path did, with the reason).
+#: from the canary's evidence record (NEW = the plan path answered; DECLINED =
+#: the plan path declined in words, with the reason, and legacy was not asked
+#: (owner decision D18); LEGACY_FALLBACK = the legacy path answered).
 _SERVING: Dict[str, Any] = {}
 
 

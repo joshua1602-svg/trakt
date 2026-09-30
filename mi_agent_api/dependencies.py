@@ -37,6 +37,28 @@ def default_tenant_id() -> str:
     return from_uri or "client_001"
 
 
+def serves_only(client_id: Optional[str]) -> bool:
+    """Is ``client_id`` the ONE tenant this deployment serves?
+
+    True only when both hold: no explicit tenancy registry declares the
+    tenants served (``trakt_core.tenancy`` — with one, the deployment serves
+    whoever it names, and nothing is inferred), and ``client_id`` is
+    :func:`default_tenant_id`. The same single-tenant test
+    ``client_identity`` applies before it lets a configuration name a tenant.
+    Never raises: an unreadable registry answers False.
+    """
+    wanted = str(client_id or "").strip().casefold()
+    if not wanted:
+        return False
+    try:
+        from trakt_core.tenancy import load_tenant_registry
+        if getattr(load_tenant_registry(), "configured", False):
+            return False
+        return default_tenant_id().strip().casefold() == wanted
+    except Exception:  # noqa: BLE001 — tenancy must never break a request
+        return False
+
+
 @dataclass(frozen=True)
 class CapabilityDependencies:
     """Collaborators for one governed capability invocation."""

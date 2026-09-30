@@ -343,3 +343,13 @@ intents added beside the baseline's.
                 no identity crosswalk. [135] now 2026-11-02 over 137 dated
                 cases; 4,698 of 4,835 live cases are lapsed by the forecast's
                 own windows
+    2026-09-30  Owner decisions D18 ("Do not use the old system") and D19
+                ("There should only be one single activated client in trakt").
+                Built (design §27): for a served principal the answer is the
+                governed answer or the governed DECLINE (plan_decline: what
+                was understood and why not, no figure; recorded DECLINED) and
+                the legacy path is never asked — the [58] variant is now
+                declined instead of answered with the whole pipeline. The
+                served tenant (client_001) reads the single activated OCC
+                client's configuration (zero or several: nothing), so scale
+                has its stage. Not deployed yet

@@ -49,7 +49,7 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("operations_control.configuration.client_config")
 
@@ -177,6 +177,51 @@ def get_active_client_config(client_id: Optional[str], *, store: Any = None
             f"artefacts/current/{rel}",
         content_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
         version=version, source=SOURCE_OCC_ACTIVATED)
+
+
+def activated_clients(*, store: Any = None) -> List[str]:
+    """Every client with an ACTIVATED configuration: onboarded, and holding a
+    current version. The same test OCC's own client view applies ("active"
+    rather than "not_onboarded"). Raises when the store cannot be read — an
+    unreadable store is not an empty one, and the caller decides."""
+    from ..onboarding.store import OnboardingStore
+    from ..stores import OpsStore
+    ops = store if store is not None else OpsStore.from_env()
+    onboarding = OnboardingStore(ops)
+    return [client for client in onboarding.onboarded_clients()
+            if onboarding.current(client) is not None]
+
+
+def get_single_activated_client_config(*, store: Any = None
+                                       ) -> Optional[ActiveClientConfig]:
+    """The configuration of THE activated client, when there is exactly one.
+
+    Owner decision D19 (2026-09-30): "There should only be one single
+    activated client in trakt — it's already plugged into the mi dashboard.
+    Any clients that are not active are just test / dummy runs." So the estate
+    has one activated client, and a deployment serving one tenant is serving
+    it, whatever identifier that deployment was configured with.
+
+    ``None`` — NOT CONFIGURED — when no client is activated, and ALSO when more
+    than one is: choosing between two activated clients is exactly the
+    one-tenant's-decision-reaches-another failure this module exists to
+    prevent, and the owner's rule says it cannot happen, so if it does it is
+    reported rather than resolved.
+    """
+    try:
+        from ..stores import OpsStore
+        ops = store if store is not None else OpsStore.from_env()
+        activated = activated_clients(store=ops)
+    except Exception:  # noqa: BLE001 — unreachable store is NOT a fallback
+        logger.warning("the activated clients could not be listed",
+                       exc_info=True)
+        return None
+    if len(activated) != 1:
+        logger.warning("expected exactly one activated client, found %d (%s); "
+                       "no client configuration is resolved",
+                       len(activated), ", ".join(activated) or "none")
+        return None
+    return get_active_client_config(activated[0], store=ops)
 
 
 def is_configured(client_id: Optional[str], *, store: Any = None) -> bool:

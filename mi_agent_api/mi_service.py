@@ -257,6 +257,12 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
     if governed is not None:
         envelope["metadata"]["semanticCoverage"] = governed
         return
+    # A GOVERNED DECLINE (D18) answered nothing, so there is no coverage to
+    # measure, and the legacy sentence reader below is the old system it
+    # replaces. Absent, which reads as "not measured".
+    if str((envelope.get("metadata") or {}).get("parserMode") or "") \
+            == _GOVERNED_DECLINED_MODE:
+        return
     if semantics is None:
         return
     try:
@@ -276,6 +282,8 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
 
 #: The parser mode the slice 1 governed-plan serving path stamps on its answer.
 _GOVERNED_PLAN_MODE = "governed_plan"
+#: ... and on its decline (`mi_agent.plan_decline.DECLINED_MODE`, D18).
+_GOVERNED_DECLINED_MODE = "governed_plan_declined"
 
 
 def _values_agree(requested: Any, executed: Any) -> bool:
@@ -1183,6 +1191,18 @@ def _model_availability(concept_merge: Any) -> Dict[str, Any]:
     }
 
 
+#: `plan_decline.kind` -> the stable error code the operator's record carries.
+_DECLINE_CODES: Dict[str, str] = {
+    "model_unavailable": ErrorCode.SEMANTIC_MODEL_UNAVAILABLE,
+    "clarify": ErrorCode.AMBIGUOUS_QUESTION,
+    "unsupported": ErrorCode.UNSUPPORTED_QUESTION,
+    # Not STORAGE_UNAVAILABLE: that is an HTTP 503, and an MI verdict carries
+    # its outcome inside the envelope at HTTP 200 (`trakt_core.errors`).
+    "unavailable": ErrorCode.CALCULATION_FAILED,
+    "failed": ErrorCode.CALCULATION_FAILED,
+}
+
+
 def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     """Map an engine-reported failure onto a stable code.
 
@@ -1191,6 +1211,15 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     previous free-text ``error`` string could not express.
     """
     meta = payload.get("metadata") or {}
+    # THE GOVERNED PATH'S OWN DECLINE (D18) says what kind it is. A question
+    # understood and not answerable yet is UNSUPPORTED, one missing a detail is
+    # AMBIGUOUS, a language step that did not complete is the model being
+    # unavailable — and data that could not be read, or a figure that broke
+    # while being produced, is CALCULATION_FAILED.
+    decline = meta.get("governedDecline")
+    if isinstance(decline, Mapping):
+        return _DECLINE_CODES.get(str(decline.get("kind") or ""),
+                                  ErrorCode.UNSUPPORTED_QUESTION)
     # THE MODEL NEVER RAN, so nothing downstream of it can be the reason. Read
     # before every capability code: an unavailable dependency is not a decision
     # the estate took about the question, and marking it `CALCULATION_FAILED,
@@ -2117,7 +2146,10 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             source_registry = _source_registry(df, client_id)
         with _perf.stage("mi_query.governed_inputs.pipeline"):
             pipeline_inputs = _pipeline_inputs(ds, client_id, run_id)
-        return _plan_serving.serve(
+        # `respond`, not `serve`: for this principal the answer is the
+        # governed answer or the governed decline, never the legacy path's
+        # (owner decision D18).
+        return _plan_serving.respond(
             question=req.question, context=context, client_id=client_id,
             run_id=run_id, legacy_result=legacy_envelope, frame=df,
             semantics=semantics, view=view,
@@ -2167,6 +2199,13 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         return None if err else frame
 
     # GOVERNED FIRST — see the helper above. One attempt per request.
+    #
+    # AND GOVERNED ONLY (owner decision D18, 2026-09-30: "Do not use the old
+    # system"). For a principal the governed path serves, what comes back is
+    # its answer or its decline, and the legacy parse below is never reached:
+    # a question it understood and declined was, until this, answered by the
+    # legacy path — and the 15:53 check measured that answering a different
+    # question ("overdue" dropped, the whole pipeline given).
     from mi_agent import plan_serving_canary as _plan_serving
     _canary = _plan_serving.handles(context)
     if _canary:
@@ -2418,11 +2457,10 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # canary handled has already bought its interpretation, and shadowing it
     # would buy a second and compare the new result against itself.
     #
-    # For a canary principal the governed attempt was made above, before the
-    # parse, and this result is one it declined — `serve` returning None (off,
-    # ineligible, clarify, refuse, any failure) leaves the legacy path to build
-    # the answer exactly as it always did. Outside the canary, the shadow
-    # observes as before.
+    # A canary principal never reaches this point: the governed attempt above
+    # returns its answer or its decline (D18). What remains here is everybody
+    # the governed path does not yet serve, for whom the shadow observes as
+    # before.
     if not _canary:
         # THE SHADOW STAYS WHERE IT WAS, on this branch only. Extending it to
         # routed questions would buy a live interpretation for every

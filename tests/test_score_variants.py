@@ -60,3 +60,11 @@ def test_the_headline_is_the_amount_not_the_month_that_names_it():
     assert sv.verdict(variant, bank) == "DIFFERENT"
     assert sv.headline("Expected completion date: 2026-04-01 — over 4835 "
                        "cases") == "2026-04-01"
+
+
+def test_a_governed_decline_is_the_governed_path():
+    """D18: DECLINED is the governed path's own decline, not a legacy answer."""
+    assert sv._path(_rec("v", outcome="REFUSED", served="DECLINED")) == "governed"
+    assert sv._path(_rec("v", served="LEGACY_FALLBACK")) == "legacy"
+    assert sv.verdict(_rec("v", outcome="REFUSED", served="DECLINED"),
+                      _rec("b", outcome="REFUSED", served="DECLINED")) == "DECLINED"
