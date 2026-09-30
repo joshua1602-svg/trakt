@@ -233,3 +233,9 @@ intents added beside the baseline's.
                 interpreter (readback projects model_calls and model_ms)
     2026-09-30  06:48 UTC 622351a2 deployed (run 36679674222, success; the
                 first attempt succeeded, no retry). Vocabulary 2.12.0
+    2026-09-30  07:10:30 UTC full bank on 622351a2 (vocabulary 2.12.0, one
+                model call per question), 135 selected with `all`; log
+                /home/qb_plan_rerun_20260930T071030Z.log. 110/135 served NEW
+                (last night 64, credits exhausted from [68]; yesterday
+                morning 51). After the run MI_AGENT_PLAN_SERVE set to off —
+                operator confirmed. Read back from this START TIME
