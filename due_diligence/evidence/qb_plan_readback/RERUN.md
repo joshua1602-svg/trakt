@@ -269,3 +269,11 @@ intents added beside the baseline's.
                 (branch claude/occ-securitisation-stage); merging deploys
                 trakt-ops-api. Then: Amend ERE -> New SPV before
                 securitisation -> Approve -> Activate
+    2026-09-30  10:26:01 UTC 11-question check on b43cd904 (vocabulary
+                2.14.0, governed first). [87] expected funded balance now
+                £94.1m (fixed); [82] latest vs prior served NEW (+£2.9m,
+                346s: the cold weekly history); [102] declined (fixed);
+                [125, 126] declined; [122, 128] scale not configured (OCC
+                stage pending, PR #510); [135] refused at compile — read back
+                from this START TIME. Governed answers still ~27-32s: the
+                legacy path was not the cost
