@@ -257,3 +257,5 @@ intents added beside the baseline's.
                 extract, governed first, scale £250MM, expected completion
                 date). ERE's portfolio.stage must be activated in OCC for
                 [122, 128]
+    2026-09-30  10:10 UTC b43cd904 deployed (run 36700450236, success, no
+                retry). Vocabulary 2.14.0
