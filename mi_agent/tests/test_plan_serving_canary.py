@@ -719,12 +719,31 @@ class TestTheCallSiteIsWiredExclusively(unittest.TestCase):
         raise AssertionError("_run_analysis was not found")
 
     def _branch(self):
+        """`if _canary:` — the ONE governed attempt, made before the legacy
+        parse (owner decision 2026-09-30, P0 design §23)."""
         for node in ast.walk(self._run_analysis_tree()):
-            if (isinstance(node, ast.If) and isinstance(node.test, ast.Call)
-                    and isinstance(node.test.func, ast.Attribute)
-                    and node.test.func.attr == "handles"):
+            if (isinstance(node, ast.If) and isinstance(node.test, ast.Name)
+                    and node.test.id == "_canary"):
                 return node
         raise AssertionError("the serving branch was not found")
+
+    def _membership(self):
+        """`_canary = <canary>.handles(context)`."""
+        for node in ast.walk(self._run_analysis_tree()):
+            if (isinstance(node, ast.Assign)
+                    and [getattr(t, "id", None) for t in node.targets] == ["_canary"]
+                    and isinstance(node.value, ast.Call)
+                    and getattr(node.value.func, "attr", "") == "handles"):
+                return node.value
+        raise AssertionError("the membership test was not found")
+
+    def _line_of_call(self, name):
+        lines = [n.lineno for n in ast.walk(self._run_analysis_tree())
+                 if isinstance(n, ast.Call)
+                 and (getattr(n.func, "attr", None) == name
+                      or getattr(n.func, "id", None) == name)]
+        self.assertTrue(lines, f"{name} is not called in _run_analysis")
+        return lines
 
     @staticmethod
     def _calls(nodes):
@@ -784,49 +803,36 @@ class TestTheCallSiteIsWiredExclusively(unittest.TestCase):
         self.assertNotIn("serve", self._calls(
             helper.body[:helper.body.index(guard)]))
 
-    def test_the_point_in_time_branch_still_gates_the_attempt(self):
+    def test_the_attempt_is_made_once_under_the_membership_test(self):
         branch = self._branch()
+        attempts = self._line_of_call("_governed_serving_attempt")
+        self.assertEqual(len(attempts), 1, "the governed attempt is made twice")
         self.assertIn("_governed_serving_attempt",
                       [c.func.id for c in ast.walk(branch)
                        if isinstance(c, ast.Call)
                        and isinstance(c.func, ast.Name)])
 
-    def test_the_routed_branch_is_offered_the_attempt_before_it_returns(self):
-        """The serving-order defect, pinned: a routed question reaches the
-        governed path, and it reaches it BEFORE the routed envelope is returned.
-
-        Measured live on 9ab14b34 — S2-P1, S2-P4 and S2-P5 produced no evidence
-        record at all, because `serve` was never called for them.
-        """
-        tree = self._run_analysis_tree()
-        routed_branch = next(
-            (n for n in ast.walk(tree)
-             if isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
-             and isinstance(n.test.left, ast.Name)
-             and n.test.left.id == "routed"), None)
-        self.assertIsNotNone(routed_branch, "the routed branch was not found")
-        body = routed_branch.body
-        attempts = [i for i, node in enumerate(body)
-                    for c in ast.walk(node)
-                    if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
-                    and c.func.id == "_governed_serving_attempt"]
-        self.assertTrue(attempts, "a routed question never reaches the "
-                                  "governed path")
-        returns = [i for i, node in enumerate(body)
-                   if isinstance(node, ast.Return)]
-        self.assertTrue(returns, "the routed branch does not return")
-        self.assertLess(min(attempts), max(returns),
-                        "the routed envelope is returned before the governed "
-                        "path is offered the request")
+    def test_the_attempt_precedes_the_legacy_parse_the_router_and_the_answer(self):
+        """GOVERNED FIRST: a question the governed path answers pays for no
+        legacy parse (its own model call), no router and no legacy answer."""
+        attempt = self._line_of_call("_governed_serving_attempt")[0]
+        for legacy in ("parse", "try_route", "runner"):
+            self.assertLess(attempt, min(self._line_of_call(legacy)),
+                            f"the legacy {legacy} runs before the governed "
+                            f"attempt")
 
     def test_the_shadow_is_the_else_so_neither_runs_twice(self):
-        branch = self._branch()
-        self.assertIn("observe_request", self._calls(branch.orelse))
-        self.assertNotIn("observe_request", self._calls(branch.body))
+        """The attempt only for a member; the shadow only for everybody else."""
+        tree = self._run_analysis_tree()
+        shadow = next(n for n in ast.walk(tree)
+                      if isinstance(n, ast.If) and isinstance(n.test, ast.UnaryOp)
+                      and isinstance(n.test.op, ast.Not)
+                      and getattr(n.test.operand, "id", None) == "_canary")
+        self.assertIn("observe_request", self._calls(shadow.body))
+        self.assertNotIn("observe_request", self._calls([self._branch()]))
 
     def test_the_membership_test_is_given_the_trusted_context(self):
-        branch = self._branch()
-        self.assertEqual([a.id for a in branch.test.args
+        self.assertEqual([a.id for a in self._membership().args
                           if isinstance(a, ast.Name)], ["context"])
 
     def test_an_absent_context_is_the_fail_closed_default(self):
