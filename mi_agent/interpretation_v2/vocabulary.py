@@ -164,7 +164,12 @@ from mi_agent import semantic_model as _semantic_model
 #: calendar and published over every whole number of weeks the history
 #: covers; a question naming its own window of weeks states it as a range of
 #: that many weekly periods (grain weekly, periods_back N).
-VOCABULARY_VERSION = "2.20.0"
+#:
+#: 2.21.0 (P0 design D23): amount or number. "How much" asks for an amount,
+#: "how many" for a count, and a question that says neither is answered by
+#: amount — a governed default the model is shown, so the words choose the
+#: measure and the unstated case is never asked back.
+VOCABULARY_VERSION = "2.21.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -1135,6 +1140,29 @@ class GovernedVocabulary:
         }
 
 
+#: D23 (owner decision 2026-09-30): amount or number. When a question asks for
+#: the size of what it is about without naming a measure of its own, its words
+#: choose between the AMOUNT and the NUMBER — "how much" is the amount, "how
+#: many" is the count — and a question that says neither is answered by amount,
+#: stated in the answer, never asked back (a low-risk reading: the answer names
+#: its measure, and the count is one question away). The catalogue carries both
+#: sides for every population the agent answers on: a balance and the loans
+#: counted, the pipeline amount and its case count, the excluded amount and its
+#: cases, the forecast balance and its loans. A measure the question names
+#: itself — an LTV, a rate, a date — is never overridden by these words.
+AMOUNT_OR_NUMBER_SLOT = "measures (amount or number)"
+AMOUNT_OR_NUMBER_RULE = (
+    "D23: where the question asks for the size of what it is about and names "
+    "no measure of its own, its words choose. 'How much' is the AMOUNT: the "
+    "money measure of that population (a balance, the pipeline amount, the "
+    "excluded amount). 'How many' (or 'number of', 'count') is the NUMBER: "
+    "the count of its loans or cases. A question that says neither is answered "
+    "by AMOUNT: name the amount measure and record the reading as a "
+    "non-blocking ambiguity; it is never a blocking one. A measure the "
+    "question names itself (an LTV, a rate, a date) is not overridden by these "
+    "words.")
+
+
 #: Slots the compiler fills from a governed default when the question leaves
 #: them empty. Declared so the model knows an empty slot is SAFE — the first
 #: live run had the interpreter blocking on every bare "region" because nothing
@@ -1153,6 +1181,9 @@ GOVERNED_DEFAULTS: Mapping[str, str] = {
         "empty resolves to the governed registry weight for that concept."),
     "population.base": "empty resolves to 'funded'.",
     "time.form": "empty resolves to 'current'.",
+    # D23 (owner, 2026-09-30): "'how much' = amount, 'how many' = count" and,
+    # for the low-risk case where neither is said, "default to amount".
+    AMOUNT_OR_NUMBER_SLOT: AMOUNT_OR_NUMBER_RULE,
 }
 
 

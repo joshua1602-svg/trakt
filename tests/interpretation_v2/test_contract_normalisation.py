@@ -702,10 +702,25 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: call, P0 design §21) it points at the catalogue instead.
     AUTHORISED_REWORDINGS = {"how_to_find_a_concept"}
 
+    #: ONE GOVERNED DEFAULT ADDED, BY NAME. D23 (owner, 2026-09-30, vocabulary
+    #: 2.21.0): "'how much' = amount, 'how many' = count", and a question that
+    #: says neither is answered by amount. Every existing default must still
+    #: read word for word; another added default fails here.
+    AUTHORISED_DEFAULT_ADDITIONS = {"measures (amount or number)"}
+
     for key in sorted(set(was) & set(now)):
         if key == "vocabulary_version":
             continue                       # moves with the block, by design
         if key in AUTHORISED_REWORDINGS:
+            continue
+        if key == "governed_defaults":
+            assert set(now[key]) - set(was[key]) == AUTHORISED_DEFAULT_ADDITIONS, (
+                f"the model was shown governed defaults "
+                f"{sorted(set(now[key]) - set(was[key]))}; only "
+                f"{sorted(AUTHORISED_DEFAULT_ADDITIONS)} were authorised")
+            for slot, text in was[key].items():
+                assert now[key].get(slot) == text, (
+                    f"governed default {slot!r} was reworded or removed")
             continue
         if key == "concept_counts":
             before_ids = set(was_vocabulary.concepts)

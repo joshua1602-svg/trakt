@@ -59,8 +59,8 @@ CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,
 EXPECTED_QUESTIONS=135
 # The oldest vocabulary the next measurement is for (2.10.0: conversion and
 # pipeline change, §20; 2.9.0 and the catalogue batches before it): an older
-# build is not the one being measured.
-MINIMUM_VOCABULARY="2.20.0"
+# build is not the one being measured. 2.21.0: D23, amount or number.
+MINIMUM_VOCABULARY="2.21.0"
 
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${APP_ROOT}"

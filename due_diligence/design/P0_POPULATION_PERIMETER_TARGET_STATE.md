@@ -155,12 +155,22 @@
         stated and says why. §33.
 
     D23 LOW-RISK AMBIGUITY IS DEFAULTED, NOT ASKED            SETTLED 2026-09-30
-        "For low risk, yes default to amount." Where a question does not say
-        whether it means an amount or a number of cases, the answer is by
-        amount and says so (a count may be stated alongside, as the stage
-        distribution already does); the agent does not ask back. Applied by
-        the clarification step of the conversational agent (§34); no
-        question in the bank asks back on this today.
+        "For low risk, yes default to amount." and "It is also simple: 'how
+        much' = amount, 'how many' = count". A question's words choose
+        between the amount and the number: "how much" is the amount, "how
+        many" (or "number of", "count") is the count of loans or cases.
+        Where a question says neither, the answer is by amount and says so
+        (a count may be stated alongside, as the stage distribution already
+        does); the agent does not ask back. A measure the question names
+        itself (an LTV, a rate, a date) is never overridden by these words.
+        Built as a governed default the interpreter is shown on every
+        question (vocabulary 2.21.0, `governed_defaults["measures (amount or
+        number)"]`), not a per-question fix; the amount taken for "neither"
+        is carried on the plan as a disclosed reading. Every population the
+        agent answers on carries both sides — a balance and the loans
+        counted, the pipeline amount and its case count, the excluded amount
+        and its cases, the forecast balance and its loans. The conversational
+        agent's clarification step (§34) inherits the same rule.
 
     D22 THE RUN-RATE IS MEASURED ON THE CALENDAR              SETTLED 2026-09-30
         "If possible, run rate = calendar." A run-rate over N weeks is the
