@@ -897,6 +897,16 @@ def _execute_tab_breakdown(body: Mapping[str, Any], *, measure: str, kind: str,
     receipt["pipeline_scope"] = _noted(live_scope)
     if owner == OWNER_TAB_COMPLETION:
         receipt["completion_basis"] = COMPLETION_BASIS
+        # D16 BY MONTH (§31): the tab publishes each month's amount at face
+        # value, its weighted amount and its case count for the same cases —
+        # the answer states the ones it does not lead with, as a month's own
+        # answer does. Read, never computed.
+        receipt["completion_figures"] = {
+            str(r[key_name]): {
+                k: (float(r[_TAB_COMPLETION_KEY[k]])
+                    if r.get(_TAB_COMPLETION_KEY[k]) is not None else None)
+                for k in (_AMOUNT, _COUNT, _WEIGHTED)}
+            for r in rows}
     if dimension == REGION_FIELD:
         # Which taxonomy, and the live cases it could not place — the tab's
         # own statement, so the answer discloses what the chart leaves out.

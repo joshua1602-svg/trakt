@@ -334,13 +334,13 @@ def test_the_annualised_run_rate_is_the_owners(funded_root, estate):
     assert set(out.receipt["inputs"]) == {"pipeline"}
 
 
-def test_the_scenario_run_rates_are_declared_and_held_until_evidence(
-        funded_root, estate):
-    """The shape `point_in_time/forecast_completion_rate` stays held (D6 hold,
-    §14.6); the declaration is ready, and reads the owner's figure."""
+def test_the_scenario_run_rates_are_declared_and_served(funded_root, estate):
+    """The shape `point_in_time/forecast_completion_rate` was held (D6 hold,
+    §14.6) until a live run showed its readings had moved (§31); the
+    declaration reads the owner's figure."""
     plan = _plan(measures=[{"concept": "forecast_completion_rate"}],
                  filters=_member("forecast_scenario", "downside"))
-    assert forecast_rt.check_eligibility(plan)[1] == forecast_rt.AMBIGUOUS_READING
+    assert forecast_rt.check_eligibility(plan)[:2] == (True, "")
     out = _execute(plan, funded_root, estate)
     rr = _scale_up()["completionRunRateForecast"]
     assert out.value == rr["scenarioMonthlyRunRate"]["downside"]
@@ -522,3 +522,46 @@ def test_the_balance_answer_is_unchanged_in_substance(monkeypatch, funded_root, 
     assert payload["answer"].startswith("Forecast funded balance: ")
     assert "the funded balance of" in payload["answer"]
     assert "of expected completions from the open pipeline" in payload["answer"]
+
+
+# --------------------------------------------------------------------------- #
+# a projection read "now" is the owner's horizon (§31)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("time", [{"form": "current"}, None])
+def test_the_base_forecast_read_as_current_is_the_owners_base_line(
+        time, funded_root, estate):
+    """[117] "What is the base forecast?" (19:59): the model read the base
+    scenario of the projected balance, as at "now". A projection has no "now"
+    — the question states no horizon, so the owner's is read, exactly as
+    "What is the downside forecast?" (forward-looking) is served."""
+    over = dict(_CURVE, operation="point_in_time",
+                filters=_member("forecast_scenario", "base"))
+    if time is None:
+        over.pop("time")
+    else:
+        over["time"] = time
+    plan = _plan(**over)
+    out = _run(plan, funded_root, estate)
+    rows = _scale_up()["completionRunRateForecast"]["projectedBalances"]
+    assert [c["base"] for c in out.cells] == [r["base"] for r in rows]
+    stated = _run(_plan(**dict(_CURVE, filters=_member("forecast_scenario", "base"))),
+                  funded_root, estate)
+    assert out.cells == stated.cells
+    # the answer states whose horizon it read
+    assert out.receipt["horizon"] == stated.receipt["horizon"]
+    assert out.receipt["horizon"].get("published_months")
+
+
+def test_a_figure_stated_for_now_keeps_its_period():
+    """The rule is the projection's alone: a figure published for now (the
+    forecast funded balance) is read as now; a stated horizon as stated."""
+    from mi_agent import semantic_engine as engine
+    balance = _MODEL.measures["forecast_loan_count"]
+    assert engine.period_as_stated(balance, {"form": "current"}) == {"form": "current"}
+    curve = _MODEL.measures["projected_funded_balance"]
+    assert engine.period_as_stated(curve, {"form": "current"})["form"] == \
+        "forward_looking"
+    ahead = {"form": "forward_looking", "grain": "monthly", "periods_ahead": 12}
+    assert engine.period_as_stated(curve, ahead) == ahead
+    assert engine.period_as_stated(curve, {"form": "trailing"}) == {"form": "trailing"}

@@ -53,6 +53,14 @@ ADMITTED = {
     # D13 (§20.3): the pipeline's change between two dated extracts — read
     # correctly as a metric delta on the pipeline amount, October to November.
     83: "pipeline",                     # pipeline growth October to November
+    # THE RUN-RATE HOLD RELEASED (P0 design §31) on the 19:59 full bank's
+    # readings (2026-09-30, vocabulary 2.18.0): every question in the shape
+    # now reaches the forecast runtime. 112 and 113 are this run's correct
+    # run-rate readings; 98 and 121 are this run's MISREADS in the same shape
+    # (the method, a KFI conversion), released because today's model no
+    # longer makes them — 98 asks back and 121 reads the stage completion rate
+    # (`test_the_run_rate_hold_is_released_on_the_1959_readings`).
+    98: "forecast", 112: "forecast", 113: "forecast", 121: "forecast",
 }
 
 #: Plans the runtime would answer with a figure the question did not ask for.
@@ -63,13 +71,16 @@ MISREAD = {
     94: forecast_rt.AMBIGUOUS_READING,      # the FUNDED share of the forecast
     114: forecast_rt.AMBIGUOUS_READING,     # the extrapolation CURVE
     117: forecast_rt.AMBIGUOUS_READING,     # the BASE scenario
-    98: forecast_rt.AMBIGUOUS_READING,      # the forecast's METHOD
-    121: forecast_rt.AMBIGUOUS_READING,     # a KFI->completion CONVERSION %
 }
+
+#: Misreads of this run whose shape's hold was RELEASED on later evidence
+#: (§31): the run-rate shape. Today's model reads both questions otherwise.
+MISREAD_RELEASED = {98: "the forecast's METHOD",
+                    121: "a KFI->completion CONVERSION %"}
 
 #: Correct readings held with the misreads because their plan is the same
 #: shape. Legacy answers them correctly meanwhile.
-HELD_WITH_THEM = {87, 112, 113}
+HELD_WITH_THEM = {87}
 
 
 def _compiled(case):
@@ -187,14 +198,15 @@ def _in_the_run_rate_shape(case):
             == ["forecast_completion_rate"])
 
 
-def test_why_the_run_rate_hold_stays_on_the_latest_readings():
-    """The 2026-09-30 full bank moved every reading the hold was built for to
-    its own concept — the annualised run-rate [113], the KFI-to-completion
-    rate [121], the Offer pull-through [134] — and the forecast's method [98]
-    asks back. But the 8- and 12-week run-rates [125, 126] arrived in the
-    shape with their window dropped: served, they would be answered with the
-    forecast's own window. The hold stays until they carry their window
-    (vocabulary 2.13.0) and a live run shows it (P0 design §22)."""
+def test_why_the_run_rate_hold_stayed_on_the_0710_readings():
+    """The 2026-09-30 07:10 full bank moved every reading the hold was built
+    for to its own concept — the annualised run-rate [113], the KFI-to-
+    completion rate [121], the Offer pull-through [134] — and the forecast's
+    method [98] asks back. But the 8- and 12-week run-rates [125, 126] arrived
+    in the shape with their window dropped: served, they would be answered
+    with the forecast's own window. The hold stayed until they carry their
+    window (vocabulary 2.13.0) and a live run shows it (P0 design §22) — which
+    the 19:59 run did (below)."""
     latest = {case["n"]: case for case in _LATEST}
     assert len(latest) == 135
     shape = sorted(n for n, case in latest.items() if _in_the_run_rate_shape(case))
@@ -205,7 +217,42 @@ def test_why_the_run_rate_hold_stays_on_the_latest_readings():
                        (134, "stage_pull_through")):
         payload = latest[n]["raw_model_payload"]
         assert [m["concept"] for m in payload["measures"]] == [concept], n
-    assert ("point_in_time", "forecast_completion_rate") in forecast_rt.HELD_READINGS
+
+
+_RELEASE = json.loads((_FIXTURE.parent / "qb_recorded_intents_20260930_1959.json")
+                      .read_text())["cases"]
+
+
+def test_the_run_rate_hold_is_released_on_the_1959_readings():
+    """The hold's own condition, met by a live run (19:59, vocabulary 2.18.0;
+    P0 design §31): in the run-rate shape, the method [98] asks back, the
+    8- and 12-week run-rates [125, 126] carry their window — which the
+    measure, stated only for its current window, refuses — and what remains
+    is the current run-rate [112], which it answers. The KFI-to-completion
+    rate [121] and the annualised run-rate [113] read as their own concepts.
+    [134] met the provider's credit limit and is unmeasured, not misread."""
+    latest = {case["n"]: case for case in _RELEASE}
+    assert len(latest) == 135
+    shape = sorted(n for n, case in latest.items() if _in_the_run_rate_shape(case))
+    assert shape == [98, 112, 125, 126]
+    assert latest[98]["recorded"]["compile_outcome"] == "CLARIFY"
+    assert latest[112]["raw_model_payload"]["time"] == {"form": "current"}
+    for n, window in ((125, "8-week"), (126, "12-week")):
+        assert latest[n]["raw_model_payload"]["time"]["labels"] == [window]
+    for n, concept in ((113, "annualised_completion_run_rate"),
+                       (121, "stage_completion_rate")):
+        payload = latest[n]["raw_model_payload"]
+        assert [m["concept"] for m in payload["measures"]] == [concept], n
+    assert latest[134]["recorded"]["reason_codes"] == ["MODEL_UNAVAILABLE"]
+    assert ("point_in_time", "forecast_completion_rate") \
+        not in forecast_rt.HELD_READINGS
+    routes = {}
+    for n in (112, 125, 126):
+        plan = _compiled(latest[n]).plan.to_dict()
+        routes[n] = forecast_rt.check_eligibility(plan)[:2]
+    assert routes[112] == (True, "")
+    assert routes[125] == (False, forecast_rt.PERIOD_NOT_SUPPORTED)
+    assert routes[126][0] is False
 
 
 def test_a_run_rate_that_keeps_its_window_is_declined_not_answered():

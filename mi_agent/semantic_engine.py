@@ -95,6 +95,25 @@ def binding_for(measure: _model.Measure, plan: Any
 # the perimeter every declared figure shares
 # --------------------------------------------------------------------------- #
 
+def period_as_stated(m: _model.Measure, period: Mapping[str, Any]
+                     ) -> Mapping[str, Any]:
+    """The plan's period as THIS figure reads it.
+
+    A figure stated only looking forward — a projection — has no "now": the
+    current state, or no period at all, is the figure as its owner publishes
+    it, over its own horizon ("the base forecast" is the base line of the
+    forecast, not a figure for today). The same rule as a change form owning
+    its window (`plan_reading.names_latest_pair`): where the question states
+    no horizon, the owner's is read, and the answer states it. A stated
+    horizon, or any other period, is read as stated.
+    """
+    form = str(period.get("form") or "")
+    if (form in ("", "current") and "forward_looking" in m.periods
+            and "current" not in m.periods):
+        return {**dict(period), "form": "forward_looking"}
+    return period
+
+
 def check(model: _model.SemanticModel, plan: Any, measure: str, operation: str,
           *, held: Optional[Mapping[Tuple[str, str], str]] = None
           ) -> Tuple[bool, str, str]:
@@ -165,6 +184,7 @@ def check(model: _model.SemanticModel, plan: Any, measure: str, operation: str,
     if not (axes or filters or m.value or m.series):
         return (False, DIMENSION_NOT_SUPPORTED,
                 f"{measure} is published per {sorted(m.by)}; break it down")
+    period = period_as_stated(m, period)
     form = str(period.get("form") or "")
     if form not in m.periods:
         return (False, PERIOD_NOT_SUPPORTED,

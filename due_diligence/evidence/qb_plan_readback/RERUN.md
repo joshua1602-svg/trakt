@@ -410,3 +410,15 @@ intents added beside the baseline's.
                 retry): a "what changed" summary may name the headline figures
                 it states (§30). Suites: no new failure. Next: the full bank
                 (`all`, the D13 measurement), then a third held-out set
+    2026-09-30  19:59:06 UTC full bank on 8463fd03 (135 asked, all recorded;
+                files uploaded): 104 answered, 31 declined, none by the legacy
+                path. Must-answer 80/88. The last eight questions [128]-[135]
+                met the model provider's credit limit (INTERPRETER_FAILURE) —
+                six of the eight must-answer misses; unmeasured, to be asked
+                again alone. Real: [112] current run rate (hold), [117] base
+                forecast (read as "now"), and "expected completions by month"
+                led with the weighted amount (D16). Built (design §31): the
+                run-rate hold released on this run's readings
+                (qb_recorded_intents_20260930_1959.json), a projection read as
+                "now" is its owner's horizon, D16 in each month (vocabulary
+                2.19.0). Not deployed yet

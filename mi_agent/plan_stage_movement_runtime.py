@@ -410,7 +410,7 @@ def _execute_catalogue(body: Mapping[str, Any],
         _engine.requires_met(binding, history_model, axis or member)
         shape, value, cells, paths, extra = _engine.serve_figure(
             m, history_model, axis=axis, member=member, binding=binding,
-            period=body.get("period") or {})
+            period=_engine.period_as_stated(m, body.get("period") or {}))
     except _engine.Refusal as refusal:
         return StageMovementOutcome(ok=False, reason=refusal.reason,
                                     detail=refusal.detail[:300])

@@ -154,7 +154,12 @@ from mi_agent import semantic_model as _semantic_model
 #: extracts (£1.18bn) where the pipeline's own change (+£2.9m on £969.8m) was
 #: asked for. Each now says it counts cases BETWEEN STAGES, and that a change
 #: in the pipeline's size or value is the pipeline's own figures (D15).
-VOCABULARY_VERSION = "2.18.0"
+#:
+#: 2.19.0 (P0 design §31): D16 in each month — what is expected to complete
+#: month by month is the amount at face value, as in one month, with the
+#: weighted figure stated alongside; the weighted figure's other name ("the
+#: expected completions") is the forecast's, not a month's.
+VOCABULARY_VERSION = "2.19.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -747,12 +752,14 @@ SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
     "weighted_expected_funded_amount": (
         "The LIVE pipeline weighted by each case's probability of completing — "
         "the Pipeline tab's weighted expected funded figure, also called the "
-        "weighted pipeline or the expected completions from the pipeline. It is "
-        "the pipeline part of the forecast funded balance. What is expected or "
-        "due to complete IN A MONTH (overdue, this month, next month) is the "
-        "pipeline AMOUNT of the cases due then, at face value — name this "
-        "measure there only when the question asks for the weighted or "
-        "probability-adjusted figure (owner decision D16). It is NOT the "
+        "weighted pipeline, or the pipeline's expected completions as the "
+        "forecast counts them. It is the pipeline part of the forecast funded "
+        "balance. What is expected or due to complete IN A MONTH (overdue, "
+        "this month, next month) or IN EACH MONTH (a breakdown by expected "
+        "completion month) is the pipeline AMOUNT of the cases due then, at "
+        "face value — name this measure there only when the question asks for "
+        "the weighted or probability-adjusted figure; the answer states both "
+        "(owner decision D16). It is NOT the "
         "pipeline amount (unweighted), and NOT the forecast funded balance "
         "(which adds the funded book): 'the expected funded BALANCE' is the "
         "forecast funded balance — a balance the book is expected to hold — "

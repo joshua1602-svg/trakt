@@ -2080,3 +2080,73 @@ reconciles the plan's measure. The pipeline declares `serves_figures_together`
 for its summary, as stage movement does, and the composer asks every runtime
 that declares it rather than one. Pinned in
 `test_pipeline_previous_snapshot.py`.
+
+
+## 31. The 19:59 full bank: the run-rate hold released; a projection has no "now"; D16 in each month (2026-09-30)
+
+8463fd03 (vocabulary 2.18.0), all 135 questions: 104 answered, 31 declined,
+none by the legacy path (D18). Must-answer (D13): 80 of 88. Of the eight
+must-answer misses, six are the last questions of the run, asked after the
+model provider's credit balance ran out (`INTERPRETER_FAILURE`, eight in all,
+[128]–[135]) — unmeasured, not misread; they are asked again, alone, after the
+next deploy. The other two are real, and so is one inconsistency:
+
+    [112]  "What is the current completion run rate?" — declined
+           AMBIGUOUS_READING: the run-rate shape was still held (§22).
+    [117]  "What is the base forecast?" — declined PERIOD_NOT_SUPPORTED: read
+           as the base line of the projected balance, as at "now".
+    [pipeline_evolution_007]  "Show expected completions by month" — answered
+           with the WEIGHTED amount per month, where "next month" is answered
+           at face value (D16). Two readings of one idea.
+
+The recorded readings (no figures) are
+`qb_recorded_intents_20260930_1959.json`.
+
+### 31.1 The run-rate hold is released, on its own condition
+
+The hold on `point_in_time / forecast_completion_rate` (§14.6, kept in §22)
+was to lift only when a live run showed the readings it was built for had
+moved to their own concepts. The 19:59 readings show it: in the shape now are
+only the forecast's method [98] (which asks back), the 8- and 12-week
+run-rates [125, 126] (which carry their window — the measure, stated only for
+its current window, refuses them), and the current run-rate [112], which the
+measure answers. The KFI-to-completion rate [121] reads as the stage
+completion rate, the annualised run-rate [113] as its own measure. The entry
+is removed from `HELD_READINGS`; the projection hold stays (its readings have
+not been shown to move). A guard removed on evidence, not relaxed for a
+question: pinned by
+`test_production_bank_perimeter.py::test_the_run_rate_hold_is_released_on_the_1959_readings`.
+
+### 31.2 A projection has no "now" (`semantic_engine.period_as_stated`)
+
+A figure published only looking forward — the projected balance and its
+scenario lines — has no value for today. When the question states no horizon
+("the base forecast", "the forecast", read as current or with no period), the
+figure is its owner's over the owner's own horizon, and the answer states the
+horizon — the same rule as a change form owning its window (§29.1). A stated
+horizon, or any other period, is read as stated and refused where the owner
+does not publish it. The rule is read off the semantic model (a measure whose
+periods are `forward_looking` and not `current`), so it applies to every
+forecast and stage figure declared that way, now and later; the forecast and
+stage runtimes and the engine's eligibility check all apply it. Pinned in
+`test_forecast_semantic_model.py`.
+
+### 31.3 D16 in each month
+
+D16 settled a month's expected completions: face value is the headline, the
+weighted figure beside it. A breakdown BY expected completion month is the
+same figure for each month, so it is the same rule: the model is told so
+(vocabulary 2.19.0), and — whichever measure the reading names — the answer
+carries the other figures the Pipeline tab publishes for the same cases in
+each month (face value, weighted, case count) as columns, with the other
+amount in the sentence. A figure a sibling part of a composed answer states
+is not restated. Read from the tab's own breakdown, never computed; a month
+the tab states no companion for says "n/a", never zero. Pinned in
+`test_expected_in_a_month_is_face_value.py`.
+
+### 31.4 Recorded, not changed
+
+"Show pipeline amount by product" and "by LTV band" were not reached (credit).
+The origination-channel breakdown on the pipeline shows the extract's broker
+values: that is what the extract carries in the field, a data question for the
+owner, not a reading or runtime error.

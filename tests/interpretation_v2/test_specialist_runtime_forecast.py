@@ -138,13 +138,15 @@ def test_the_milestone_and_balance_plans_are_eligible():
 
 
 def test_the_shapes_production_used_for_several_questions_are_held():
-    """The owner computes them; the plan cannot yet say which figure it means."""
-    for plan in (_plan(**_RUN_RATE), _plan(**_PROJECTION)):
-        ok, why, detail = forecast_rt.check_eligibility(plan)
-        assert (ok, why) == (False, forecast_rt.AMBIGUOUS_READING)
-        # 2.7.0 gave each misread question its own concept; the hold lifts
-        # only on a live run's evidence, and says so.
-        assert "held until a live run shows the readings" in detail
+    """The owner computes them; the plan cannot yet say which figure it means.
+    The run-rate shape was released on the 19:59 readings (§31); the
+    projection of the forecast funded balance is still held."""
+    ok, why, detail = forecast_rt.check_eligibility(_plan(**_PROJECTION))
+    assert (ok, why) == (False, forecast_rt.AMBIGUOUS_READING)
+    # 2.7.0 gave each misread question its own concept; the hold lifts
+    # only on a live run's evidence, and says so.
+    assert "held until a live run shows the readings" in detail
+    assert forecast_rt.check_eligibility(_plan(**_RUN_RATE))[:2] == (True, "")
 
 
 def test_a_grain_asks_for_a_series_and_is_refused():

@@ -222,10 +222,15 @@ HELD_READINGS: Mapping[Tuple[str, str], str] = {
         "this shape arrived for the expected funded balance [87], but also for "
         "the extrapolation curve [114], the base scenario [117] and the funded "
         "share of the forecast [94] — four different figures"),
-    ("point_in_time", "forecast_completion_rate"): (
-        "this shape arrived for the completion run-rate [112, 113], but also "
-        "for a KFI-to-completion conversion rate [121] and for the forecast's "
-        "method [98]"),
+    # ("point_in_time", "forecast_completion_rate") — RELEASED on the 19:59
+    # full bank (2026-09-30, vocabulary 2.18.0; P0 design §31), by the hold's
+    # own condition: the readings moved to their own concepts. The KFI-to-
+    # completion rate [121] reads as the stage completion rate, the annualised
+    # run-rate [113] as its own measure, the forecast's method [98] asks back,
+    # and the 8- and 12-week run-rates [125, 126] keep their window, which
+    # the measure (stated only for the current window) refuses. What remains in
+    # the shape is the current run-rate [112], which it answers.
+    # `qb_recorded_intents_20260930_1959.json` is the evidence.
 }
 
 #: A milestone's threshold: what the owner's rule answers, and nothing wider.
@@ -679,7 +684,8 @@ def _execute_catalogue(body: Mapping[str, Any], *, request: Mapping[str, Any],
 
     shape, value, cells, paths, extra = _engine.serve_figure(
         m, payload, axis=axis, member=member, binding=binding,
-        period=body.get("period") or {}, unavailable=FORECAST_UNAVAILABLE)
+        period=_engine.period_as_stated(m, body.get("period") or {}),
+        unavailable=FORECAST_UNAVAILABLE)
 
     context = {key: _semantic_model.read(payload, path)
                for key, path in m.context.items()}

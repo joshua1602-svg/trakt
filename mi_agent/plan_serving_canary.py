@@ -740,21 +740,43 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                       if axis == "expected_completion_month"
                       else (lambda r: -(r["value"] or 0.0)))
         axis_label = _PIPELINE_AXES.get(str(axis), str(axis).replace("_", " "))
+        # D16 BY MONTH (§31): the figures for the same cases the breakdown
+        # does not lead with, less any a sibling part of a composed answer
+        # states as its own figure.
+        figures = receipt.get("completion_figures") or {}
+        companions = [k for k in ("amount", "weighted", "count")
+                      if figures and k != receipt.get("measure_kind")
+                      and k not in {pipeline_rt.SUPPORTED_MEASURES[m]
+                                    for m in composition.siblings(plan)
+                                    if m in pipeline_rt.SUPPORTED_MEASURES}]
+        for r in rows:
+            for k in companions:
+                r[f"{k}_companion"] = (figures.get(str(r[str(axis)])) or {}).get(k)
         artefacts = [_artefact(
             "table", f"Pipeline by {axis_label}", rows=rows,
             columns=[{"key": str(axis), "label": axis_label.capitalize()},
-                     {"key": "value", "label": label}],
+                     {"key": "value", "label": label}]
+                    + [{"key": f"{k}_companion", "label": _COMPANION_LABEL[k]}
+                       for k in companions],
             description=f"{len(rows)} rows.")]
         named = (_stage_name if axis == "pipeline_stage" else str)
         if axis == "expected_completion_month":
             # A TIMELINE reads in date order, every month named (capped for a
             # long one); the table has them all.
             shown = rows[:_SENTENCE_ROWS]
+            more = (f", and {len(rows) - len(shown):,} more"
+                    if len(rows) > len(shown) else "")
             answer = (f"The {phrase} by {axis_label}: "
                       + ", ".join(f"{named(r[str(axis)])} {_shown(r['value'])}"
                                   for r in shown)
-                      + (f", and {len(rows) - len(shown):,} more"
-                         if len(rows) > len(shown) else "") + f"{as_at}.")
+                      + more + f"{as_at}.")
+            for k in companions:
+                if k == "count":
+                    continue                      # in the table
+                answer += (f" {_COMPANION_LABEL[k]}: "
+                           + ", ".join(f"{named(r[str(axis)])} "
+                                       f"{_companion_shown(r.get(f'{k}_companion'))}"
+                                       for r in shown) + more + ".")
         else:
             # THE ANSWER STANDARD: the measure, the grouping, the leaders and
             # how many groups — the same sentence a funded breakdown makes.
@@ -1589,6 +1611,20 @@ def _catalogue_notes(receipt: Mapping[str, Any]) -> List[Dict[str, str]]:
         notes.append({"field": "definition",
                       "note": f"owner decision {receipt.get('definition_decision')}"})
     return notes
+
+
+#: How a companion figure is named beside the one a breakdown leads with.
+_COMPANION_LABEL: Mapping[str, str] = {
+    "amount": "At face value",
+    "weighted": "Weighted by each case's chance of completing",
+    "count": "Cases",
+}
+
+
+def _companion_shown(value: Any) -> str:
+    """A companion amount the owner published, or "n/a" where it published
+    none — never a zero it did not state."""
+    return "n/a" if value is None else _money(value)
 
 
 def _timing_companions(kind: Any, figures: Mapping[str, Any], *,
