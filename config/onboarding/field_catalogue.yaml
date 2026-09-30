@@ -253,7 +253,7 @@ sections:
         help: >-
           Whether the book is a new SPV before securitisation or an established
           client. It sets what "scale" means in MI answers: £100MM for a new SPV,
-          £200MM of assets under management for an established client.
+          £250MM of assets under management for an established client.
         scope: client
         source: operator_supplied
         type: enum

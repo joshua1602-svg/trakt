@@ -4,7 +4,7 @@ The 2026-09-29 production bank asked "When does the book reach scale?" and
 "What is the expected time to securitisation scale?". The model, correctly,
 asked for an amount; the legacy path answered with a fixed ladder of round
 numbers and no date. D9: scale is specific to the portfolio — an established
-client is at scale once its assets under management exceed £200MM; a new SPV
+client is at scale once its assets under management exceed £250MM (owner decision 2026-09-30; was £200MM); a new SPV
 before securitisation has scale at £100MM — recorded as `portfolio.stage` in
 the client configuration, never a figure the model invents.
 
