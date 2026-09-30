@@ -1404,6 +1404,9 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
     member = receipt.get("member") or None
     axis = (receipt.get("group_field_keys") or [None])[0]
     banded = False
+    # The semantic model's caveat, as its own sentence, with every shape.
+    caveat = str(receipt.get("caveat") or "").strip().rstrip(".")
+    caveat = f" {caveat}." if caveat else ""
 
     if shape == "series":
         columns = list(receipt.get("series_columns") or ())
@@ -1429,7 +1432,8 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
         return answer, artefacts, len(columns) > 1 or bool(member)
 
     if shape == "grouped":
-        axis_label = _FORECAST_AXES.get(str(axis), _words(axis))
+        axis_label = (receipt.get("axis_label")
+                      or _FORECAST_AXES.get(str(axis), _words(axis)))
         rows = [dict(c) for c in (outcome.cells or ())]
         if str(axis) in _OWNER_ORDERED_AXES:
             # The owner's order IS the answer (downside → upside, the ladder
@@ -1452,7 +1456,7 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
                 unplaced_amount=float(basis.get("unplacedForecastAmount") or 0.0),
                 unplaced_of="the forecast")
             answer = f"{answer} {note}."
-        answer = f"{answer} {as_at}"
+        answer = f"{answer}{caveat} {as_at}"
         also = [k for k in (rows[0] if rows else {}) if k not in (axis, "value")]
         columns = ([{"key": str(axis), "label": axis_label.capitalize()},
                     {"key": "value", "label": label}]
@@ -1464,14 +1468,18 @@ def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
 
     value = outcome.value
     if member:
-        answer = (f"{label} ({_FORECAST_AXES.get(member['dimension'], _words(member['dimension']))}: "
+        member_axis = (receipt.get("axis_label")
+                       or _FORECAST_AXES.get(member['dimension'],
+                                             _words(member['dimension'])))
+        answer = (f"{label} ({member_axis}: "
                   f"{_value_words(member['dimension'], member['value'])}): "
-                  f"{_shown_in(unit, value)}. {as_at}")
+                  f"{_shown_in(unit, value)}.{caveat} {as_at}")
         banded = member.get("dimension") == "forecast_scenario"
     else:
         explained = _explained(receipt)
         answer = (f"{label}: {_shown_in(unit, value)}"
-                  + (f" — {explained}" if explained else "") + f". {as_at}")
+                  + (f" — {explained}" if explained else "")
+                  + f".{caveat} {as_at}")
     kpis = [{"field": str(receipt.get("measure_concept")), "label": label,
              "value": _shown_in(unit, value), "rawValue": value}]
     artefacts = [make("kpi", label, kpis=kpis, description="Governed forecast.")]
@@ -1779,6 +1787,27 @@ def _attempt_change_form(body: Dict[str, Any], *, plan: Mapping[str, Any],
     return dict(payload), ""
 
 
+def _history(pipeline_history: Any) -> Any:
+    """The pipeline's case history, resolved by the branch that reads it.
+
+    The caller may hand it over as a provider `f()` rather than the model: the
+    history is built from every weekly extract, and a funded question — most of
+    them — never reads it, so it is fetched only by a pipeline, stage-movement
+    or forecast plan. A provider that fails degrades to None, as an unresolved
+    input always has, and the runtime that needed it refuses.
+    """
+    if not callable(pipeline_history):
+        return pipeline_history
+    from trakt_core import perf as _perf
+    with _perf.stage("governed.pipeline_history"):
+        try:
+            return pipeline_history()
+        except Exception:  # noqa: BLE001 - the canary never costs an answer
+            logger.warning("pipeline history could not be resolved for the "
+                           "governed attempt", exc_info=True)
+            return None
+
+
 def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              render_portfolio_id: Optional[str], as_of: Optional[str],
              snapshot_store: Any = None,
@@ -1844,7 +1873,7 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
             render_portfolio_id=render_portfolio_id, as_of=as_of,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
-            pipeline_history=pipeline_history, pipeline_run_id=pipeline_run_id)
+            pipeline_history=_history(pipeline_history), pipeline_run_id=pipeline_run_id)
 
     # STAGE MOVEMENT, a second pipeline owner, above the gate for the same
     # reason: its plans are about the pipeline and the funded runtimes would
@@ -1853,7 +1882,7 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
         return _attempt_stage_movement(
             body, plan=plan, question=question,
             pipeline_root=pipeline_root, pipeline_client_id=pipeline_client_id,
-            pipeline_history=pipeline_history,
+            pipeline_history=_history(pipeline_history),
             render_portfolio_id=render_portfolio_id, as_of=as_of)
 
     # FORECAST, the derived population, likewise above the gate: a forecast plan
@@ -1864,7 +1893,7 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
         return _attempt_forecast(
             body, plan=plan, question=question, client_id=client_id,
             output_root=output_root, pipeline_root=pipeline_root,
-            pipeline_history=pipeline_history, run_id=pipeline_run_id,
+            pipeline_history=_history(pipeline_history), run_id=pipeline_run_id,
             funded_frame_resolver=funded_frame_resolver, semantics=semantics,
             render_portfolio_id=render_portfolio_id, as_of=as_of)
 

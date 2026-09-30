@@ -2082,13 +2082,17 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         pipeline plan with no source refuses rather than being answered from
         anything else.
         """
+        # THE HISTORY AS A PROVIDER, not the model: it is built from every
+        # weekly extract, and only a pipeline, stage-movement or forecast plan
+        # reads it — the canary resolves it in that branch (`_history`), so a
+        # funded question no longer lists the extracts and copies the model.
         found: Dict[str, Any] = {"pipeline_source": None, "pipeline_root": None,
                                  "pipeline_client_id": cid,
-                                 "pipeline_history": None}
+                                 "pipeline_history": (
+                                     lambda: ds_mod._pipeline_history(cid))}
         try:
             found["pipeline_source"] = ds_mod._resolve_pipeline_source(cid, rid)
             found["pipeline_root"] = ds_mod._pipeline_discovery_root()
-            found["pipeline_history"] = ds_mod._pipeline_history(cid)
         except Exception:  # noqa: BLE001 - the canary never costs an answer
             logger.warning("pipeline inputs could not be resolved for the "
                            "governed attempt", exc_info=True)
@@ -2107,9 +2111,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # temporal path is unavailable and the legacy envelope serves. A slice 1
         # request never reads any of this.
         from mi_agent_api import governed_snapshot_store as _snapshot_store
-        with _perf.stage("mi_query.governed_inputs"):
+        with _perf.stage("mi_query.governed_inputs.snapshot_store"):
             snapshot_store = _snapshot_store.build_store(ds, client_id)
+        with _perf.stage("mi_query.governed_inputs.source_registry"):
             source_registry = _source_registry(df, client_id)
+        with _perf.stage("mi_query.governed_inputs.pipeline"):
             pipeline_inputs = _pipeline_inputs(ds, client_id, run_id)
         return _plan_serving.serve(
             question=req.question, context=context, client_id=client_id,

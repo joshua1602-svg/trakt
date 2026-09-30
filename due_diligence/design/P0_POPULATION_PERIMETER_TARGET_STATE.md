@@ -1597,3 +1597,72 @@ It is conditional on completing, and says so; the share that complete is
 'by expected completion month/date' and no longer claims 'when are cases
 expected to complete'. Vocabulary 2.14.0. Pinned by
 `test_expected_completion_date.py`.
+
+## 24. The 10:26 check; a grouped figure is a breakdown; history on demand (2026-09-30)
+
+The 11-question check on b43cd904 (vocabulary 2.14.0, governed first):
+[87] £94.1m and [82] +£2.9m served correctly; [102] and [125, 126] declined
+as they should; [122, 128] wait on OCC activating ERE's stage (PR #510).
+[135] "When are pipeline cases expected to complete?" was refused.
+
+### 24.1 A grouped figure is a breakdown (normalisation rule 7)
+
+The model's reading of [135] was right in everything that carries meaning:
+`pipeline_stage_movement`, `expected_completion_date`, grouped by
+`origin_stage`. It labelled the operation `point_in_time`, and the compiler
+refuses a grouping on a single figure — with a reason that names the meaning
+it refused: "a grouping makes output 'primary' a breakdown, not a
+point_in_time". The operation label and the grouping state one thing twice
+(how many figures the answer is), so the label has one canonical value. That
+is a representational redundancy of the kind `normalise.py` exists to remove, not
+a reading to correct:
+
+    point_in_time + every output grouped  ->  breakdown
+        only when the capability produces a breakdown (limit_assessment does
+        not, and keeps its refusal), and only when EVERY output groups (a
+        mixed intent keeps its refusal — rewriting it would make the
+        ungrouped output the unsupported one).
+
+It adds no dimension, drops no filter, picks no member and infers no ranking.
+A question about one member keeps its filter, so its breakdown is that
+member's row. The model's label still travels in `intent_claims`; the rewrite
+is recorded in plan provenance. Normal form 1.1; the plan identity is
+unchanged (provenance is outside it). Pinned by
+`test_grouped_figure_is_a_breakdown.py` and, on the recorded reading, by
+`test_expected_completion_date.py`.
+
+The same answer by stage exposed two presentation faults, fixed in the
+semantic model rather than the renderer. The axis read "from stage" (the
+rates' name for `origin_stage`); a binding may now name its axis, and the date
+names it "current stage". The "not a promise" caveat went only with the single
+figure, because it sat inside `explain`, which carries whole-pipeline
+companion figures; a measure may now declare a `caveat` that goes with every
+shape:
+
+    Expected completion date by current stage: KFI 2026-05-22, Application
+    2026-06-08, Offer 2026-06-08. A date for the cases that complete, not a
+    promise that they will. As at pipeline history 2026-05-29.
+
+A stage's median date can fall before the as-at date: the stage's live cases
+are, at the median, already past the book's typical time to complete from it.
+The table carries `pastTypical` beside each date. Whether such cases should be
+dated differently is a methodology decision for the owner, and is not taken
+here.
+
+### 24.2 Speed: the history on demand, and where the rest goes
+
+Governed answers still took ~27-32s with the legacy path gone (§23.2), against
+a median model time of 5.5s. The production seam built the governed inputs for
+every attempt, the pipeline's case history among them — a listing of every
+weekly extract and a copy of the cached model — and a funded question never
+reads it. The seam now hands the canary a provider, resolved only by a
+pipeline, stage-movement or forecast plan (`plan_serving_canary._history`;
+`test_history_is_read_only_when_needed.py`).
+
+The rest is measured rather than guessed: every bank question records its
+per-stage timing (85c3fd41), now with each governed input timed on its own —
+`mi_query.governed_inputs.snapshot_store`, `.source_registry`, `.pipeline`,
+`governed.interpret_and_compile`, `governed.pipeline_history`. The first
+trend question after a deploy (346s on [82]) builds the weekly history cold;
+precomputing it when an extract arrives is the next step once the timings name
+the order of the remaining costs.

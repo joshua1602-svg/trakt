@@ -277,3 +277,15 @@ intents added beside the baseline's.
                 stage pending, PR #510); [135] refused at compile — read back
                 from this START TIME. Governed answers still ~27-32s: the
                 legacy path was not the cost
+    2026-09-30  the 10:26:01 check read back (7f3064ca prints what the model
+                read and why the compiler refused): [135] was read RIGHT —
+                pipeline_stage_movement, expected_completion_date by
+                origin_stage — but labelled point_in_time, and the compiler
+                refuses a grouped single figure ("a grouping makes output
+                'primary' a breakdown"). Normalisation rule 7 (normal form
+                1.1): a single figure whose every output groups IS a
+                breakdown. The by-stage answer now names the axis 'current
+                stage' and carries the caveat. The pipeline history is
+                fetched only by a plan that reads it; per-input timing on
+                every bank question. Design §24. OCC suite on main with and
+                without PR #510: the same 34 failures, none new (PR comment)

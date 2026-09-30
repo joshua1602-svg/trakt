@@ -102,3 +102,59 @@ def test_the_model_is_told_it_is_a_date_from_history_and_not_the_records():
     month = SPECIALIST_DIMENSION_DEFINITIONS["expected_completion_month"]
     assert "when are cases expected to complete" not in month
     assert "`expected_completion_date`" in month
+
+
+# --------------------------------------------------------------------------- #
+# the 10:26 check's reading: a single figure, grouped (normalisation rule 7)
+# --------------------------------------------------------------------------- #
+
+def _read_at_1026():
+    """The model's own reading of [135] on the 2026-09-30 10:26 check, as the
+    readback printed it: the right measure and axis, labelled a single figure."""
+    return {"schema_version": "candidate_intent/1.0",
+            "capability": "pipeline_stage_movement",
+            "operation": "point_in_time", "population": {"base": "pipeline"},
+            "measures": [{"concept": "expected_completion_date"}],
+            "dimensions": ["origin_stage"], "time": {"form": "current"}}
+
+
+def test_the_1026_reading_is_the_breakdown_by_stage(history):
+    from mi_agent.interpretation_v2.compiler import (CompilerContext,
+                                                     DeterministicCompiler)
+    from mi_agent.interpretation_v2.intent import parse_candidate_intent
+    result = DeterministicCompiler(CompilerContext()).compile(
+        parse_candidate_intent(_read_at_1026()))
+    assert result.plan is not None, [(r.code, r.detail) for r in result.reasons]
+    plan = result.plan.to_dict()
+    assert plan["operation"] == "breakdown"
+    assert any("grouped_figure" in note for note in plan["provenance"]["notes"])
+    # The model's own label still travels.
+    assert result.intent.operation == "point_in_time"
+    out = _run(plan, history)
+    assert {c["origin_stage"]: c["value"] for c in out.cells} == {
+        s: row.get("medianDate")
+        for s, row in history["expectedCompletionByStage"].items()}
+
+
+def test_the_1026_reading_is_answered_with_a_date_per_stage(monkeypatch,
+                                                            history):
+    payload = _served(_read_at_1026(), monkeypatch, history)
+    assert payload is not None
+    answer = payload["answer"]
+    # The stage a live case is at now — not the "from stage" of a rate.
+    assert answer.startswith("Expected completion date by current stage: ")
+    for stage, row in history["expectedCompletionByStage"].items():
+        if row.get("medianDate"):
+            assert row["medianDate"] in answer, (stage, answer)
+    # The caveat goes with every shape, not only the single figure.
+    assert "not a promise that they will" in answer
+
+
+def test_one_stage_says_it_is_the_current_stage_and_carries_the_caveat(
+        monkeypatch, history):
+    intent = dict(_intent_for_the_whole_pipeline(),
+                  filters=[{"concept": "origin_stage", "comparator": "eq",
+                            "value": "OFFER"}])
+    answer = _served(intent, monkeypatch, history)["answer"]
+    assert answer.startswith("Expected completion date (current stage: Offer): ")
+    assert "not a promise that they will" in answer

@@ -250,6 +250,10 @@ def _member(member: Tuple[str, str], payload: Mapping[str, Any],
     return (found or {}).get(binding.get("value")), path
 
 
+def _axis_label(m: _model.Measure, axis: Optional[str]) -> Optional[str]:
+    return (m.by.get(axis) or {}).get("label") if axis else None
+
+
 def _evidence(member: Tuple[str, str], payload: Mapping[str, Any],
               binding: Mapping[str, Any]) -> Dict[str, Any]:
     """The owner's own evidence for ONE member of a map — the counts it
@@ -377,6 +381,11 @@ def receipt(model: _model.SemanticModel, m: _model.Measure, plan: Any, *,
         "inputs": inputs_used(model, m, payload),
         "context": context,
         "explain": m.explain if (shape == "scalar" and not member) else "",
+        "caveat": m.caveat,
+        # The axis as THIS figure names it, where the file says: the same
+        # `origin_stage` is the stage a rate is measured from and the stage a
+        # live case is at now.
+        "axis_label": _axis_label(m, axis or (member[0] if member else None)),
         **context,
         **dict(extra),
     }

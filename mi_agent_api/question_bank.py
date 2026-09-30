@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
 import time
 from collections import Counter, defaultdict
@@ -168,6 +169,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     tally: Dict[str, Counter] = defaultdict(Counter)
     routes: Counter = Counter()
     served: Counter = Counter()
+    stage_ms: Dict[str, List[float]] = defaultdict(list)
     with args.out.open("w", encoding="utf-8") as fh:
         for row in rows:
             rec = run_one(row, portfolio=args.portfolio, lens=args.lens,
@@ -183,6 +185,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                   f"{str(rec['route'] or '-'):<26} "
                   f"{rec['seconds']:>5}s  {row['question'][:60]!r}\n"
                   f"{'':8} -> {snippet}", flush=True)
+            stages = (rec.get("timing") or {}).get("stages") or {}
+            for name, ms in stages.items():
+                stage_ms[name].append(float(ms))
+            if stages:
+                print(f"{'':8} time: {_heaviest(stages)}", flush=True)
 
     print("\nSUMMARY  (answered / refused / error)")
     for cat in sorted(tally):
@@ -194,8 +201,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("\nSERVED BY  (NEW = governed plan; '-' = canary not engaged)")
     for how, n in served.most_common():
         print(f"  {how:<60} {n}")
+    if stage_ms:
+        print("\nTIME BY STAGE  (median / max seconds, questions that ran it)")
+        for name, values in sorted(stage_ms.items(),
+                                   key=lambda kv: -statistics.median(kv[1])):
+            print(f"  {name:<44} {statistics.median(values) / 1000:>6.1f} "
+                  f"{max(values) / 1000:>7.1f}  {len(values):>3}")
     print(f"\nfull answers: {args.out.resolve()}")
     return 0
+
+
+def _heaviest(stages: Dict[str, Any], limit: int = 4) -> str:
+    """The stages that took longest, in seconds — names only, never data."""
+    top = sorted(stages.items(), key=lambda kv: -float(kv[1]))[:limit]
+    return ", ".join(f"{name} {float(ms) / 1000:.1f}s" for name, ms in top)
 
 
 if __name__ == "__main__":

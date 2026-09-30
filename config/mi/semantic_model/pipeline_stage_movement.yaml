@@ -143,10 +143,13 @@ measures:
     explain: >-
       the median over the {live_case_count} live cases of the date each was first
       seen at its stage plus the book's median time to complete from that
-      stage, measured on the cases that did complete — a date for the cases
-      that complete, not a promise that they will
+      stage, measured on the cases that did complete
+    caveat: >-
+      A date for the cases that complete, not a promise that they will
     by:
       origin_stage:
+        # Here the stage a live case is at NOW, not a stage it moved from.
+        label: current stage
         map: expectedCompletionByStage
         value: medianDate
         # What each date rests on, stated with it: the live cases, the median

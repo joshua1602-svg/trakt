@@ -69,6 +69,11 @@ class Measure:
     inputs: Tuple[str, ...] = ()
     context: Mapping[str, str] = field(default_factory=dict)
     explain: str = ""
+    #: A sentence that goes with EVERY answer for this figure, whatever its
+    #: shape — `explain` states the whole-population method with its companion
+    #: figures and so goes with the single figure only; the caveat is what the
+    #: figure is not, and a breakdown or one member needs it as much.
+    caveat: str = ""
     series: Mapping[str, str] = field(default_factory=dict)
     by: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     decision: str = ""
@@ -214,6 +219,7 @@ def _validate(doc: Mapping[str, Any], capability: str) -> SemanticModel:
             periods=_tuple(row.get("periods")), grains=_tuple(row.get("grains")),
             value=row.get("value"), inputs=inputs,
             context=dict(row.get("context") or {}), explain=_text(row.get("explain")),
+            caveat=_text(row.get("caveat")),
             series=dict(row.get("series") or {}), by=by,
             decision=str(row.get("decision") or ""), population=population)
     return SemanticModel(capability=capability, population=home, views=views,

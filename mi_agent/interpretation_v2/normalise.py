@@ -60,12 +60,13 @@ from .vocabulary import (CAPABILITY_CHANGE_FORMS,
 __all__ = ["NORMAL_FORM_VERSION", "PAIR_IMPLYING_OPERATIONS",
            "CANONICAL_PAIR_FORM", "CANONICAL_PAIR_PERIODS_BACK", "BOUNDED",
            "DERIVED_POPULATION_OF", "DERIVED_POPULATION_SPELLINGS",
+           "SINGLE_FIGURE_OPERATION", "GROUPED_FIGURE_OPERATION",
            "LABELS_ARE_WORDING_ONLY", "identity_labels",
            "NormalisationResult", "canonical_intent"]
 
 #: The normal form's own version, separate from the intent schema version: the
 #: schema did not change, the canonicalisation of it is new.
-NORMAL_FORM_VERSION = "candidate_intent_normal_form/1.0"
+NORMAL_FORM_VERSION = "candidate_intent_normal_form/1.1"
 
 # --------------------------------------------------------------------------- #
 # 1. period labels
@@ -174,6 +175,48 @@ DERIVED_POPULATION_OF: Mapping[str, str] = {"forecast": "forecast"}
 #: refused by the runtime that cannot execute them — see
 #: `BOUNDED["forecast_of_the_pipeline"]`.
 DERIVED_POPULATION_SPELLINGS: frozenset = frozenset({"funded"})
+
+
+# --------------------------------------------------------------------------- #
+# 7. a grouped figure is a breakdown
+# --------------------------------------------------------------------------- #
+
+#: "When are pipeline cases expected to complete?" (must-answer [135], the
+#: 2026-09-30 10:26 check) arrived as `point_in_time` over
+#: `expected_completion_date` GROUPED BY `origin_stage`, and was refused: the
+#: compiler forbids a grouping on a single figure because "a grouping makes the
+#: output a breakdown, not a point_in_time" (compiler `_GROUPING_FORBIDDEN`).
+#: The compiler had already named the meaning. The operation label and the
+#: grouping state ONE thing twice — how many figures the answer is — and the
+#: grouping is the slot that says it, so the label has one canonical value.
+#: This is the same redundancy as rule 5's linguistic variants: one request,
+#: two spellings, one of them refused.
+#:
+#: WHAT IT MAY NOT DO. It reads the operation and whether every output groups;
+#: it adds no dimension, drops no filter and picks no member. It fires only when
+#: EVERY output groups (a mixed intent keeps its refusal, because rewriting it
+#: would make the ungrouped output the unsupported one) and only when the
+#: capability produces a breakdown (`limit_assessment` does not, and keeps its
+#: refusal). A question about one member keeps its filter, so the breakdown is
+#: that member's row. A ranking is not inferred: "which stage completes first"
+#: needs an order the reading did not state, and inventing one would be adding
+#: meaning.
+SINGLE_FIGURE_OPERATION = "point_in_time"
+GROUPED_FIGURE_OPERATION = "breakdown"
+
+
+def _every_output_groups(intent: CandidateIntent) -> bool:
+    """The compiler's own test of "grouped", read from the intent's slots.
+
+    An output groups when it names a dimension or a geography grouping, its own
+    or the top-level one it inherits (compiler `_authorise_composition`).
+    """
+    top = intent.geography.requested and intent.geography.group_by
+    outputs = intent.effective_outputs()
+    return bool(outputs) and all(
+        bool(output.dimensions) or top
+        or (output.geography.requested and output.geography.group_by)
+        for output in outputs)
 
 
 @dataclass(frozen=True)
@@ -372,5 +415,20 @@ def canonical_intent(intent: CandidateIntent,
             f"(capability {intent.capability!r} outputs the {derived!r} "
             f"population)")
         intent = replace(intent, population=replace(population, base=derived))
+
+    # -- 7. a grouped figure is a breakdown ---------------------------------- #
+    #
+    # LAST, because rules 3-4 can set the capability, and whether the owner
+    # produces a breakdown is this rule's condition. STRUCTURED SLOTS ONLY: the
+    # operation, the groupings and the capability's own operation set.
+    if (intent.operation == SINGLE_FIGURE_OPERATION
+            and _every_output_groups(intent)):
+        supported = (capability_operations or {}).get(intent.capability)
+        if supported is None or GROUPED_FIGURE_OPERATION in supported:
+            applied.append(
+                f"grouped_figure: operation {SINGLE_FIGURE_OPERATION!r} -> "
+                f"{GROUPED_FIGURE_OPERATION!r} (every output is grouped, so "
+                f"the answer is one figure per member)")
+            intent = replace(intent, operation=GROUPED_FIGURE_OPERATION)
 
     return NormalisationResult(intent=intent, applied=tuple(applied))
