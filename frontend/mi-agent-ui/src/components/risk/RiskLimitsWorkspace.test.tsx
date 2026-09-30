@@ -170,10 +170,11 @@ describe("RiskLimitsWorkspace", () => {
   // asked to remove. The sufficiency-floor caveat is a genuine warning (a
   // stage's forecast falls back to a configured assumption) rather than
   // decorative methodology, and is still asserted.
-  it("still warns when a stage falls back to a configured assumption", async () => {
+  it("still warns when a stage has too little history to be weighted (D21)", async () => {
     render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
     const banner = await screen.findByTestId("forecast-provenance-banner");
-    expect(banner).toHaveTextContent("sufficiency floor"); // KFI fallback caveat
+    expect(banner).toHaveTextContent("too little history"); // KFI caveat
+    expect(banner).not.toHaveTextContent("configured");
     expect(banner).not.toHaveTextContent("completion-trend model");
     expect(screen.queryByRole("button", { name: "View methodology" })).toBeNull();
   });
