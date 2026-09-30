@@ -263,3 +263,9 @@ intents added beside the baseline's.
                 £100MM), not established; £250MM is the established stage's
                 threshold. Authored stage reverted; OCC must activate
                 portfolio.stage: pre_securitisation_spv for [122, 128]
+    2026-09-30  the live OCC (trakt-ops-api, deployed from main 2026-09-28)
+                has no Securitisation stage field: it was added on this
+                branch (4f0fc542). PR #510 moves ONLY that field to main
+                (branch claude/occ-securitisation-stage); merging deploys
+                trakt-ops-api. Then: Amend ERE -> New SPV before
+                securitisation -> Approve -> Activate
