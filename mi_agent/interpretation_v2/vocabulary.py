@@ -140,7 +140,14 @@ from mi_agent import semantic_model as _semantic_model
 #: complete in a month is the pipeline amount at face value, the weighted
 #: figure only when weighting is asked for; D17, the expected completion date
 #: leaves lapsed cases out.
-VOCABULARY_VERSION = "2.16.0"
+#:
+#: 2.17.0 (P0 design §28): stage movement implements `material_summary` — what
+#: moved in the whole pipeline between its latest pair of extracts, every case
+#: classified once as arrived, moved stage, left or stayed, from the movement
+#: owner's own totals. A "what moved" reading over the stage-movement figures
+#: was bound to the FUNDED book's owner of the form and refused; the owner of
+#: the figures now owns the form over them.
+VOCABULARY_VERSION = "2.17.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -196,9 +203,11 @@ CAPABILITY_OPERATIONS: Mapping[str, FrozenSet[str]] = {
     "pipeline": frozenset({"summary", "breakdown", "point_in_time", "series",
                            "movement", "compare"}),
     # `point_in_time` since 2.10.0: a measured rate is one figure (§20).
+    # `summary` since 2.17.0: what moved in the whole pipeline, the
+    # `material_summary` form's own operation (§28).
     "pipeline_stage_movement": frozenset({
         "transition", "arrivals", "departures", "stayers", "reconciliation",
-        "movement", "breakdown", "point_in_time"}),
+        "movement", "breakdown", "point_in_time", "summary"}),
     # `breakdown` since 2.7.0: the Forecast tab publishes the forecast by
     # component, region and LTV band, the weighting exclusion by reason, and
     # the milestone ladder by threshold (§16.3).
@@ -451,6 +460,10 @@ CAPABILITY_CHANGE_FORMS: Mapping[str, FrozenSet[str]] = {
     # in each of its headline figures, from the same weekly owner.
     "pipeline": frozenset({"metric_delta", "level_comparison",
                            "material_summary"}),
+    # `material_summary` since 2.17.0 (§28): what moved in the whole pipeline
+    # between the movement owner's latest pair of extracts — arrived, moved
+    # stage, left, stayed — from its own event totals.
+    "pipeline_stage_movement": frozenset({"material_summary"}),
 }
 
 #: WHOSE CHANGE A POPULATION'S CHANGE IS, where no measure names an owner.

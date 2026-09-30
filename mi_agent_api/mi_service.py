@@ -341,6 +341,41 @@ def _predicate_proved(requested: Mapping[str, Any],
     return False
 
 
+def _composed_plan_coverage(block: Mapping[str, Any]) -> Dict[str, Any]:
+    """A COMPOSED answer (several figures of one population, P1) is proved as
+    the conjunction of its parts: every part's own ledger, exactly as it would
+    be read had that figure been asked alone, and one entry per figure the plan
+    asked for, resolved only by a part that states that figure and is itself
+    fully accounted for. A figure no part carries is UNACCOUNTED and refuses."""
+    entries: List[Dict[str, Any]] = []
+    proved_figures = set()
+    for part in block.get("composed") or ():
+        if not isinstance(part, Mapping):
+            continue
+        ledger = _governed_plan_coverage(
+            {"metadata": {"parserMode": _GOVERNED_PLAN_MODE,
+                          "governedPlan": dict(part)}}) or {
+            "concepts": [], "unaccounted": [{"kind": "governed_plan:part"}]}
+        for entry in ledger.get("concepts") or ():
+            if entry not in entries:
+                entries.append(entry)
+        figure = str((part.get("requested") or {}).get("measure_concept") or "")
+        if figure and not ledger.get("unaccounted"):
+            proved_figures.add(figure)
+    for figure in ((block.get("requested") or {}).get("measure_concepts") or ()):
+        entries.append({
+            "kind": "governed_plan:figure", "field": "measure",
+            "value": str(figure), "term": str(figure),
+            "owner": "governed_plan + composed parts",
+            "disposition": (_coverage_resolved()
+                            if str(figure) in proved_figures
+                            else _coverage_missing()),
+        })
+    return {"version": 1, "concepts": entries,
+            "unaccounted": [e for e in entries
+                            if e["disposition"] == _coverage_missing()]}
+
+
 def _execution_receipts(executed: Mapping[str, Any]) -> List[Dict[str, Any]]:
     """Every deterministic receipt this answer rests on, as a list.
 
@@ -407,6 +442,8 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
     block = meta.get("governedPlan")
     if not isinstance(block, Mapping):
         return None
+    if isinstance(block.get("composed"), Sequence):
+        return _composed_plan_coverage(block)
     requested = block.get("requested") or {}
     executed = block.get("executed") or {}
     receipts = _execution_receipts(executed)

@@ -43,7 +43,10 @@ _NOTHING_GUESSED = ("Nothing was guessed, and no other figure was put in its "
 #: before the families: "RECONCILIATION_FAILED" is a breakage, not a period.
 _FAILED_CODES = frozenset({
     "EXECUTION_FAILED", "RENDER_FAILED", "UNEXPECTED_ERROR",
-    "PLAN_RECEIPT_RECONCILIATION_FAILED", "RECONCILIATION_FAILED"})
+    "PLAN_RECEIPT_RECONCILIATION_FAILED", "RECONCILIATION_FAILED",
+    # The parts of a composed answer declared different data
+    # (`plan_composition`): withheld, never shown side by side.
+    "COMPOSED_FIGURES_NOT_ALIGNED"})
 
 #: Reasons that mean the data the answer needs could not be read for this
 #: request — true of the request, not of the question.
@@ -251,6 +254,12 @@ def message(body: Mapping[str, Any], reason: str) -> str:
                  "try again")
     else:
         plain = plain_reason(runtime_code(code))
+    # A QUESTION ASKING FOR SEVERAL FIGURES is answered for all of them or for
+    # none (`plan_composition`), so the decline names the figure that could
+    # not be produced.
+    failed = str((body.get("composition") or {}).get("failed_figure") or "")
+    if failed:
+        plain = f"for the {_named(failed, _labels())}, {plain}"
     if reading:
         return (f"I understood this as {reading}, but I have not answered it: "
                 f"{plain}. {_NOTHING_GUESSED}")

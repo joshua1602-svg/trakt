@@ -117,6 +117,22 @@ OPERATIONS: Mapping[str, Mapping[str, Any]] = {
 #: governed pair of weekly extracts, which every answer states.
 PERIOD_FORMS: FrozenSet[str] = frozenset({"current"})
 
+#: WHAT MOVED IN THE WHOLE PIPELINE (vocabulary 2.17.0): the `material_summary`
+#: change form over this owner — every case between the latest pair of extracts
+#: classified once as arrived, moved stage, left or stayed, from the payload's
+#: own event totals and per-stage reconciliation. The pair is the latest
+#: extract and the one before it, which is what "the previous" means for the
+#: pipeline (owner decision D15), so a period stated as "since the previous
+#: extract" names the owner's own pair.
+SUMMARY_FORM = "material_summary"
+#: The figures the summary states, any of which a plan may name.
+SUMMARY_MEASURES: FrozenSet[str] = frozenset({
+    "cases_moved", "amount_moved", "cases_arrived", "cases_departed",
+    "cases_stayed", "stayer_amount_change"})
+#: The periods that name the owner's latest pair (D15).
+SUMMARY_PERIOD_FORMS: FrozenSet[str] = frozenset({
+    "current", "previous_reporting_period", "relative_pair"})
+
 OWNER = "movement_detail.resolve_stage_transition_detail"
 WORDING_OWNER = "stage_movement_query.compose"
 
@@ -140,6 +156,30 @@ def claims(plan: Any) -> bool:
 def _measures(body: Mapping[str, Any]) -> List[str]:
     output = _single_output(body) or {}
     return [str(m.get("concept") or "") for m in (output.get("measures") or ())]
+
+
+def change_form_of(plan: Any) -> Optional[str]:
+    """The analytical form the COMPILER read, from the plan's own bindings."""
+    provenance = _as_mapping(plan).get("provenance") or {}
+    bindings = provenance.get("compiler_bindings") or {}
+    form = (bindings.get("change_form") or {}).get("form")
+    return str(form) if form else None
+
+
+def is_summary(plan: Any) -> bool:
+    return change_form_of(plan) == SUMMARY_FORM
+
+
+def serves_figures_together(plan: Any) -> bool:
+    """Does this runtime answer the plan's figures as ONE owner answer? The
+    summary and a stage's reconciliation state several figures from one
+    payload; every other shape is one figure, and a plan naming several is
+    composed from one-figure plans (`plan_composition`)."""
+    body = _as_mapping(plan)
+    if is_summary(body):
+        return True
+    spec = OPERATIONS.get(str(body.get("operation") or "")) or {}
+    return bool(spec.get("measures_optional"))
 
 
 def kind_of(plan: Any) -> str:
@@ -222,6 +262,8 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 "the stage movement runtime serves no population comparison")
 
     operation = str(body.get("operation") or "")
+    if is_summary(body):
+        return _check_summary(body, output)
     if kind_of(body) == KIND_CATALOGUE:
         return _engine.check(MODEL, body, _measures(body)[0], operation)
     spec = OPERATIONS.get(operation)
@@ -268,11 +310,50 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     return True, "", ""
 
 
+def _check_summary(body: Mapping[str, Any], output: Mapping[str, Any]
+                   ) -> Tuple[bool, str, str]:
+    """What moved in the whole pipeline: no stage named (one stage's movement
+    is that stage's reconciliation), the owner's own figures only, broken down
+    by stage at most, over the owner's latest pair of extracts."""
+    measures = _measures(body)
+    unknown = [m for m in measures if m not in SUMMARY_MEASURES]
+    if unknown:
+        return (False, MEASURE_NOT_SUPPORTED,
+                f"what moved in the pipeline states {sorted(SUMMARY_MEASURES)}; "
+                f"this plan names {unknown}")
+    axes = [_axis(d) for d in (output.get("dimensions") or ())]
+    if any(axis != STAGE for axis in axes):
+        return (False, DIMENSION_NOT_SUPPORTED,
+                f"what moved in the pipeline is broken down by stage only; "
+                f"this plan names {axes}")
+    stages, problems = stage_filters(body)
+    if problems or stages:
+        return (False, FILTERS_NOT_SUPPORTED,
+                "what moved at one stage is that stage's reconciliation; the "
+                "summary is of the whole pipeline"
+                + (f" ({'; '.join(problems)})" if problems else ""))
+    period = body.get("period") or {}
+    form = str(period.get("form") or "")
+    back = period.get("periods_back")
+    grain = period.get("grain")
+    if (form not in SUMMARY_PERIOD_FORMS
+            or (form == "relative_pair"
+                and (back not in (None, 1) or grain not in (None, "weekly")))):
+        return (False, PERIOD_NOT_SUPPORTED,
+                f"the owner answers for the latest extract and the one before "
+                f"it (D15); period.form={form!r}, periods_back={back!r}, "
+                f"grain={grain!r} names another pair")
+    return True, "", ""
+
+
 def reading_for(plan: Any) -> Dict[str, Any]:
     """The owner's own reading, from the plan's structured slots. An ELIGIBLE
     plan only. Returned as the `StageMovement` fields, so the owner's type is
     constructed where it is used rather than imported into the perimeter."""
     body = _as_mapping(plan)
+    if is_summary(body):
+        return {"subtype": "summary", "measure": _COUNT, "source": None,
+                "destination": None, "stage": None}
     output = _single_output(body) or {}
     spec = OPERATIONS[str(body.get("operation") or "")]
     measures = [str(m.get("concept") or "") for m in (output.get("measures") or ())]

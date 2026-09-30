@@ -69,6 +69,7 @@ from mi_agent import plan_temporal_runtime as temporal
 from mi_agent import plan_material_summary as material_summary
 from mi_agent import plan_attribution as attribution
 from mi_agent import plan_metric_delta as metric_delta
+from mi_agent import plan_composition as composition
 
 logger = logging.getLogger("mi_agent.plan_serving_canary")
 
@@ -719,8 +720,15 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
             # the figures the question did not name beside the one it did.
             answer = (f"The {phrase} {_timing_phrase(timing)} is "
                       f"{_shown(value)}{as_at}."
-                      + _timing_companions(receipt.get("measure_kind"),
-                                           receipt.get("timing_figures") or {}))
+                      + _timing_companions(
+                          receipt.get("measure_kind"),
+                          receipt.get("timing_figures") or {},
+                          # A figure a sibling part of a composed answer
+                          # states is not restated beside this one (P1).
+                          stated_elsewhere={
+                              pipeline_rt.SUPPORTED_MEASURES[m]
+                              for m in composition.siblings(plan)
+                              if m in pipeline_rt.SUPPORTED_MEASURES}))
         else:
             answer = f"The {phrase} is {_shown(value)}{as_at}."
     elif shape == "grouped":
@@ -1583,18 +1591,21 @@ def _catalogue_notes(receipt: Mapping[str, Any]) -> List[Dict[str, str]]:
     return notes
 
 
-def _timing_companions(kind: Any, figures: Mapping[str, Any]) -> str:
+def _timing_companions(kind: Any, figures: Mapping[str, Any], *,
+                       stated_elsewhere: Any = ()) -> str:
     """D16: the figures for the same cases that the headline is not — the
-    face value, the weighted value and the case count."""
+    face value, the weighted value and the case count — less any another part
+    of the same composed answer states as its own figure."""
     amount, count, weighted = (figures.get("amount"), figures.get("count"),
                                figures.get("weighted"))
+    skip = {kind, *stated_elsewhere}
     parts = []
-    if kind != "amount" and amount is not None:
+    if "amount" not in skip and amount is not None:
         parts.append(f"at face value {_money(amount)}")
-    if kind != "weighted" and weighted is not None:
+    if "weighted" not in skip and weighted is not None:
         parts.append(f"weighted by each case's chance of completing "
                      f"{_money(weighted)}")
-    if kind != "count" and count is not None:
+    if "count" not in skip and count is not None:
         parts.append(_standard.plural(int(count), "case"))
     return (" " + "; ".join(parts)[:1].upper() + "; ".join(parts)[1:] + "."
             if parts else "")
@@ -1999,6 +2010,121 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # From here the accepted slice 1 perimeter owns every decision, and nothing
     # below edits the plan the compiler emitted.
     plan = compiled.plan.to_dict()
+    inputs = dict(frame=frame, semantics=semantics,
+                  render_portfolio_id=render_portfolio_id, as_of=as_of,
+                  snapshot_store=snapshot_store,
+                  snapshot_client_id=snapshot_client_id,
+                  snapshot_route=snapshot_route,
+                  source_registry=source_registry,
+                  execution_population=execution_population,
+                  pipeline_source=pipeline_source, pipeline_root=pipeline_root,
+                  pipeline_client_id=pipeline_client_id,
+                  pipeline_history=pipeline_history,
+                  pipeline_run_id=pipeline_run_id,
+                  funded_frame_resolver=funded_frame_resolver,
+                  client_id=client_id, output_root=output_root,
+                  tenant_id=tenant_id,
+                  authorised_portfolio_ids=authorised_portfolio_ids)
+    # SEVERAL FIGURES OF ONE POPULATION: one plan per figure, each through its
+    # own runtime, all or none (`plan_composition`; P1, D4).
+    if composition.needs_composition(plan):
+        return _attempt_composed(body, plan=plan, question=question,
+                                 inputs=inputs)
+    return _serve_plan(body, plan=plan, question=question, **inputs)
+
+
+def _attempt_composed(body: Dict[str, Any], *, plan: Dict[str, Any],
+                      question: str, inputs: Mapping[str, Any]
+                      ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """A plan naming several figures: each part served by `_serve_plan`, every
+    part answered, every part from the same data, then one composed answer.
+
+    The record keeps every part's eligibility and execution, and the top-level
+    eligibility, execution and disposition state the composition's outcome.
+    """
+    parts = composition.split(plan)
+    # THE CASE HISTORY IS BUILT ONCE for the whole question, however many parts
+    # read it: it is the same history, and building it is the slowest input.
+    history = inputs.get("pipeline_history")
+    if callable(history):
+        built: List[Any] = []
+
+        def history_once() -> Any:
+            if not built:
+                built.append(history())
+            return built[0]
+
+        inputs = dict(inputs, pipeline_history=history_once)
+    served: List[Dict[str, Any]] = []
+    record: List[Dict[str, Any]] = []
+    body["composition"] = {"figures": composition.figures(plan),
+                           "parts": record}
+    for part in parts:
+        part_body: Dict[str, Any] = {k: v for k, v in body.items()
+                                     if k not in ("eligibility", "execution",
+                                                  "disposition", "composition")}
+        payload, reason = _serve_plan(part_body, plan=part, question=question,
+                                      **inputs)
+        figure = composition.figures(part)[0]
+        record.append({"figure": figure, "plan_id": part.get("plan_id"),
+                       "eligibility": part_body.get("eligibility"),
+                       "execution": part_body.get("execution"),
+                       "disposition": part_body.get("disposition"),
+                       "served": payload is not None, "reason": reason})
+        if payload is None:
+            # ALL OR NOTHING: the whole question is declined with the reason
+            # its unanswered figure gives, and the record says which figure.
+            body["composition"]["failed_figure"] = figure
+            body["eligibility"] = dict(part_body.get("eligibility") or {},
+                                       perimeter="composition")
+            body["execution"] = dict(part_body.get("execution") or {})
+            body["disposition"] = part_body.get("disposition")
+            return None, reason
+        served.append(payload)
+
+    body["eligibility"] = {"eligible": True, "reason": "", "detail": "",
+                           "perimeter": "composition"}
+    body["execution"] = {
+        "attempted": True, "runtime": "composition",
+        "value": [(r.get("execution") or {}).get("value") for r in record],
+        "receipt": {"composed": [(r.get("execution") or {}).get("receipt")
+                                 for r in record]}}
+    if not composition.aligned(served):
+        body["disposition"] = evidence.EXECUTION_ERROR
+        body["execution"]["why_not"] = (
+            "the parts declare different data, so their figures are not put "
+            "side by side")
+        return None, composition.FIGURES_NOT_ALIGNED
+    body["disposition"] = evidence.EXECUTED
+    try:
+        payload = composition.compose(plan, served)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    return payload, ""
+
+
+def _serve_plan(body: Dict[str, Any], *, plan: Dict[str, Any], question: str,
+                frame: Any, semantics: Any,
+                render_portfolio_id: Optional[str], as_of: Optional[str],
+                snapshot_store: Any = None,
+                snapshot_client_id: Optional[str] = None,
+                snapshot_route: Optional[str] = None,
+                source_registry: Any = None,
+                execution_population: Optional[str] = None,
+                pipeline_source: Any = None, pipeline_root: Any = None,
+                pipeline_client_id: Optional[str] = None,
+                pipeline_history: Any = None,
+                pipeline_run_id: Optional[str] = None,
+                funded_frame_resolver: Any = None,
+                client_id: Optional[str] = None,
+                output_root: Optional[str] = None,
+                tenant_id: Optional[str] = None,
+                authorised_portfolio_ids: Tuple[str, ...] = (),
+                ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One PLAN, through the runtime that owns it. `(payload or None, reason)`;
+    fills `body` as it goes. Every gate a one-figure question passes is here,
+    so a part of a composed answer passes exactly the same ones."""
 
     # SPECIALIST CAPABILITY DISPATCH, FIRST, and from the plan alone.
     #

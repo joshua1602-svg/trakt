@@ -1911,3 +1911,58 @@ addressed to it, and the activated configuration declares its own client id
 Pinned by `test_governed_decline.py`, the D18 class in
 `test_plan_serving_canary.py`, `test_slice2_serving_repair.py` and
 `test_single_activated_client.py`.
+
+
+## 28. Several figures in one answer; what moved in the whole pipeline (2026-09-30)
+
+The two remaining findings of the 15:53 check, built as the design had already
+placed them.
+
+### 28.1 Answer composition — several figures of one population (P1, D4)
+
+§22.3 settled it: "two figures on one axis is answer composition (P1, D4/D5),
+not a pipeline branch". `mi_agent/plan_composition.py` is that composer, above
+every runtime:
+
+    SPLIT      a plan whose one output names several measures becomes one plan
+               per figure — the same population, filters, grouping and period.
+               Structural; nothing is re-read or re-decided.
+    SERVE      each part through `_serve_plan`, the same function a one-figure
+               question passes through: the runtime's perimeter, the population
+               proof, execution, reconciliation and rendering.
+    ALL OR     every figure is answered or the question is declined, naming the
+    NOTHING    figure that could not be produced (D18's decline).
+    ONE DATA   every part must declare the same data (the identity its receipt
+               states); otherwise the answer is withheld
+               (`COMPOSED_FIGURES_NOT_ALIGNED`), never shown side by side.
+    COMPOSE    every figure's own governed sentence in the order asked (each
+               names its measure and as-at, D4), then what they say about the
+               population once; every KPI in one card; one table per shared
+               axis, rows matched by member, a column per figure.
+
+The coverage owner proves a composed answer as the conjunction of its parts:
+each part's ledger exactly as if that figure were asked alone, plus one entry
+per figure asked for, resolved only by a fully accounted part stating it
+(`mi_service._composed_plan_coverage`). A runtime that states several figures
+from one owner payload (stage movement's reconciliation and summary) says so
+(`serves_figures_together`) and is not split. A renderer that states companion
+figures (D16) does not restate one a sibling part states.
+
+It applies to the funded book and the pipeline alike ("how many loans and what
+balance, by region" composes by the same rule as "is any of the pipeline
+overdue, and how much"). Pinned by `test_several_figures_one_answer.py`.
+
+### 28.2 What moved in the whole pipeline (vocabulary 2.17.0)
+
+The movement owner publishes, for its latest pair of extracts, every case
+classified once as arrived, moved stage, left or stayed, with counts, amounts
+and a reconciliation to both extracts. Stage movement now implements the
+`material_summary` form over that (`CAPABILITY_CHANGE_FORMS`), so normalisation
+rule 4 keeps the form with the owner of the figures instead of binding it to
+the funded book's owner. The runtime serves it when no stage is named (one
+stage's movement is that stage's reconciliation), the figures named are ones
+the summary states, and the period is the latest extract and the one before
+it — D15's "previous"; any other pair is refused. The owner's wording
+(`stage_movement_query`, subtype `summary`) reads its own event totals and
+per-stage rows and states its residuals rather than hiding them. Pinned by
+`test_pipeline_movement_summary.py`.

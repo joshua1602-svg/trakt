@@ -353,3 +353,11 @@ intents added beside the baseline's.
                 served tenant (client_001) reads the single activated OCC
                 client's configuration (zero or several: nothing), so scale
                 has its stage. Not deployed yet
+    2026-09-30  Built (design §28): several figures of one population in one
+                answer (plan_composition: each figure through its own
+                runtime's gates, all or none, same data, one answer, one
+                table per axis) — the [58] variant "is any overdue, and how
+                much" is now answered with both figures; stage movement owns
+                "what moved" over its figures (vocabulary 2.17.0) — the [82]
+                variant "pipeline movement since the prior extract" is
+                answered from the movement owner's totals. Not deployed yet
