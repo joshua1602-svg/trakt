@@ -125,6 +125,12 @@ class MovementBridge:
         }
 
 
+
+def _sym() -> str:
+    """The governed reporting currency's symbol (pound only by default)."""
+    from mi_agent_api import currency as _currency
+    return _currency.current_symbol()
+
 def _adapt(key: str, label: str, payload: Mapping[str, Any]) -> MovementBridge:
     if not payload or not payload.get("available"):
         return MovementBridge(key=key, label=label, available=False,
@@ -231,12 +237,12 @@ def _money(v: Optional[float]) -> str:
         return "—"
     a = abs(v)
     if a >= 1e9:
-        return f"£{v / 1e9:.2f}bn"
+        return f"{_sym()}{v / 1e9:.2f}bn"
     if a >= 1e6:
-        return f"£{v / 1e6:.1f}m"
+        return f"{_sym()}{v / 1e6:.1f}m"
     if a >= 1e3:
-        return f"£{v / 1e3:.0f}k"
-    return f"£{v:,.0f}"
+        return f"{_sym()}{v / 1e3:.0f}k"
+    return f"{_sym()}{v:,.0f}"
 
 
 def _signed(v: Optional[float]) -> str:

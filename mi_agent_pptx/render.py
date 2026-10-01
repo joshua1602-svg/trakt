@@ -58,7 +58,8 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
                  h: float, *, theme: PptxTheme = THEME, currency: bool = True,
                  label_key: str = "label", count_key: Optional[str] = "count",
                  dpi: int = 220) -> Path:
-    """Dashboard BarList: label left, periwinkle bar ∝ max, mono value right."""
+    """Dashboard BarList: label left, cyan-500 bar ∝ max in a navy-950 well,
+    mono value right."""
     rows = [r for r in rows if r is not None]
     fig = _fig(w, h, theme, dpi)
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
@@ -90,12 +91,14 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
         y0 = yc - bar_h / 2
         ax.add_patch(mpatches.FancyBboxPatch(
             (tx0, y0), tw, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
-            linewidth=0, facecolor=theme.bg_panel_alt, alpha=0.7,
+            # The dashboard's bar list: a DARK well (navy-950) with the value
+            # filled in cyan-500 — the track recedes and only the value lights.
+            linewidth=0, facecolor=theme.bg_well, alpha=1.0,
             mutation_aspect=h / w, zorder=1))
         frac = max(val / vmax, 0.012)
         ax.add_patch(mpatches.FancyBboxPatch(
             (tx0, y0), tw * frac, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
-            linewidth=0, facecolor=theme.peri, alpha=0.9,
+            linewidth=0, facecolor=theme.cyan_500, alpha=1.0,
             mutation_aspect=h / w, zorder=2))
         ax.text(label_x, yc, _truncate(lab, max_chars), va="center", ha="left",
                 color=theme.ink_300, fontsize=10.5, zorder=3)
@@ -261,6 +264,23 @@ def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
     return _save(fig, path, theme, dpi)
 
 
+
+def zero_anchored_limits(values: Sequence[float]) -> Optional[Tuple[float, float]]:
+    """The value axis a line chart should use, or ``None`` to let it fit.
+
+    ZERO-ANCHORED, as every evolution chart on the dashboard is. Auto-scaling
+    fitted the axis to the data, so a weighted LTV drifting from 50.25% to
+    50.60% filled the panel as a dramatic swing; on a zero-based axis it reads
+    as the near-flat line it is. A series that can go negative — a forecast
+    error, a net movement — keeps an axis fitted to its own range (``None``).
+    """
+    vals = [float(v) for v in values if v is not None]
+    if not vals or min(vals) < 0:
+        return None
+    top = max(vals) * 1.12
+    return (0.0, top if top > 0 else 1.0)
+
+
 def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                currency: bool = True, percent: bool = False, area: bool = False,
@@ -296,18 +316,23 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
         if area and len(series) == 1:
             ax.fill_between(x, [v or 0 for v in vals], color=color, alpha=0.16, zorder=2)
 
+    shown = [float(v) for sr in series for v in (sr.get("values") or ())
+             if v is not None]
+    bounds = zero_anchored_limits(shown)
+    if bounds is not None:
+        ax.set_ylim(*bounds)
+
     if currency:
         ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: compact_currency(v)))
     elif percent:
-        # Decimals follow the RANGE, not a constant. A weighted LTV that moves
-        # between 45.8% and 47.2% produced five ticks all reading "46%" — an
-        # axis that labels four distinct gridlines identically is worse than no
-        # axis, because it reads as a rendering fault rather than a flat series.
-        shown = [float(v) for sr in series for v in (sr.get("values") or ())
-                 if v is not None]
-        as_points = [v * 100 if abs(v) <= 1.5 else v for v in shown]
-        spread = (max(as_points) - min(as_points)) if as_points else 0.0
-        dp = 0 if spread >= 6 else (1 if spread >= 0.6 else 2)
+        # Decimals follow the AXIS range, not a constant. A weighted LTV that
+        # moves between 45.8% and 47.2% on a fitted axis produced five ticks
+        # all reading "46%" — an axis that labels distinct gridlines identically
+        # reads as a rendering fault. Once the axis is anchored at zero the span
+        # is the axis, not the data, so the ticks are whole steps again.
+        lo, hi = ax.get_ylim()
+        span = abs(hi - lo) * (100 if max(abs(lo), abs(hi)) <= 1.5 else 1)
+        dp = 1 if span >= 0.6 else 2
         ax.yaxis.set_major_formatter(FuncFormatter(
             lambda v, p: f"{v * 100:.{dp}f}%" if abs(v) <= 1.5 else f"{v:.{dp}f}%"))
     idx = _tick_indices(x_labels, w * 0.825, fontsize=8.5)
@@ -430,7 +455,7 @@ def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: f
         rag = _STATUS_RAG.get(str(t.get("status", "")).lower(), "green")
         colour = theme.rag.get(rag, theme.neutral)
         # Track, then the filled current bar.
-        ax.barh(i, top, height=0.52, color=theme.bg_panel_alt, edgecolor="none")
+        ax.barh(i, top, height=0.52, color=theme.bg_well, edgecolor="none")
         ax.barh(i, min(util, top), height=0.52, color=colour, edgecolor="none")
         ax.text(min(util, top) + 0.012 * top, i, f"{util:.0f}%", ha="left",
                 va="center", color=theme.ink_100, fontsize=9,

@@ -24,6 +24,7 @@ from .chart_resolver import render_bridge_waterfall
 from .mi_api import DashboardData
 from .placeholders import render_placeholder_png
 from .pptx_theme import PptxTheme, THEME
+from .strat_order import order_bars
 from . import render as R
 
 SLIDE_W = Inches(13.333)
@@ -58,6 +59,32 @@ class DeckContext:
     logo_path: Optional[str] = None
 
 
+
+#: Monthly-change tiles and the headline tile whose delta makes each redundant.
+_MOM_DUPLICATES = {"mom_balance": "balance", "mom_loans": "loans"}
+
+#: As many tiles as three rows of four hold — the dashboard's arrangement.
+MAX_KPI_TILES = 12
+
+
+def headline_kpis(kpis):
+    """The KPI tiles the dashboard's Funded Book Snapshot shows, in its order.
+
+    The dashboard's rule, ported verbatim (FundedSnapshotPanel.tsx): the
+    headline Balance and Loans tiles already carry the period-on-period delta,
+    so the separate "Monthly change" tiles would repeat the same figure — they
+    are hidden ONLY when the headline tile really shows the delta. Without it,
+    once the deck began receiving the prior period, a redundant "Monthly
+    change · loans" tile pushed NNEG exposure off the slide.
+    """
+    kpis = [k for k in (kpis or ()) if isinstance(k, dict)]
+    by_id = {k.get("id"): k for k in kpis}
+    keep = [k for k in kpis
+            if not (k.get("id") in _MOM_DUPLICATES
+                    and (by_id.get(_MOM_DUPLICATES[k.get("id")]) or {}).get("delta"))]
+    return keep[:MAX_KPI_TILES]
+
+
 class DeckBuilder:
     def __init__(self, data: DashboardData, ctx: DeckContext,
                  theme: PptxTheme = THEME):
@@ -90,7 +117,8 @@ class DeckBuilder:
         return s
 
     def _text(self, slide, l, t, w, h, text, *, size=14, color=None, bold=False,
-              align=PP_ALIGN.LEFT, italic=False, anchor=MSO_ANCHOR.TOP, spacing=None):
+              align=PP_ALIGN.LEFT, italic=False, anchor=MSO_ANCHOR.TOP, spacing=None,
+              font=None):
         box = slide.shapes.add_textbox(l, t, w, h)
         tf = box.text_frame
         tf.word_wrap = True
@@ -106,7 +134,7 @@ class DeckBuilder:
         run.font.size = Pt(size)
         run.font.bold = bold
         run.font.italic = italic
-        run.font.name = self.theme.font_sans
+        run.font.name = font or self.theme.font_sans
         run.font.color.rgb = self._rgb(color or self.theme.ink_100)
         return box
 
@@ -128,17 +156,21 @@ class DeckBuilder:
         return shp
 
     def _header(self, slide, title, strap, *, accent=None):
-        rail = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0),
-                                      Inches(0.12), SLIDE_H)
-        rail.fill.solid()
-        rail.fill.fore_color.rgb = self._rgb(accent or self.theme.peri)
-        rail.line.fill.background()
-        rail.shadow.inherit = False
+        """Title and subtitle — structure from weight and contrast, not colour.
+
+        The dashboard's rule is explicit: "Structure comes from SPACING, WEIGHT
+        and CONTRAST; colour is reserved for state and emphasis." Every slide
+        used to carry a full-height cyan rail and a cyan italic strapline —
+        decoration in the one colour the dashboard reserves for selection, on
+        every page, so it signalled nothing. ``accent`` is accepted for the
+        handlers that still pass one and is deliberately unused.
+        """
+        del accent
         self._text(slide, Inches(0.55), Inches(0.34), Inches(12.2), Inches(0.6),
-                   title, size=25, bold=True)
+                   title, size=25, bold=True, color=self.theme.ink_100)
         if strap:
-            self._text(slide, Inches(0.57), Inches(1.0), Inches(12.4), Inches(0.5),
-                       strap, size=12, color=self.theme.peri, italic=True)
+            self._text(slide, Inches(0.56), Inches(1.0), Inches(12.4), Inches(0.5),
+                       strap, size=12, color=self.theme.ink_300)
 
     def scope_footnote(self) -> str:
         """The one-line scope + date stamp every slide carries.
@@ -187,49 +219,109 @@ class DeckBuilder:
         return img_l, img_t, img_w, img_h
 
     # ------------------------------------------------------------------- tiles
-    def _tile(self, slide, l, t, w, h, tile: Dict[str, Any]):
-        self._panel(slide, l, t, w, h, fill=self.theme.bg_panel_alt,
-                    line=self.theme.line_soft, lw=1.0)
-        pad = Inches(0.16)
-        iw = Emu(int(w) - 2 * int(pad))
-        avail = bool(tile.get("available", True)) and tile.get("value") not in (None, "")
-        self._text(slide, l + pad, t + Inches(0.14), iw, Inches(0.3),
-                   str(tile.get("label", "")).upper(), size=8.5,
-                   color=self.theme.ink_400, bold=True)
-        val = str(tile.get("value") if avail else "—")
-        # A KPI value may be a long label (an area name), not just a number. Step
-        # the size down so it fits the tile instead of being clipped — a value the
-        # reader cannot see is worse than a smaller one.
-        width_in = int(iw) / EMU_IN
-        size = 20
-        for limit, candidate in ((width_in * 2.6, 20), (width_in * 3.4, 15),
-                                 (width_in * 4.6, 12)):
-            if len(val) <= limit:
-                size = candidate
-                break
-        else:
-            size = 10
-        self._text(slide, l + pad, t + Inches(0.44), iw, Inches(0.58), val,
-                   size=size, bold=True,
-                   color=self.theme.ink_100 if avail else self.theme.ink_500)
-        y = t + Inches(1.02)
-        delta, intent = tile.get("delta"), tile.get("deltaIntent")
-        if delta:
-            color = {"positive": self.theme.mint, "negative": self.theme.rose}.get(
-                intent, self.theme.ink_400)
-            arrow = {"positive": "▲ ", "negative": "▼ "}.get(intent, "")
-            self._text(slide, l + pad, y, iw, Inches(0.3), f"{arrow}{delta}",
-                       size=9.5, color=color, bold=True)
-        elif tile.get("hint"):
-            self._text(slide, l + pad, y, iw, Inches(0.3), str(tile["hint"]),
-                       size=9, color=self.theme.ink_400)
+    def _runs(self, slide, l, t, w, h, runs, *, align=PP_ALIGN.LEFT):
+        """One line of text in several styles — a figure's delta and its hint,
+        set the way the dashboard sets them: the movement bold in its direction
+        colour, the context quiet beside it."""
+        box = slide.shapes.add_textbox(l, t, w, h)
+        tf = box.text_frame
+        tf.word_wrap = True
+        for m in ("margin_left", "margin_right", "margin_top", "margin_bottom"):
+            setattr(tf, m, 0)
+        para = tf.paragraphs[0]
+        para.alignment = align
+        for text, style in runs:
+            if not text:
+                continue
+            run = para.add_run()
+            run.text = text
+            run.font.size = Pt(style.get("size", 9))
+            run.font.bold = bool(style.get("bold"))
+            run.font.name = style.get("font") or self.theme.font_sans
+            run.font.color.rgb = self._rgb(style.get("color") or self.theme.ink_300)
+        return box
 
-    def _tile_grid(self, slide, tiles: List[Dict[str, Any]], *, top=1.62, cols=5):
+    #: Monospace glyph width as a fraction of the em — sizes a figure to its
+    #: tile without measuring text, which python-pptx cannot do.
+    _MONO_EM = 0.60
+
+    def _figure_size(self, text: str, width_in: float, sizes=(22, 18, 15, 12, 10)):
+        """The largest figure size at which *text* fits *width_in*.
+
+        Fitted on the actual width of a monospace glyph, so every ordinary
+        KPI in a row lands on the SAME size. The old rule stepped any value
+        over a few characters down to 15pt, which is how "£104.8MM" came out
+        visibly smaller than "318" beside it.
+        """
+        for size in sizes:
+            if len(text) * self._MONO_EM * size / 72.0 <= width_in:
+                return size
+        return sizes[-1]
+
+    #: Label band reserved on every tile, so a label that wraps to two lines
+    #: does not push its figure below its neighbours' — a row of figures on
+    #: one baseline is what makes them comparable.
+    TILE_LABEL_BAND = 0.34
+
+    def _tile(self, slide, l, t, w, h, tile: Dict[str, Any]):
+        """The dashboard's StatTile, as a slide element.
+
+        A raised panel one surface step above the slide; a leading-edge rail
+        that takes a colour ONLY where there is a direction to report (mint up,
+        rose down, the structural grey otherwise); an uppercase field label; the
+        figure in the monospace face; then the movement and its context. The
+        delta and its hint were always in the payload — the deck threw them
+        away and the dashboard did not.
+        """
+        th = self.theme
+        self._panel(slide, l, t, w, h, fill=th.bg_panel_alt, line=th.line, lw=0.75)
+        intent = tile.get("deltaIntent")
+        delta = tile.get("delta")
+        rail_colour = {"positive": th.mint, "negative": th.rose}.get(
+            intent if delta else None, th.line_strong)
+        rail = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, l, t + Inches(0.07),
+                                      Inches(0.045), h - Inches(0.14))
+        rail.fill.solid()
+        rail.fill.fore_color.rgb = self._rgb(rail_colour)
+        rail.line.fill.background()
+        rail.shadow.inherit = False
+
+        pad = Inches(0.22)
+        iw = Emu(int(w) - int(pad) - int(Inches(0.16)))
+        avail = bool(tile.get("available", True)) and tile.get("value") not in (None, "")
+        self._text(slide, l + pad, t + Inches(0.15), iw, Inches(self.TILE_LABEL_BAND),
+                   str(tile.get("label", "")).upper(), size=8.5,
+                   color=th.ink_400, bold=True, spacing=0.95)
+        val = str(tile.get("value") if avail else "—")
+        fig_t = t + Inches(0.15 + self.TILE_LABEL_BAND + 0.04)
+        self._text(slide, l + pad, fig_t, iw, Inches(0.44), val,
+                   size=self._figure_size(val, int(iw) / EMU_IN), bold=True,
+                   color=th.ink_100 if avail else th.ink_500, font=th.font_figure)
+
+        line_t = fig_t + Inches(0.48)
+        hint = tile.get("hint")
+        if delta:
+            colour = {"positive": th.mint, "negative": th.rose}.get(intent, th.ink_300)
+            arrow = {"positive": "▲ ", "negative": "▼ "}.get(intent, "")
+            self._runs(slide, l + pad, line_t, iw, Emu(int(t + h) - int(line_t)),
+                       [(f"{arrow}{delta}", {"size": 9.5, "bold": True, "color": colour,
+                                             "font": th.font_figure}),
+                        (f"   {hint}" if hint else "", {"size": 8.5, "color": th.ink_500})])
+        elif hint:
+            self._text(slide, l + pad, line_t, iw, Emu(int(t + h) - int(line_t)),
+                       str(hint), size=8.5, color=th.ink_500, spacing=1.05)
+
+    def _tile_grid(self, slide, tiles: List[Dict[str, Any]], *, top=1.62, cols=4):
+        """KPI tiles in the dashboard's arrangement: four across, sized to what
+        they carry. Five-across at a fixed 1.62in left half of every tile empty
+        and pushed long labels onto a second line."""
         rows = max(1, (len(tiles) + cols - 1) // cols)
-        gx, gy = Inches(0.16), Inches(0.22)
-        left0, top0 = Inches(0.55), Inches(top)
-        tile_w = Emu(int((int(Inches(12.25)) - (cols - 1) * int(gx)) / cols))
-        tile_h = Inches(1.62) if rows <= 2 else Inches(1.3)
+        gx, gy = Inches(0.18), Inches(0.18)
+        left0, top0 = Inches(self.CONTENT_L), Inches(top)
+        span = int(Inches(self.CONTENT_R - self.CONTENT_L))
+        tile_w = Emu(int((span - (cols - 1) * int(gx)) / cols))
+        carries_line = any(t.get("delta") or t.get("hint") for t in tiles)
+        tile_h = Inches(1.34 if carries_line else 1.04)
         for i, tile in enumerate(tiles):
             r, c = divmod(i, cols)
             l = Emu(int(left0) + c * (int(tile_w) + int(gx)))
@@ -297,25 +389,23 @@ class DeckBuilder:
         covering one book can never be mistaken for a total-portfolio deck.
         """
         s = self._slide()
-        # Full-height left accent rail (replaces the old overlapping corner panel).
-        rail = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0),
-                                  Inches(0.16), SLIDE_H)
-        rail.fill.solid()
-        rail.fill.fore_color.rgb = self._rgb(self.theme.peri)
-        rail.line.fill.background()
-        rail.shadow.inherit = False
-        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(2.92),
-                                 Inches(2.2), Inches(0.07))
+        # The cover sits on the app ground, as the dashboard's header bar does;
+        # every other slide is the Core Dashboard surface. No accent rail and no
+        # cyan type: on the dashboard cyan marks a selection, and a cover
+        # selects nothing. A structural rule separates name from pack.
+        s.background.fill.fore_color.rgb = self._rgb(self.theme.bg_cover)
+        bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(2.94),
+                                 Inches(2.2), Inches(0.03))
         bar.fill.solid()
-        bar.fill.fore_color.rgb = self._rgb(self.theme.peri)
+        bar.fill.fore_color.rgb = self._rgb(self.theme.line_strong)
         bar.line.fill.background()
         bar.shadow.inherit = False
         self._text(s, Inches(0.9), Inches(0.62), Inches(6), Inches(0.4),
-                   "TRAKT · MI AGENT", size=12, color=self.theme.peri, bold=True)
+                   "TRAKT · MI AGENT", size=11, color=self.theme.ink_400, bold=True)
         self._text(s, Inches(0.86), Inches(1.42), Inches(11.5), Inches(1.1),
                    self._entity_name(), size=38, bold=True)
         self._text(s, Inches(0.92), Inches(3.12), Inches(11), Inches(0.5),
-                   self.ctx.deck_name, size=18, color=self.theme.peri)
+                   self.ctx.deck_name, size=18, color=self.theme.ink_200)
         strap = self._cover_strapline()
         self._text(s, Inches(0.92), Inches(3.7), Inches(10.5), Inches(0.6),
                    strap, size=12.5, color=self.theme.ink_300, italic=True,
@@ -335,7 +425,7 @@ class DeckBuilder:
         p = self.d.portfolio
         left, top = Inches(0.92), Inches(4.42)
         self._text(s, left, top, Inches(5.6), Inches(0.3), "REPORTING SCOPE",
-                   size=9, color=self.theme.peri, bold=True)
+                   size=9, color=self.theme.ink_400, bold=True)
         if p is None:
             self._text(s, left, top + Inches(0.3), Inches(6), Inches(0.4),
                        "Scope unavailable — no governed portfolio context resolved.",
@@ -358,7 +448,7 @@ class DeckBuilder:
         # Reporting dates — per type when they differ, else one line.
         rleft = Inches(7.1)
         self._text(s, rleft, top, Inches(5.3), Inches(0.3), "REPORTING DATES",
-                   size=9, color=self.theme.peri, bold=True)
+                   size=9, color=self.theme.ink_400, bold=True)
         ry = top + Inches(0.28)
         dates = p.type_reporting_dates
         if dates:
@@ -399,12 +489,12 @@ class DeckBuilder:
         self._header(s, spec.get("title", "Executive Summary"),
                      "Funded book snapshot" + (
                          f" · reporting {self.d.reporting_date}" if self.d.reporting_date else ""))
-        tiles = list(self.d.funded.get("kpis", []))[:10]
+        tiles = headline_kpis(self.d.funded.get("kpis", []))
         if not tiles:
             self._placeholder_body(s, "Funded book unavailable for this run.")
             self._footer(s)
             return self._record("executive_summary", spec.get("title"), "", placeholder=True)
-        self._tile_grid(s, tiles, top=1.62, cols=5)
+        self._tile_grid(s, tiles, top=1.62)
         self._footer(s)
         self._record("executive_summary", spec.get("title", "Executive Summary"),
                      "Funded KPIs (dashboard-aligned).")
@@ -450,7 +540,10 @@ class DeckBuilder:
             l = Inches(0.55) if col == 0 else Inches(6.78)
             t = Inches(top + row * (row_h + gap))
             h = Inches(row_h)
-            accent = accent_for.get(getattr(ins, "severity", "info"), self.theme.peri)
+            # Colour only where there is something to report (severity), the
+            # structural grey otherwise — the dashboard's movement-rail rule.
+            accent = accent_for.get(getattr(ins, "severity", "info"),
+                                    self.theme.line_strong)
             self._panel(s, l, t, col_w, h, fill=self.theme.bg_panel_alt,
                         line=self.theme.line_soft)
             chip = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, l, t, Inches(0.045), h)
@@ -625,7 +718,7 @@ class DeckBuilder:
         self._panel(s, l, t, w, h, fill=self.theme.bg_panel, line=self.theme.line)
         self._text(s, l + Inches(0.20), t + Inches(0.16), w - Inches(0.4),
                    Inches(0.30), sl.label.upper(), size=9.5, bold=True,
-                   color=self.theme.peri)
+                   color=self.theme.ink_400)
 
         inner = (w / EMU_IN) - 0.40
         for i, (label, fn) in enumerate(lead):
@@ -872,7 +965,10 @@ class DeckBuilder:
 
         for st, box in zip(strats, boxes):
             key = st.get("key")
-            rows = st.get("bars", [])
+            # The DASHBOARD'S order (strat_order ports stratOrder.ts): ordinal
+            # bands by their bound, everything else alphabetically. The engine
+            # ranks by balance, which drew LTV as 20-30, 40-50 … 30-40.
+            rows = order_bars(st.get("bars", []))
             ok = self._barlist_card(s, box, st.get("label", key or ""), rows,
                                     "balance", cid=f"strat_{key}")
             ph = ph and not ok
@@ -1014,8 +1110,9 @@ class DeckBuilder:
         boxes = self._chart_boxes(2, top=3.02, height=3.26)
         il, it, iw, ih = self._card(s, *boxes[0], "Funded balance by vintage")
         p1 = self.work / "cohort_balance.png"
-        R.draw_barlist(p1, [{"label": r.vintage, "balance": r.balance}
-                            for r in sorted(rows, key=lambda r: -(r.balance or 0))],
+        # Vintages read in time order, as the dashboard's formation table does.
+        R.draw_barlist(p1, order_bars([{"label": r.vintage, "balance": r.balance}
+                                       for r in rows]),
                        "balance", iw, ih, theme=self.theme)
         self._place(s, p1, il, it, iw, ih)
 
@@ -1729,7 +1826,8 @@ class DeckBuilder:
             self._panel(s, l, Inches(1.6), tw, Inches(1.4), fill=self.theme.bg_panel_alt,
                         line=col, lw=1.2)
             self._text(s, l + Inches(0.2), Inches(1.82), tw, Inches(0.7),
-                       str(tile["value"]), size=26, bold=True, color=col)
+                       str(tile["value"]), size=26, bold=True, color=col,
+                       font=self.theme.font_figure)
             self._text(s, l + Inches(0.2), Inches(2.62), tw, Inches(0.3),
                        tile["label"].upper(), size=9.5, color=self.theme.ink_400, bold=True)
         # tests table
@@ -1820,7 +1918,7 @@ class DeckBuilder:
                        color=self.theme.ink_300)
             self._text(s, Inches(0.85), Inches(3.16), Inches(left_w - 0.6),
                        Inches(0.28), "CHECKS PERFORMED", size=8.5,
-                       color=self.theme.peri, bold=True)
+                       color=self.theme.ink_400, bold=True)
             # Naming the checks is what separates "all clear" from "nothing ran".
             for i, line in enumerate((
                     "Concentration limits — current, expected and stress",
@@ -1838,7 +1936,7 @@ class DeckBuilder:
                     fill=self.theme.bg_panel, line=self.theme.line)
         self._text(s, Inches(obs_l + 0.22), Inches(1.78), Inches(obs_w - 0.4),
                    Inches(0.3), "OBSERVATIONS", size=9, bold=True,
-                   color=self.theme.peri)
+                   color=self.theme.ink_400)
         # Observations are distributed down the SAME band rather than stacked at
         # the top of it, so a single observation does not sit above four inches
         # of empty panel.
@@ -1909,7 +2007,8 @@ class DeckBuilder:
                        Inches(0.28), label, size=8, color=self.theme.ink_400,
                        bold=True)
             self._text(s, l + Inches(0.18), Inches(1.92), tw - Inches(0.3),
-                       Inches(0.42), value, size=19, bold=True, color=colour)
+                       Inches(0.42), value, size=19, bold=True, color=colour,
+                       font=self.theme.font_figure)
 
         # -- utilisation bars ------------------------------------------------
         bars = [{"label": r["label"], "utilisation": r["utilisation"] or 0,
@@ -1936,16 +2035,16 @@ class DeckBuilder:
         # pushed the fifth column 0.2in off the slide once the Expected column
         # appeared, which only happens when forward states exist.
         if forward:
-            cols = [("Test", 0.0, 2.00, PP_ALIGN.LEFT),
-                    ("Current", 2.06, 0.70, PP_ALIGN.RIGHT),
-                    ("Limit", 2.82, 0.66, PP_ALIGN.RIGHT),
-                    ("Headroom", 3.54, 0.76, PP_ALIGN.RIGHT),
-                    ("Expected", 4.38, 0.72, PP_ALIGN.RIGHT)]
+            cols = [("Test", 0.0, 1.80, PP_ALIGN.LEFT),
+                    ("Current", 1.86, 0.74, PP_ALIGN.RIGHT),
+                    ("Limit", 2.64, 0.86, PP_ALIGN.RIGHT),
+                    ("Headroom", 3.54, 0.80, PP_ALIGN.RIGHT),
+                    ("Expected", 4.38, 0.74, PP_ALIGN.RIGHT)]
         else:
-            cols = [("Test", 0.0, 2.20, PP_ALIGN.LEFT),
-                    ("Current", 2.35, 0.85, PP_ALIGN.RIGHT),
-                    ("Limit", 3.30, 0.80, PP_ALIGN.RIGHT),
-                    ("Headroom", 4.20, 0.90, PP_ALIGN.RIGHT)]
+            cols = [("Test", 0.0, 2.00, PP_ALIGN.LEFT),
+                    ("Current", 2.10, 0.86, PP_ALIGN.RIGHT),
+                    ("Limit", 3.02, 0.96, PP_ALIGN.RIGHT),
+                    ("Headroom", 4.04, 0.96, PP_ALIGN.RIGHT)]
         # Pitch derives from how many tests there ARE, so one test does not sit
         # in a sliver at the top of an empty card and five do not collide. When
         # tests overflow the slide, the last line of the band is reserved for
@@ -1972,36 +2071,52 @@ class DeckBuilder:
             status_colour = self.theme.rag.get(
                 {"breach": "red", "warning": "amber"}.get(r["status"], "green"),
                 self.theme.ink_300)
+            # The dashboard's covenant columns: 2dp values (a test at 29.96%
+            # must not round onto its 30% limit), the limit WITH its governed
+            # operator (a bare minimum reads as a maximum), headroom in its unit.
             values = [
                 (self._fit_label(r["label"], cols[0][2]), self.theme.ink_100),
-                (C.format_measure(r["value"], r["unit"]), status_colour),
-                (C.format_measure(r["limit"], r["unit"]), self.theme.ink_300),
-                (f"{r['headroom']:.1f}" if r["headroom"] is not None else "—",
-                 self.theme.ink_300),
+                (C.format_measure(r["value"], r["unit"], dp=2), status_colour),
+                (C.format_limit(r), self.theme.ink_300),
+                (C.format_headroom(r), self.theme.ink_300),
             ]
             if forward:
-                values.append((C.format_measure(r["expected_value"], r["unit"])
+                values.append((C.format_measure(r["expected_value"], r["unit"], dp=2)
                                if r["expected_value"] is not None else "—",
-                               self.theme.peri))
+                               self.theme.ink_200))
             for i, ((value, colour), (_label, dx, cw, align)) in enumerate(
                     zip(values, cols)):
                 self._text(s, Inches(7.5 + dx), y, Inches(cw), Inches(0.3),
                            str(value), size=9.5 if i == 0 else value_pt,
                            color=colour, align=align,
-                           bold=(align == PP_ALIGN.RIGHT and colour is status_colour))
+                           bold=(align == PP_ALIGN.RIGHT and colour is status_colour),
+                           font=None if i == 0 else self.theme.font_figure)
             # A test that passes today but is forecast to cross says BOTH, and
             # says which is which — "PASS · breaches 2026-07" reads as a
             # contradiction rather than as a forward-looking warning.
-            status_line = r["status"].upper()
+            note = ""
             if r.get("expected_breach") and r.get("breach_horizon"):
-                status_line += f" now · forecast breach {r['breach_horizon']}"
+                note = f"now · forecast breach {r['breach_horizon']}"
             elif r.get("expected_breach"):
-                status_line += " now · forecast breach"
+                note = "now · forecast breach"
             elif r.get("stress_breach"):
-                status_line += " now · breaches under stress only"
-            self._text(s, Inches(7.5), Emu(int(y) + int(Inches(0.28))),
-                       Inches(5.0), Inches(0.22), status_line,
-                       size=7.5, color=status_colour)
+                note = "now · breaches under stress only"
+            # The status is a BADGE, as on the dashboard: a bordered pill in the
+            # status colour, so pass / warning / breach is read at a glance
+            # rather than found in a line of small type.
+            badge_y = Emu(int(y) + int(Inches(0.29)))
+            word = r["status"].upper()
+            # 7.5pt is the pack's legibility floor (the QA harness enforces it).
+            badge_w = Inches(0.18 + 0.082 * len(word))
+            self._panel(s, Inches(7.5), badge_y, badge_w, Inches(0.21),
+                        fill=self.theme.bg_panel_alt, line=status_colour, lw=0.75)
+            self._text(s, Inches(7.5), badge_y, badge_w, Inches(0.21), word,
+                       size=7.5, bold=True, color=status_colour,
+                       align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+            if note:
+                self._text(s, Emu(int(Inches(7.58)) + int(badge_w)), badge_y,
+                           Inches(4.2), Inches(0.2), note, size=7.5,
+                           color=status_colour, anchor=MSO_ANCHOR.MIDDLE)
             if detail:
                 # Only where the evaluator produced them. A deployment that
                 # evaluates neither forward state gets the current position
@@ -2229,7 +2344,7 @@ class DeckBuilder:
             run.font.bold = heading
             run.font.name = self.theme.font_sans
             run.font.color.rgb = self._rgb(
-                self.theme.peri if heading else self.theme.ink_300)
+                self.theme.ink_400 if heading else self.theme.ink_300)
             para.space_after = Pt(5 if heading else 2)
 
     # ------------------------------------------------------------------ helpers

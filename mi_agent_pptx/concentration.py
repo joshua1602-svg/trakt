@@ -46,6 +46,12 @@ SOURCE_APPROVED = "approved_configuration"
 SOURCE_LEGACY = "legacy_extracted"
 
 
+
+def _sym() -> str:
+    """The governed reporting currency's symbol (pound only by default)."""
+    from mi_agent_api import currency as _currency
+    return _currency.current_symbol()
+
 def normalise_status(value: Any) -> str:
     return _STATUS_NORMAL.get(str(value or "").strip().lower(), STATUS_UNAVAILABLE)
 
@@ -59,23 +65,33 @@ def _num(value: Any) -> Optional[float]:
         return None
 
 
-def format_measure(value: Optional[float], unit: Optional[str]) -> str:
-    """A governed test value in its own unit — never re-scaled."""
+_PCT_UNITS = ("percent", "percentage", "pct", "%", "percentage_points", "pp")
+
+
+def format_measure(value: Optional[float], unit: Optional[str], *,
+                   dp: int = 1) -> str:
+    """A governed test value in its own unit — never re-scaled.
+
+    ``dp`` sets percentage precision. The covenant table uses 2dp, as the
+    dashboard's concentration table does: a test at 29.96% against a 30% limit
+    reads "30.0%" at one decimal, which is the one figure on the page that must
+    not round onto its limit.
+    """
     v = _num(value)
     if v is None:
         return "—"
     u = str(unit or "").strip().lower()
-    if u in ("percent", "percentage", "pct", "%", "percentage_points", "pp"):
-        return f"{v:.1f}%"
+    if u in _PCT_UNITS:
+        return f"{v:.{dp}f}%"
     if u in ("gbp", "currency", "amount"):
         a = abs(v)
         if a >= 1e9:
-            return f"£{v / 1e9:.2f}bn"
+            return f"{_sym()}{v / 1e9:.2f}bn"
         if a >= 1e6:
-            return f"£{v / 1e6:.1f}m"
+            return f"{_sym()}{v / 1e6:.1f}m"
         if a >= 1e3:
-            return f"£{v / 1e3:.0f}k"
-        return f"£{v:,.0f}"
+            return f"{_sym()}{v / 1e3:.0f}k"
+        return f"{_sym()}{v:,.0f}"
     if u in ("count", "loans", "number"):
         return f"{v:,.0f}"
     return f"{v:,.1f}"
@@ -252,3 +268,41 @@ def source_disclosure(envelope: Optional[Mapping[str, Any]]) -> Optional[str]:
         return ("Extracted limit monitor — not an operator-approved "
                 "concentration configuration")
     return None
+
+
+#: The governed operator as the dashboard prints it before a limit.
+_OPERATOR_GLYPH = {"max": "≤", "min": "≥", "lte": "≤", "gte": "≥",
+                   "<=": "≤", ">=": "≥", "lt": "<", "gt": ">"}
+
+
+def format_limit(row: Mapping[str, Any], *, dp: int = 2) -> str:
+    """A limit WITH its operator — "≤ 30.00%", "≥ 5.00%".
+
+    Printed bare, a minimum-type test's limit reads exactly like a maximum's,
+    and the reader inverts the covenant. The operator is the governed one from
+    the approved configuration, never inferred from the value.
+    """
+    shown = format_measure(row.get("limit"), row.get("unit"), dp=dp)
+    if shown == "—":
+        return shown
+    glyph = _OPERATOR_GLYPH.get(str(row.get("operator") or "").lower())
+    return f"{glyph} {shown}" if glyph else shown
+
+
+def format_headroom(row: Mapping[str, Any], key: str = "headroom") -> str:
+    """Headroom in the test's own unit — "15.80pp", "£3.8m", "12 loans".
+
+    It used to be a bare "15.8", which on a percentage test is percentage
+    POINTS and on a money test is currency; the reader had to guess which.
+    """
+    v = _num(row.get(key))
+    if v is None:
+        return "—"
+    u = str(row.get("unit") or "").strip().lower()
+    if u in _PCT_UNITS:
+        return f"{v:.2f}pp"
+    if u in ("gbp", "currency", "amount"):
+        return format_measure(v, u)
+    if u in ("count", "loans", "number"):
+        return f"{v:,.0f}"
+    return f"{v:,.2f}"

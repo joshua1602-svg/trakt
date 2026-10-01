@@ -94,6 +94,10 @@ class DashboardData:
     movement: Dict[str, Any] = field(default_factory=dict)
     #: Deterministic watch items (see :mod:`mi_agent_pptx.watchlist`).
     watchlist: Dict[str, Any] = field(default_factory=dict)
+    #: The book's governed reporting currency (ISO code), resolved once with the
+    #: same precedence the API applies per request: approved client
+    #: configuration, then the tape, then the platform default.
+    currency_code: str = "GBP"
 
     def note(self, msg: str) -> None:
         if msg and msg not in self.notes:
@@ -414,10 +418,53 @@ def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str,
     return frames
 
 
+def _prior_from_runs(out_root: Optional[str], cid: str, run_id: Optional[str],
+                     context_id: Optional[str] = None):
+    """The prior period exactly as the dashboard's ``/mi/snapshot`` route finds it.
+
+    That route discovers prior RUNS under the onboarding output root
+    (``discover_snapshots`` → ``find_prior_run`` → ``resolve_tape_path``). The
+    deck only ever looked for dated platform-canonical files, so on a book that
+    arrives as runs it found no prior period at all — and every movement the
+    dashboard shows under a KPI ("+£3.7MM, +3.7% vs prior run") was blank in
+    the pack built from the same data. Same rule, same answer.
+
+    Local roots only: a blob root keeps the dated-cut path below, which reads
+    the same governed platform history the dashboard's blob index is built on.
+    """
+    root = str(out_root or "")
+    if not root or not run_id or root.startswith("blob://"):
+        return None, None, None
+    try:
+        from mi_agent_api import snapshots as snap
+        prior = snap.find_prior_run(snap.discover_snapshots(root), cid, run_id)
+        if not prior:
+            return None, None, None
+        tape = snap.resolve_tape_path(root, cid, prior["run_id"])
+        if tape is None:
+            return None, None, None
+        df, _report = snap.load_prepared_run(tape)
+    except Exception:  # noqa: BLE001 — a prior comparison is additive, never fatal
+        return None, None, None
+    df = _scoped_to(df, cid, context_id)
+    if df is None or df.empty:
+        return None, None, None
+    return df, prior["run_id"], prior.get("reporting_date")
+
+
 def _prior_funded(cuts: List[Tuple[str, str]], cid: str, reporting_date: Optional[str],
-                  context_id: Optional[str] = None):
-    """The prepared funded frame for the reporting period BEFORE *reporting_date*
-    (the most recent dated cut strictly earlier), for month-on-month KPI deltas."""
+                  context_id: Optional[str] = None, *, out_root: Optional[str] = None,
+                  run_id: Optional[str] = None):
+    """The prepared funded frame for the reporting period BEFORE *reporting_date*,
+    for period-on-period KPI deltas.
+
+    The dashboard's own rule first (:func:`_prior_from_runs`), so the two
+    surfaces compare against the same period; then the most recent dated
+    platform cut strictly earlier, which is the only history some deployments
+    carry."""
+    by_run = _prior_from_runs(out_root, cid, run_id, context_id)
+    if by_run[0] is not None:
+        return by_run
     if not cuts:
         return None, None, None
     earlier = [(d, p) for d, p in cuts if not reporting_date or d < str(reporting_date)]
@@ -650,9 +697,22 @@ def build_dashboard_data(
                 pass
         data.reporting_date = reporting_date
 
+        # -- Governed reporting currency ---------------------------------
+        # Resolved and put IN FORCE here, before anything is formatted: the
+        # snapshot writes its tile strings through ``currency``, and the
+        # narrative, tables and chart axes format money of their own. A EUR book
+        # used to come out € on its KPI page and £ on nine others, because only
+        # the snapshot ever asked which currency the book was in.
+        try:
+            from mi_agent_api import currency as _currency
+            data.currency_code = _currency.resolve_and_set(funded_df, client_id=cid)
+        except Exception as exc:  # noqa: BLE001 — the platform default stands
+            data.note(f"currency: {exc}")
+
         funded_cuts = _dated_funded_cuts(out_root, cid)
         prior_df, prior_rid, prior_rd = _prior_funded(funded_cuts, cid, reporting_date,
-                                                      portfolio_context)
+                                                      portfolio_context,
+                                                      out_root=out_root, run_id=rid)
 
         # -- Governed portfolio context (scope + constituent books) -------
         # Resolved from the UNSCOPED frame so the registry sees every book, then

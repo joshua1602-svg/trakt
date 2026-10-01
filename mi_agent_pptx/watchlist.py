@@ -67,6 +67,12 @@ MATERIAL_SHARE_PP = 2.0
 MATERIAL_LTV_PP = 0.5
 
 
+
+def _sym() -> str:
+    """The governed reporting currency's symbol (pound only by default)."""
+    from mi_agent_api import currency as _currency
+    return _currency.current_symbol()
+
 def _dimension_label(label: str) -> str:
     """A dimension name in prose. ``.lower()`` alone turned "LTV band" into
     "ltv band" — an acronym is not a word."""
@@ -82,12 +88,12 @@ def _money(value: Optional[float]) -> str:
         return "—"
     a = abs(value)
     if a >= 1e9:
-        return f"£{value / 1e9:.2f}bn"
+        return f"{_sym()}{value / 1e9:.2f}bn"
     if a >= 1e6:
-        return f"£{value / 1e6:.1f}m"
+        return f"{_sym()}{value / 1e6:.1f}m"
     if a >= 1e3:
-        return f"£{value / 1e3:.0f}k"
-    return f"£{value:,.0f}"
+        return f"{_sym()}{value / 1e3:.0f}k"
+    return f"{_sym()}{value:,.0f}"
 
 
 def _item(ctx: Mapping[str, Any], item_type: str, headline: str, summary: str, *,

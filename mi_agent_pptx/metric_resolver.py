@@ -43,9 +43,18 @@ def _is_nan(v: Any) -> bool:
     return isinstance(v, float) and math.isnan(v)
 
 
-def compact_currency(value: float, symbol: str = "£") -> str:
+def compact_currency(value: float, symbol: Optional[str] = None) -> str:
+    """Compact money for figures and axes — "£104.8MM", "€329K".
+
+    The symbol is the GOVERNED reporting currency unless one is passed. It was
+    a hard-coded pound, which is how a EUR book's composition page, vintage and
+    cohort tables and every chart axis came out in sterling.
+    """
     if value is None or _is_nan(value):
         return "—"
+    if symbol is None:
+        from mi_agent_api import currency as _currency
+        symbol = _currency.current_symbol()
     v = float(value)
     sign = "-" if v < 0 else ""
     a = abs(v)

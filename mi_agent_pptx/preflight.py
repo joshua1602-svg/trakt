@@ -366,10 +366,12 @@ def _gate_pipeline_reconciles(text: Optional[str], pipeline) -> GateResult:
     # one on the page (millions, one decimal — the pack's own convention).
     millions = f"{float(amount) / 1e6:.1f}"
     ok = millions in text.replace(",", "")
+    from mi_agent_api import currency as _currency
+    sym = _currency.current_symbol()
     return GateResult("pipeline_reconciles", ok,
                       f"pipeline headline reconciles to the governed snapshot "
-                      f"(£{millions}MM)" if ok else
-                      f"pipeline headline £{millions}MM does not appear in the deck",
+                      f"({sym}{millions}MM)" if ok else
+                      f"pipeline headline {sym}{millions}MM does not appear in the deck",
                       evidence={"pipeline_amount": amount})
 
 

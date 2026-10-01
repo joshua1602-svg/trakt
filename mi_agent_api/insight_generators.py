@@ -36,16 +36,27 @@ Result = Tuple[List[Insight], List[Omission]]
 # Formatting — one place, so every headline reads the same way
 # --------------------------------------------------------------------------- #
 def money(v: Optional[float]) -> str:
+    """Prose money, in the GOVERNED reporting currency.
+
+    This used to print a pound sign whatever the book was denominated in. It is
+    shared by the dashboard's observations and the investor deck's narrative,
+    so a EUR book read "+£2.7m" on both while its KPI tiles — which already
+    went through ``currency`` — said €. The symbol now comes from the same
+    request-scoped currency the tiles use; with nothing resolved it is the
+    platform default, so a sterling book reads exactly as before.
+    """
     if v is None:
         return "—"
+    from . import currency as _currency
+    sym = _currency.current_symbol()
     a = abs(v)
     if a >= 1e9:
-        return f"£{v / 1e9:.2f}bn"
+        return f"{sym}{v / 1e9:.2f}bn"
     if a >= 1e6:
-        return f"£{v / 1e6:.1f}m"
+        return f"{sym}{v / 1e6:.1f}m"
     if a >= 1e3:
-        return f"£{v / 1e3:.0f}k"
-    return f"£{v:,.0f}"
+        return f"{sym}{v / 1e3:.0f}k"
+    return f"{sym}{v:,.0f}"
 
 
 def signed_money(v: Optional[float]) -> str:

@@ -359,6 +359,12 @@ def run(argv: Optional[List[str]] = None) -> int:
         logo_path=deck_meta.get("logo_path"),
     )
 
+    # RENDER under the book's currency too. The render phase formats money of
+    # its own — chart axes, table cells, waterfall labels — so the currency the
+    # data was built under has to be in force here as well, not just assumed to
+    # have survived.
+    from mi_agent_api import currency as _currency
+    _currency.set_currency(getattr(data, "currency_code", None))
     builder = DeckBuilder(data, ctx, theme=THEME)
     report = builder.build(slides, output)
 
