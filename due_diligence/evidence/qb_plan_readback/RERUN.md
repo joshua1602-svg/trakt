@@ -591,3 +591,9 @@ intents added beside the baseline's.
                 figures read (cold forecast questions were ~140s). With the
                 ranking and decline wording (7d1cacd5). Next: deploy, then the
                 full 135 bank and the unspent held-out variants on that build
+    2026-10-01  The D13 sign-off is one run: `run_production_bank.sh
+                <principal> signoff` asks the 135 bank questions, then the 81
+                held-out variants no fix was made against (the second set
+                minus its 24 `holdout_recent` rows, spent on the 13:49 and
+                later fixes) — one log and one .jsonl, scored with
+                score_variants.py --variants <it> --bank <it>

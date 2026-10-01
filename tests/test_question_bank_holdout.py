@@ -82,3 +82,36 @@ def test_the_production_script_offers_the_twins():
     assert 'twins) TWINS="1"' in text
     assert 'echo "--twins"' in text
     assert 'KIND="qb_twins"' in text
+
+
+def test_unspent_is_every_variant_no_fix_was_made_against():
+    rows = qb.holdout_rows("unspent")
+    variants = yaml.safe_load(qb.HOLDOUT_BANK.read_text())["questions"]
+    assert [r["id"] for r in rows] == [
+        v["id"] for v in variants if v["category"] != "holdout_recent"]
+    assert len(rows) == 81
+
+
+def test_the_signoff_asks_the_bank_then_the_unspent_variants(monkeypatch, tmp_path):
+    """D13: one run, the 135 bank questions first, then the 81 variants."""
+    asked = []
+    monkeypatch.setattr(qb, "run_one", lambda row, **_: asked.append(row["id"]) or {
+        "id": row["id"], "category": row["category"], "question": row["question"],
+        "outcome": "ANSWERED", "route": None, "view": None, "seconds": 0.0,
+        "served": "NEW", "serving_reason": "", "timing": {}, "answer": ""})
+    monkeypatch.setattr(qb, "_capture_serving", lambda: None)
+    categories = ("funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,"
+                  "forecast,forecast_scale")
+    assert qb.main(["--signoff", "--categories", categories,
+                    "--out", str(tmp_path / "o.jsonl")]) == 0
+    bank = [r["id"] for r in qb.load_bank(qb.DEFAULT_BANKS)
+            if r["category"] in categories.split(",")]
+    assert len(bank) == 135
+    assert asked == bank + [r["id"] for r in qb.holdout_rows("unspent")]
+
+
+def test_the_production_script_offers_the_signoff():
+    text = _SCRIPT.read_text()
+    assert 'signoff) SIGNOFF="1"' in text
+    assert 'echo "--signoff --categories ${CATEGORIES}"' in text
+    assert 'KIND="qb_signoff"' in text

@@ -13,6 +13,7 @@
 #     bash mi_agent_api/run_production_bank.sh <principal object id> variants-recent
 #     bash mi_agent_api/run_production_bank.sh <principal object id> variants
 #     bash mi_agent_api/run_production_bank.sh <principal object id> twins
+#     bash mi_agent_api/run_production_bank.sh <principal object id> signoff
 #
 # `variants-recent` asks the held-out variants of the questions changed for
 # since 2026-09-29, each after the bank question it varies (~42 questions), so
@@ -22,6 +23,9 @@
 #         --variants <variants>.jsonl --bank <bank>.jsonl
 # `twins` asks the conversation bank's 26 new stand-alone twins (§34) on their
 # own, so each twin's outcome is known before any conversation is scored.
+# `signoff` is the D13 sign-off run: the 135 bank questions, then the held-out
+# variants no fix was made against (81), in ONE run — one log, one .jsonl,
+# scored with score_variants.py --variants <it> --bank <it>.
 #
 # The second argument is REQUIRED: the named bank questions (a spot check of
 # particular changes), or `all` for the whole bank. The whole bank is never the
@@ -42,23 +46,26 @@ set -euo pipefail
 PRINCIPAL="${1:-}"
 SELECTION="${2:-}"
 if [[ -z "${PRINCIPAL}" || -z "${SELECTION}" || $# -gt 2 ]]; then
-  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...|all|variants-recent|variants|twins>" >&2
+  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...|all|variants-recent|variants|twins|signoff>" >&2
   echo "  <id,id,...>      only the named bank questions, comma-separated, no spaces" >&2
   echo "  all              the whole bank (~135 model interpretations)" >&2
   echo "  variants-recent  the recently changed questions and their held-out variants (~42)" >&2
   echo "  variants         all 105 held-out variants (compare with an 'all' run)" >&2
-  echo "  twins            the conversation bank's new stand-alone twins (~26)" >&2
+  echo "  twins            the conversation bank's new stand-alone twins (~27)" >&2
+  echo "  signoff          the whole bank, then the unspent held-out variants (~216)" >&2
   echo "Nothing was asked." >&2
   exit 2
 fi
 IDS=""
 HOLDOUT=""
 TWINS=""
+SIGNOFF=""
 case "${SELECTION}" in
   all) ;;
   variants-recent) HOLDOUT="recent" ;;
   variants) HOLDOUT="all" ;;
   twins) TWINS="1" ;;
+  signoff) SIGNOFF="1" ;;
   *) IDS="${SELECTION}" ;;
 esac
 CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,forecast_scale"
@@ -94,11 +101,11 @@ if [[ -n "${PYTHONPATH:-}" ]]; then
 fi
 
 echo "app directory: ${APP_ROOT}"
-python - "${PRINCIPAL}" "${CATEGORIES}" "${EXPECTED_QUESTIONS}" "${MINIMUM_VOCABULARY}" "${IDS}" "${HOLDOUT}" "${TWINS}" <<'PY'
+python - "${PRINCIPAL}" "${CATEGORIES}" "${EXPECTED_QUESTIONS}" "${MINIMUM_VOCABULARY}" "${IDS}" "${HOLDOUT}" "${TWINS}" "${SIGNOFF}" <<'PY'
 import json, os, sys
 from pathlib import Path
 
-principal, categories, expected, vocabulary, ids, holdout, twins = sys.argv[1:8]
+principal, categories, expected, vocabulary, ids, holdout, twins, signoff = sys.argv[1:9]
 problems = []
 
 build = Path("build_info.json")
@@ -132,6 +139,14 @@ from mi_agent_api.question_bank import DEFAULT_BANKS, holdout_rows, load_bank, t
 rows = load_bank(DEFAULT_BANKS)
 if twins:
     print(f"questions selected: {len(twin_rows())} (conversation bank twins)")
+elif signoff:
+    wanted = set(categories.split(","))
+    count = sum(1 for r in rows if r.get("category") in wanted)
+    unspent = len(holdout_rows("unspent"))
+    print(f"questions selected: {count + unspent} (sign-off: {count} bank "
+          f"questions, then {unspent} unspent held-out variants)")
+    if count != int(expected):
+        problems.append(f"{count} bank questions selected, not {expected}")
 elif holdout:
     print(f"questions selected: {len(holdout_rows(holdout))} "
           f"(held-out variants: {holdout})")
@@ -158,6 +173,7 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 KIND="qb_plan_rerun"
 [[ -n "${HOLDOUT}" ]] && KIND="qb_variants_${HOLDOUT}"
 [[ -n "${TWINS}" ]] && KIND="qb_twins"
+[[ -n "${SIGNOFF}" ]] && KIND="qb_signoff"
 LOG="/home/${KIND}_${STAMP}.log"
 OUT="/home/${KIND}_${STAMP}.jsonl"
 START="$(date -u +%Y-%m-%dT%H:%M:%S)"
@@ -167,7 +183,7 @@ START="$(date -u +%Y-%m-%dT%H:%M:%S)"
   echo
 } > "${LOG}"
 nohup python -m mi_agent_api.question_bank \
-  --principal "${PRINCIPAL}" $(if [[ -n "${TWINS}" ]]; then echo "--twins"; elif [[ -n "${HOLDOUT}" ]]; then echo "--holdout ${HOLDOUT}"; elif [[ -n "${IDS}" ]]; then echo "--ids ${IDS}"; else echo "--categories ${CATEGORIES}"; fi) --out "${OUT}" \
+  --principal "${PRINCIPAL}" $(if [[ -n "${TWINS}" ]]; then echo "--twins"; elif [[ -n "${SIGNOFF}" ]]; then echo "--signoff --categories ${CATEGORIES}"; elif [[ -n "${HOLDOUT}" ]]; then echo "--holdout ${HOLDOUT}"; elif [[ -n "${IDS}" ]]; then echo "--ids ${IDS}"; else echo "--categories ${CATEGORIES}"; fi) --out "${OUT}" \
   >> "${LOG}" 2>&1 &
 
 echo

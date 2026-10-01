@@ -108,11 +108,17 @@ def holdout_rows(mode: str) -> List[Dict[str, Any]]:
     ``all``: every variant — compared with a whole-bank run on the same
     deploy. ``recent``: the variants of the questions changed for since
     2026-09-29, each after the bank question it varies, so one run holds both
-    sides of every comparison.
+    sides of every comparison. ``unspent``: the variants not yet used to fix
+    anything — what a sign-off asks beside the whole bank (D13).
     """
     variants = load_bank([HOLDOUT_BANK])
     if mode == "all":
         return variants
+    if mode == "unspent":
+        # The variants no fix was made against: every row but the
+        # `holdout_recent` ones, whose findings were fixed (D15-D17 and since)
+        # — a fixed finding spends its row (§25).
+        return [v for v in variants if v.get("category") != "holdout_recent"]
     recent = [v for v in variants if v.get("category") == "holdout_recent"]
     bank = {r.get("id"): r for r in load_bank(DEFAULT_BANKS)}
     rows: List[Dict[str, Any]] = []
@@ -200,7 +206,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="actor id to ask as; name one listed in "
                          "MI_AGENT_PLAN_SERVE_PRINCIPALS to exercise the "
                          "governed-plan path (MI_AGENT_PLAN_SERVE=canary)")
-    ap.add_argument("--holdout", choices=("all", "recent"), default=None,
+    ap.add_argument("--signoff", action="store_true",
+                    help="the D13 sign-off: the bank (by --categories), then "
+                         "the unspent held-out variants, in one run")
+    ap.add_argument("--holdout", choices=("all", "recent", "unspent"), default=None,
                     help="ask the held-out variants (all), or the recently "
                          "changed questions' variants each after its bank "
                          "question (recent), instead of a bank")
@@ -223,6 +232,11 @@ def main(argv: Optional[List[str]] = None) -> int:
           f"{'IS' if listed else 'is NOT'} on the allow-list", flush=True)
     if args.twins:
         rows = twin_rows()
+    elif args.signoff:
+        cats = {c.strip() for c in args.categories.split(",") if c.strip()}
+        rows = [r for r in load_bank(args.bank or DEFAULT_BANKS)
+                if args.categories == "all" or r.get("category") in cats]
+        rows += holdout_rows("unspent")
     elif args.holdout:
         rows = holdout_rows(args.holdout)
     else:
