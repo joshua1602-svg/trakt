@@ -197,14 +197,23 @@ def test_the_candidate_intent_schema_did_not_change():
     it is an ENUM, so it can no more carry a column or a snapshot than any other
     slot here. The schema version is unchanged for the same reason: an optional
     additive enum is backward compatible with every existing reading.
+
+    `ranking` (vocabulary 2.22.0) says which end of a ranked breakdown was asked
+    for and how many groups — "highest" or "lowest", and a bounded whole number.
+    It exists because "which is lowest" and "the top five" had no home: the
+    order was dropped and every group was listed. It is OPTIONAL, an ENUM plus
+    an integer bounded 1-50, so it can carry no column either, and the schema
+    version is unchanged for the same reason.
     """
     assert INTENT_SCHEMA_VERSION == "candidate_intent/1.0"
     schema = candidate_intent_json_schema()
     assert set(schema["properties"]) == {
         "schema_version", "capability", "operation", "change_form",
         "population", "measures", "dimensions", "filters", "geography", "time",
-        "comparison", "target", "outputs", "ambiguity", "evidence"}
+        "comparison", "target", "outputs", "ambiguity", "evidence", "ranking"}
     assert schema["additionalProperties"] is False
+    assert "ranking" not in schema["required"]
+    assert set(schema["properties"]["ranking"]["properties"]) == {"order", "limit"}
     assert "change_form" not in schema["required"]
     assert schema["properties"]["change_form"]["enum"]
 

@@ -2420,16 +2420,67 @@ D13 sign-off.
 
 The multi-turn bank is drafted ahead of the build, as its specification:
 `config/mi/golden_questions/conversation_bank_20261001.yaml` — 40
-conversations, 97 follow-ups, in six groups (one change; chains; ask-back and
+conversations, 98 follow-ups, in six groups (one change; chains; ask-back and
 reply; unclear follow-ups; must start fresh; must refuse). Each answered
 follow-up is scored against its STAND-ALONE TWIN, the same question asked in
 full: the same plan, the same figures, and a statement of what carried over —
-automatic, with no hand scoring and no golden figure. 122 turns are read by
+automatic, with no hand scoring and no golden figure. 123 turns are read by
 the model; the 15 memory mechanics (expiry, change of book, cleared chat,
 edited or borrowed memory) are enforced and tested in code. Pass mark (D25):
 no wrong answer — every follow-up matches its twin or asks back — and every
-must-start-fresh and must-refuse case passes. 26 twins are new wordings; they
+must-start-fresh and must-refuse case passes. 27 twins are new wordings; they
 are run on their own first so each twin's outcome is known. The reading
 conventions the twins assume are settled (D25): a new grouping replaces the
 previous one ("split further by" adds an axis), and a declined follow-up
 leaves the memory on the last answered plan.
+
+## 35. The twins run and the 135 run: five general fixes (2026-10-01)
+
+The 26 new twins (deploy fe3fb063) answered 15, misread 2 and declined 11; the
+135 bank on the same deploy answered 116 of 135 with 87 of 88 must-answers.
+Each miss was traced to a missing general rule, not to its wording, and fixed
+as one (evidence/qb_plan_readback/RERUN.md):
+
+    1 STAGE RATES   "X to completion" from KFI or Application is the completion
+                    rate from X; pull-through is one step only, so Offer's
+                    pull-through is the one rate that ends at completion. Both
+                    catalogue definitions say which they are (`pipeline_stage_
+                    movement.yaml`). With D26, a case open past its stage's
+                    measured window has lapsed and counts as fallen out.
+    2 FILTER VALUES A filter's value is checked against the values the book
+                    records before the figure is computed
+                    (`plan_runtime_adapter.filter_values_in_book`): a value the
+                    book spells differently is the book's value; a value it
+                    does not record is declined `FILTER_VALUE_NOT_IN_BOOK`,
+                    naming the values it does record (up to 25) — not "could
+                    not be produced reliably".
+    3 RANKING       "Which is highest", "which is lowest" and "the top five"
+                    have a slot (`ranking`: highest | lowest, and a number 1–50;
+                    vocabulary 2.22.0, optional and additive, schema version
+                    unchanged). The compiler defaults a rank with no end named
+                    to highest first; a ranking on any operation but rank or
+                    breakdown is a conflicting claim and is not compiled. The funded path hands the order and
+                    number to the executor's own grouped ranking (one axis);
+                    the pipeline orders and cuts its published breakdown. The
+                    answer says which end and how many ("the 3 smallest"). A
+                    defaulted ranking is not part of the plan's identity, so
+                    every plan recorded before it keeps its id.
+    4 ONE VALUE     One value of a breakdown a figure is published by is read
+                    off that breakdown, never recomputed narrowed — the
+                    pipeline amount or count for one stage, the milestone date
+                    for one scenario (downside / base / upside). A stage the
+                    live pipeline is not published for is declined
+                    `MEMBER_NOT_PUBLISHED`. Scenarios belong to the projection
+                    only (`forecast_scenario`), so "the base forecast" is the
+                    projected funded balance, not a narrowed forecast balance.
+    5 TWO EXTRACTS  A comparison of two named snapshots prepares only those two
+                    extracts (`evolution.pipeline_extract_dates`, `only_dates`).
+
+Kept deliberately: the 8-week run rate "for the pipeline" is still refused —
+an earlier attempt to read it as the forecast's completion rate turned an old
+misread (Q134) into a wrong answer on the perimeter replay, so it was reverted
+and a test records why.
+
+Recorded for the client, not changed: the origination-channel field holds
+broker names; property type holds one value (RBLD); the field named NUTS3
+holds 11 coarse regions.

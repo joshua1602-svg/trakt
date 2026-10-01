@@ -169,7 +169,13 @@ from mi_agent import semantic_model as _semantic_model
 #: "how many" for a count, and a question that says neither is answered by
 #: amount — a governed default the model is shown, so the words choose the
 #: measure and the unstated case is never asked back.
-VOCABULARY_VERSION = "2.21.0"
+#:
+#: 2.22.0 (2026-10-01 twins run and full bank): a ranking's END and NUMBER
+#: are stated (`ranking`: highest / lowest, and the number named) and the
+#: pipeline may be ranked; "X to completion" from KFI or Application is the
+#: completion rate, not the one-step pull-through; the scenario band belongs
+#: to the scale-up projection and the milestone dates only.
+VOCABULARY_VERSION = "2.22.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -222,8 +228,11 @@ CAPABILITY_OPERATIONS: Mapping[str, FrozenSet[str]] = {
     # pipeline's change between two dated extracts, as a movement or as the two
     # levels side by side (§20). A comparison of two POPULATIONS or two
     # dimension values is still refused by the pipeline runtime.
+    # `rank` since 2.22.0: "which broker has the largest pipeline", "the
+    # five smallest LTV bands" — a ranking over one of the tab's breakdowns,
+    # ordered by its figure (twins run 2026-10-01).
     "pipeline": frozenset({"summary", "breakdown", "point_in_time", "series",
-                           "movement", "compare"}),
+                           "movement", "compare", "rank"}),
     # `point_in_time` since 2.10.0: a measured rate is one figure (§20).
     # `summary` since 2.17.0: what moved in the whole pipeline, the
     # `material_summary` form's own operation (§28).

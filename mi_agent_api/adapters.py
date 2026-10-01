@@ -657,7 +657,22 @@ def _ranked_lead(rows, resolved: Mapping[str, Any],
                          h.get("scale"))
     superlative = ("lowest" if str(spec.get("sort_direction") or "desc").lower() == "asc"
                    else "highest")
-    measure = _kpi_label(ranked_key, resolved)
+    counted = str(spec.get("aggregation") or "").lower() == "count"
+    measure = "number of loans" if counted else _kpi_label(ranked_key, resolved)
+    top_n = spec.get("top_n")
+    if isinstance(top_n, int) and top_n > 1 and len(rows) > 1:
+        # "THE FIVE ..." — the number the reader named, every one of them, in
+        # the executor's order (the direction they asked for), in the answer
+        # standard's breakdown shape.
+        def _shown_row(r):
+            return _prose_value(r.get(ranked_key),
+                                h.get("format") or _infer_col_format(ranked_key, resolved),
+                                h.get("scale"))
+        listed = ", ".join(f"{str(r.get(dimension) or '').strip()} {_shown_row(r)}"
+                           for r in rows)
+        return (f"{measure[:1].upper()}{measure[1:]} by "
+                f"{_label_for(dimension, resolved)} — the {len(rows):,} "
+                f"{superlative}: {listed}.")
     groups = "1 group" if len(rows) == 1 else f"{len(rows):,} groups"
     return f"{label} has the {superlative} {measure}: {shown} ({groups})."
 

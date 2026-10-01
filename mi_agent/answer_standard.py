@@ -81,15 +81,17 @@ def plural(count: Any, noun: str, many: Optional[str] = None) -> str:
 
 def breakdown_lead(measure: str, axis: str,
                    groups: Sequence[Tuple[str, str]], *, total: int,
-                   word: str = "largest", noun: str = "groups") -> str:
+                   word: str = "largest", noun: str = "groups",
+                   lead: Optional[int] = None) -> str:
     """A breakdown in words, WITHOUT a closing full stop (the caller adds its
     as-at clause first).
 
     `groups` are `(label, shown value)` pairs ALREADY ORDERED by the caller —
     largest first for a size, time order never (a time axis is a series, not a
-    ranking). The first `LEAD_GROUPS` are named; `total` is how many there are.
+    ranking). The first `LEAD_GROUPS` are named — or `lead` of them, for a
+    ranking that asked for that many; `total` is how many there are.
     """
-    named = list(groups)[:LEAD_GROUPS]
+    named = list(groups)[:(lead or LEAD_GROUPS)]
     shown = ", ".join(f"{label} {value}" for label, value in named)
     rest = int(total) - len(named)
     more = f", and {rest:,} more" if rest > 0 else ""

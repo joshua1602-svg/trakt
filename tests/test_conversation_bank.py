@@ -28,7 +28,7 @@ CHANGES = {"amount_to_count", "statistic", "breakdown", "narrow", "widen_back",
            "date_series", "change_form", "scenario", "target"}
 #: Conversations and follow-ups per group, as the header states them.
 GROUPS = {"A": (14, 42), "B": (5, 20), "C": (6, 8), "D": (4, 6),
-          "E": (5, 10), "F": (6, 11)}
+          "E": (5, 10), "F": (6, 12)}
 
 
 @pytest.fixture(scope="module")

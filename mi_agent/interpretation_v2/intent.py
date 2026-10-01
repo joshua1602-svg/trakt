@@ -393,6 +393,31 @@ class SemanticTarget:
         return (self.concept, self.comparator, self.value)
 
 
+#: Which end of a ranking a question asks for.
+RANKING_ORDERS = frozenset({"highest", "lowest"})
+#: The most entries a "top N" names; a larger request is the whole breakdown.
+RANKING_LIMIT_MAX = 50
+
+
+@dataclass(frozen=True)
+class SemanticRanking:
+    """WHICH END of a ranking the question asks for, and how many.
+
+    "Which region has the largest balance?", "the five smallest brokers by
+    loan count", "lowest LTV band" — a ranking over ONE grouping, ordered by
+    the figure. The order is the reader's word (highest / largest / top, or
+    lowest / smallest / bottom); the limit is the number they named, if any.
+    It names no field and no column: the figure and the grouping are the
+    intent's own measure and dimension (twins run 2026-10-01: ranking had
+    nowhere to say which end was meant)."""
+
+    order: str = "highest"
+    limit: Optional[int] = None
+
+    def key(self) -> Tuple[Any, ...]:
+        return (self.order, self.limit)
+
+
 @dataclass(frozen=True)
 class SemanticComparison:
     """Two things held against each other, named semantically."""
@@ -468,6 +493,8 @@ class CandidateIntent:
     time: SemanticTime = field(default_factory=SemanticTime)
     comparison: SemanticComparison = field(default_factory=SemanticComparison)
     target: Optional[SemanticTarget] = None
+    #: Which end of a ranking, and how many — set only for a ranking.
+    ranking: Optional[SemanticRanking] = None
     outputs: Tuple[RequestedOutput, ...] = ()
     ambiguity: Tuple[Ambiguity, ...] = ()
     evidence: Tuple[SourceSpan, ...] = ()
@@ -507,6 +534,7 @@ class CandidateIntent:
             self.time.key(),
             self.comparison.key(),
             self.target.key() if self.target else None,
+            self.ranking.key() if self.ranking else None,
             tuple(sorted(o.key() for o in self.effective_outputs())),
         )
 
@@ -520,9 +548,10 @@ class CandidateIntent:
 
 _INTENT_KEYS = ("schema_version", "capability", "operation", "change_form",
                 "population", "measures", "dimensions", "filters", "geography",
-                "time", "comparison", "target", "outputs", "ambiguity",
-                "evidence")
+                "time", "comparison", "target", "ranking", "outputs",
+                "ambiguity", "evidence")
 _TARGET_KEYS = ("concept", "value", "comparator")
+_RANKING_KEYS = ("order", "limit")
 _MEASURE_KEYS = ("concept", "statistic", "weight")
 _FILTER_KEYS = ("concept", "comparator", "value")
 _GEO_KEYS = ("requested", "basis", "level", "group_by", "values")
@@ -732,6 +761,25 @@ def _parse_target(raw: Any, *, slot: str) -> Optional[SemanticTarget]:
     )
 
 
+def _parse_ranking(raw: Any, *, slot: str) -> Optional[SemanticRanking]:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise IntentParseError("INTENT_SCHEMA_INVALID", slot, "expected an object")
+    _known_keys(raw, _RANKING_KEYS, slot=slot)
+    limit = raw.get("limit")
+    if limit is not None:
+        if (isinstance(limit, bool) or not isinstance(limit, int)
+                or not 1 <= limit <= RANKING_LIMIT_MAX):
+            raise IntentParseError(
+                "INTENT_SCHEMA_INVALID", f"{slot}.limit",
+                f"a whole number from 1 to {RANKING_LIMIT_MAX}, or absent")
+    return SemanticRanking(
+        order=_enum(raw.get("order", "highest"), RANKING_ORDERS,
+                    slot=f"{slot}.order"),
+        limit=limit)
+
+
 def _parse_output(raw: Any, *, slot: str, index: int) -> RequestedOutput:
     if not isinstance(raw, Mapping):
         raise IntentParseError("INTENT_SCHEMA_INVALID", slot, "expected an object")
@@ -814,6 +862,7 @@ def parse_candidate_intent(payload: Any, *,
         time=_parse_time(payload.get("time"), slot="time"),
         comparison=_parse_comparison(payload.get("comparison"), slot="comparison"),
         target=_parse_target(payload.get("target"), slot="target"),
+        ranking=_parse_ranking(payload.get("ranking"), slot="ranking"),
         outputs=tuple(_parse_output(o, slot=f"outputs[{i}]", index=i)
                       for i, o in enumerate(payload.get("outputs") or ())),
         ambiguity=tuple(ambiguity),
@@ -1007,6 +1056,24 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                     "value": {"description": "The threshold figure from the "
                                              "question."},
                     "comparator": {"type": "string", "enum": sorted(COMPARATORS)},
+                },
+            },
+            "ranking": {
+                "type": "object", "additionalProperties": False,
+                "description": "Set ONLY for a ranking over one grouping — "
+                               "the group with the most or least of a figure, "
+                               "or the N groups with the most or least — "
+                               "with operation `rank`: `order` is which end "
+                               "the reader asked for (highest, largest, most, "
+                               "top -> highest; lowest, smallest, least, "
+                               "bottom -> lowest) and `limit` how many they "
+                               "named (omit it when they named no number). "
+                               "The figure ranked is the measure; what is "
+                               "ranked is the one dimension.",
+                "properties": {
+                    "order": {"type": "string", "enum": sorted(RANKING_ORDERS)},
+                    "limit": {"type": "integer", "minimum": 1,
+                              "maximum": RANKING_LIMIT_MAX},
                 },
             },
             "outputs": {

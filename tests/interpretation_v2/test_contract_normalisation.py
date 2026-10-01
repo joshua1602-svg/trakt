@@ -665,11 +665,14 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: without it the form is unreachable (normalisation rule 5 canonicalises
     #: the form's operation to `summary`, and the compiler refuses an
     #: operation the capability does not list).
+    #: A ranking over one of the Pipeline tab's breakdowns (2.22.0, the
+    #: 2026-10-01 twins run): "which broker has the largest pipeline" is a
+    #: rank, ordered by the figure, and the pipeline listed none.
     AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"},
                                       "forecast": {"breakdown"},
                                       "pipeline_stage_movement": {"point_in_time",
                                                                   "summary"},
-                                      "pipeline": {"movement", "compare"}}
+                                      "pipeline": {"movement", "compare", "rank"}}
 
     #: THE CATALOGUE, WIDENED BY NAME. Catalogue batch 1 (vocabulary 2.6.0,
     #: owner direction 2026-09-29: "narrow the gap") gave the Pipeline tab's
@@ -771,11 +774,20 @@ def test_the_model_still_cannot_author_an_executable_binding():
     # ENUM of governed analytical forms, so it cannot carry a column, a
     # snapshot or an expression — which is the invariant this test is
     # actually about, asserted below rather than left to the set.
+    # `ranking` (2.22.0, the 2026-10-01 twins run) is the one slot added since:
+    # which END of a ranking and how many — an enum and a bounded integer, so
+    # it can carry no column, snapshot or expression either.
     assert set(schema["properties"]) == {
         "schema_version", "capability", "operation", "change_form",
         "population", "measures", "dimensions", "filters", "geography",
-        "time", "comparison", "target", "outputs", "ambiguity", "evidence"}
+        "time", "comparison", "target", "ranking", "outputs", "ambiguity",
+        "evidence"}
     assert schema["properties"]["change_form"]["enum"]
+    ranking = schema["properties"]["ranking"]
+    assert ranking["additionalProperties"] is False
+    assert set(ranking["properties"]) == {"order", "limit"}
+    assert ranking["properties"]["order"]["enum"] == ["highest", "lowest"]
+    assert ranking["properties"]["limit"]["type"] == "integer"
 
 
 # --------------------------------------------------------------------------- #

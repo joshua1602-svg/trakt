@@ -2,15 +2,17 @@
 # before the conversational agent is built: it is the build's specification
 # and, once built, its proof — as D13's buckets are for single questions.
 #
-# 40 conversations, 97 follow-ups (every turn after the first). Groups:
+# 40 conversations, 98 follow-ups (every turn after the first). Groups:
 #   A  one change per follow-up              14 conversations, 42 follow-ups
 #   B  chains where changes pile up           5 conversations, 20 follow-ups
 #   C  the agent asks back, the reply fills   6 conversations,  8 follow-ups
 #   D  unclear follow-ups: ask, never guess   4 conversations,  6 follow-ups
 #   E  must start fresh, not carry            5 conversations, 10 follow-ups
-#   F  must refuse or not carry               6 conversations, 11 follow-ups
-# 122 turns the model reads (run: live), 15 enforced in code (run: code).
-# 26 twins are new (no bank_id): run them on their own first.
+#   F  must refuse or not carry               6 conversations, 12 follow-ups
+# 123 turns the model reads (run: live), 15 enforced in code (run: code).
+# 27 twins are new (no bank_id): run them on their own first. cv_F04 was
+# revised 2026-10-01 after fix 4 answered its twin ("Just the Offers" now
+# carries; the refusal it tested moved to a closed stage).
 #
 # HOW A TURN IS SCORED — THE STAND-ALONE TWIN. Every follow-up that is
 # answered has a twin: the same question asked in full, on its own. The
@@ -791,10 +793,16 @@ conversations:
   turns:
   - {question: "What is the pipeline amount by stage?", expect: answer, run: live, bank_id: pipeline_005}
   - question: "Just the Offers"
+    expect: carry
+    run: live
+    change: narrow
+    note: "Was a decline when drafted; its twin is answered since fix 4 (2026-10-01): one stage is the by-stage breakdown's own value."
+    twin: {question: "What is the pipeline amount at Offer stage?"}
+  - question: "Just the completed ones"
     expect: decline
     run: live
-    note: "The pipeline publishes no stage-filtered figure: declined as its twin is, never answered with the unfiltered figure."
-    twin: {question: "What is the pipeline amount at Offer stage?"}
+    note: "The live pipeline is not published for a closed stage: declined as its twin is, never answered with the unfiltered figure or the Offers still in memory."
+    twin: {question: "What is the live pipeline amount at Completed stage?"}
 
 - id: cv_F05
   group: F

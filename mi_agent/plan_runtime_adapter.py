@@ -72,7 +72,7 @@ ELIGIBLE_CAPABILITY = "generic_analysis"
 #: Operations the generic executor can express. `distribution` is excluded
 #: deliberately: it is owned by `period_change/distribution.py`, not by a
 #: groupby.
-ELIGIBLE_OPERATIONS = frozenset({"point_in_time", "breakdown"})
+ELIGIBLE_OPERATIONS = frozenset({"point_in_time", "breakdown", "rank"})
 
 #: The only period form this slice accepts. The production path resolves ONE
 #: frame per request and `mi_agent_workflow` refuses capabilities measured across
@@ -696,6 +696,12 @@ def spec_for_plan(plan: Any, *,
         intent, chart_type, output_format = _RENDERING.get(len(axes),
                                                           _MANY_DIMENSIONS)
 
+    # A RANKING (twins run 2026-10-01): the plan's order and number, on the
+    # executor's own ranking fields — a grouped ranking, in the direction the
+    # reader asked, cut to the number they named. The executor orders and
+    # cuts; nothing is ranked here.
+    ranking = body.get("ranking") or {}
+    ranked = bool(ranking) and len(axes) == 1
     return MIQuerySpec(
         intent=intent, chart_type=chart_type, output_format=output_format,
         metric=None if aggregation == COUNT else metric,
@@ -705,6 +711,11 @@ def spec_for_plan(plan: Any, *,
         x=axes[0] if len(axes) == 1 else None,
         dimensions=list(axes),
         filters=_filters_for(body, output),
+        ranking_mode="grouped" if ranked else None,
+        sort_direction=("asc" if ranked and ranking.get("order") == "lowest"
+                        else "desc"),
+        top_n=(int(ranking["limit"]) if ranked and ranking.get("limit")
+               else None),
         explanation="Shadow execution of a governed plan (slice 1).",
     )
 

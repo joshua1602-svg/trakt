@@ -189,7 +189,7 @@ _TAB_TIMING_KEY: Mapping[Tuple[str, str], str] = {
 #: "what is in the pipeline"; the other two are the ordinary scalar and grouped
 #: shapes.
 CURRENT_OPERATIONS: FrozenSet[str] = frozenset({"summary", "point_in_time",
-                                                "breakdown"})
+                                                "breakdown", "rank"})
 CURRENT_PERIOD_FORMS: FrozenSet[str] = frozenset({"current"})
 
 #: Temporal operations, served by the WEEKLY evolution owner.

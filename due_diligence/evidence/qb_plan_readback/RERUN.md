@@ -518,3 +518,20 @@ intents added beside the baseline's.
                 channel" returns the 232 broker names — the book's
                 origination channel carries the broker (a data check for the
                 client); property type is one value (RBLD) for all 568 loans
+    2026-10-01  Built, not deployed: the five fixes for the twins and 135
+                runs and D26 (design §35; vocabulary 2.22.0 — the runner
+                refuses an older deploy). Stage rates ("X to completion" is
+                the completion rate; a case open past its stage's measured
+                window has lapsed and fallen out), filter values checked
+                against the book's own values, ranking (highest / lowest /
+                top N), one value of a published breakdown (a stage, a
+                scenario), and a two-snapshot comparison preparing only those
+                two extracts. cv_F04 revised: "Just the Offers" now carries
+                (its twin answers); the refusal it tested moved to a closed
+                stage (27 new twins). Before deploying: the read-only stage
+                window check (D26). After deploying, re-run:
+                  twins (27)
+                  pipeline_010,pipeline_011,forecast_runoff_003,
+                  forecast_scale_011,forecast_scale_015,forecast_scale_019,
+                  forecast_018,forecast_019,forecast_020,
+                  pipeline_evolution_011

@@ -61,7 +61,7 @@ def test_twins_are_the_conversation_banks_new_twins_each_once():
         t["twin"]["question"] for c in data["conversations"] for t in c["turns"]
         if t.get("twin") and not t["twin"].get("bank_id")))
     assert {r["question"] for r in rows} == new
-    assert len(rows) == 26
+    assert len(rows) == 27
     assert len({r["id"] for r in rows}) == len(rows)
     assert {r["category"] for r in rows} == {"conversation_twin"}
 

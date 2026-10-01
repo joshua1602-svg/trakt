@@ -81,6 +81,7 @@ from .plan import (
     PeriodBinding,
     PlanProvenance,
     PopulationBinding,
+    RankingBinding,
     TargetBinding,
 )
 from .vocabulary import (
@@ -457,6 +458,10 @@ class DeterministicCompiler:
         target, target_reasons = self._bind_target(intent)
         reasons.extend(target_reasons)
 
+        ranking, ranking_reasons, ranking_notes = self._bind_ranking(intent)
+        reasons.extend(ranking_reasons)
+        notes.extend(ranking_notes)
+
         outputs: List[OutputPlan] = []
         for output in intent.effective_outputs():
             plan_output, out_reasons, out_notes = self._bind_output(
@@ -490,6 +495,7 @@ class DeterministicCompiler:
             outputs=tuple(outputs),
             period=period,
             target=target,
+            ranking=ranking,
             comparison_kind=intent.comparison.kind,
             comparison_left=intent.comparison.left,
             comparison_right=intent.comparison.right,
@@ -792,6 +798,28 @@ class DeterministicCompiler:
                               default_owner=(default_owner
                                              if default_method else "")),
                 reasons)
+
+    def _bind_ranking(self, intent: CandidateIntent
+                      ) -> Tuple[Optional[RankingBinding], List[CompileReason],
+                                 List[str]]:
+        """Which end of a ranking, and how many (twins run 2026-10-01).
+
+        A ranking orders ONE breakdown by its figure: it rides a `rank` (or a
+        `breakdown`) and nothing else. A `rank` that names no end is read
+        highest first — "which is largest" is what a ranking asks unless it
+        says otherwise — and the default is recorded on the plan."""
+        ranking = intent.ranking
+        if ranking is None:
+            if intent.operation == "rank":
+                return (RankingBinding(order="highest", defaulted=True), [],
+                        ["ranking: no end named, read highest first"])
+            return None, [], []
+        if intent.operation not in ("rank", "breakdown"):
+            return None, [CompileReason(
+                CONFLICTING_CLAIMS, "ranking",
+                f"a ranking orders a breakdown; operation "
+                f"{intent.operation!r} has none to order")], []
+        return RankingBinding(order=ranking.order, limit=ranking.limit), [], []
 
     def _bind_target(self, intent: CandidateIntent
                      ) -> Tuple[Optional[TargetBinding], List[CompileReason]]:

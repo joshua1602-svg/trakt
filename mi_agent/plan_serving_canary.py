@@ -742,12 +742,20 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
             answer = f"The {phrase} is {_shown(value)}{as_at}."
     elif shape == "grouped":
         # Months read in date order; every other breakdown largest first, so
-        # "which is largest" is answered by the sentence itself.
+        # "which is largest" is answered by the sentence itself. A RANKING
+        # (2.22.0) orders by the figure in the direction it asked, even by
+        # month, and keeps the number it named.
+        ranking = plan.get("ranking") or {}
+        lowest = ranking.get("order") == "lowest"
         rows = sorted(({str(axis): c[axis], "value": c["value"]}
                        for c in outcome.cells),
                       key=(lambda r: r[str(axis)])
-                      if axis == "expected_completion_month"
+                      if axis == "expected_completion_month" and not ranking
+                      else (lambda r: (r["value"] or 0.0)) if lowest
                       else (lambda r: -(r["value"] or 0.0)))
+        limit = ranking.get("limit")
+        if limit:
+            rows = rows[:int(limit)]
         axis_label = _PIPELINE_AXES.get(str(axis), str(axis).replace("_", " "))
         # D16 BY MONTH (§31): the figures for the same cases the breakdown
         # does not lead with, less any a sibling part of a composed answer
@@ -769,7 +777,7 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                        for k in companions],
             description=f"{len(rows)} rows.")]
         named = (_stage_name if axis == "pipeline_stage" else str)
-        if axis == "expected_completion_month":
+        if axis == "expected_completion_month" and not ranking:
             # A TIMELINE reads in date order, every month named (capped for a
             # long one); the table has them all.
             shown = rows[:_SENTENCE_ROWS]
@@ -789,10 +797,14 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
         else:
             # THE ANSWER STANDARD: the measure, the grouping, the leaders and
             # how many groups — the same sentence a funded breakdown makes.
+            word = "smallest" if lowest else "largest"
+            if limit:
+                word = f"the {len(rows):,} {word}"
             lead = _standard.breakdown_lead(
                 phrase[:1].upper() + phrase[1:], axis_label,
                 [(named(r[str(axis)]), _shown(r["value"])) for r in rows],
-                total=len(rows))
+                total=len(rows), word=word,
+                lead=len(rows) if limit else None)
             answer = f"{lead}{as_at}."
     elif shape == "dated_summary":
         # WHAT MOVED BETWEEN TWO SNAPSHOTS (D15): every headline figure, from
@@ -2387,7 +2399,13 @@ def _serve_plan(body: Dict[str, Any], *, plan: Dict[str, Any], question: str,
     body["execution"] = {"attempted": True, "bound_spec": spec.to_dict(),
                          "requested_semantics": adapter.requested_semantics(plan)}
     try:
-        result = execute_mi_query(spec, frame, semantics)
+        # A governed ranking is ranked by ITS OWN figure: "the five brokers
+        # with the most loans" by loan count, never by balance first (the
+        # executor's default top-N basis for an additive measure).
+        ranking_basis = ({"top_n_rank_priority": ()}
+                         if getattr(spec, "ranking_mode", None) == "grouped"
+                         else {})
+        result = execute_mi_query(spec, frame, semantics, **ranking_basis)
     except Exception as exc:                                         # noqa: BLE001
         body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
         body["disposition"] = evidence.EXECUTION_ERROR
