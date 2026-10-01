@@ -1223,6 +1223,42 @@ def _dated_selection(plan: Mapping[str, Any], dates: Sequence[str]
     return out, "", ""
 
 
+def _chosen_series(body: Mapping[str, Any], *, root: Any, client_id: str,
+                   to_run_id: Optional[str],
+                   history_model: Optional[Mapping[str, Any]]
+                   ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]],
+                              List[str], str, str]:
+    """`(series, resolution, chosen, why, detail)` for a dated plan.
+
+    The plan's dates are chosen from the extract inventory (D7 for a month,
+    the extract order for "latest against previous"), and only the chosen
+    extracts are prepared by the weekly owner — never the whole history for
+    two snapshots."""
+    from mi_agent_api import evolution as evolution_mod
+
+    try:
+        dates = evolution_mod.pipeline_extract_dates(root, client_id, to_run_id)
+    except Exception as exc:                                         # noqa: BLE001
+        return None, [], [], EXECUTION_FAILED, f"{type(exc).__name__}: {exc}"[:200]
+    resolution, why, detail = _dated_selection(body, dates)
+    if why:
+        return None, resolution, [], why, detail
+    chosen = [row["extract_date"] for row in resolution]
+    try:
+        series = evolution_mod.pipeline_evolution(
+            root, client_id, to_run_id, historical_model=history_model,
+            only_dates=chosen)
+    except Exception as exc:                                         # noqa: BLE001
+        return None, resolution, chosen, EXECUTION_FAILED, \
+            f"{type(exc).__name__}: {exc}"[:200]
+    read = {str(p.get("extract_date") or "") for p in (series.get("periods") or ())}
+    unread = [d for d in chosen if d not in read]
+    if unread:
+        return None, resolution, chosen, HISTORY_UNAVAILABLE, (
+            f"the chosen weekly extract(s) {', '.join(unread)} could not be read")
+    return series, resolution, chosen, "", ""
+
+
 def execute_dated(plan: Any, *, root: Any, client_id: str,
                   to_run_id: Optional[str] = None,
                   history_model: Optional[Mapping[str, Any]] = None
@@ -1236,8 +1272,6 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
     here: the plan asked for the pipeline at those dates, and a movement is a
     different operation with a different owner.
     """
-    from mi_agent_api import evolution as evolution_mod
-
     body = _as_mapping(plan)
     if is_summary(body):
         return _dated_summary(body, root=root, client_id=client_id,
@@ -1252,19 +1286,14 @@ def execute_dated(plan: Any, *, root: Any, client_id: str,
             ok=False, reason=HISTORY_UNAVAILABLE,
             detail="no governed weekly pipeline history was supplied for this "
                    "request")
-    try:
-        series = evolution_mod.pipeline_evolution(
-            root, client_id, to_run_id, historical_model=history_model)
-    except Exception as exc:                                         # noqa: BLE001
-        return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
-                               detail=f"{type(exc).__name__}: {exc}"[:200])
+    series, resolution, chosen, why, detail = _chosen_series(
+        body, root=root, client_id=client_id, to_run_id=to_run_id,
+        history_model=history_model)
+    if why:
+        return PipelineOutcome(ok=False, reason=why, detail=detail[:300])
 
     periods = list(series.get("periods") or ())
     by_date = {str(p.get("extract_date") or ""): p for p in periods}
-    resolution, why, detail = _dated_selection(body, list(by_date))
-    if why:
-        return PipelineOutcome(ok=False, reason=why, detail=detail[:300])
-    chosen = [row["extract_date"] for row in resolution]
     dataset = {
         "identity": "governed_weekly_pipeline_extracts",
         "extracts_used": len(chosen),
@@ -1312,25 +1341,19 @@ def _dated_summary(body: Mapping[str, Any], *, root: Any, client_id: str,
     change the semantic engine computes — from the weekly owner's own series,
     exactly the figures a named-measure change reads."""
     from mi_agent import semantic_engine as engine
-    from mi_agent_api import evolution as evolution_mod
 
     if not root or not client_id:
         return PipelineOutcome(
             ok=False, reason=HISTORY_UNAVAILABLE,
             detail="no governed weekly pipeline history was supplied for this "
                    "request")
-    try:
-        series = evolution_mod.pipeline_evolution(
-            root, client_id, to_run_id, historical_model=history_model)
-    except Exception as exc:                                         # noqa: BLE001
-        return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
-                               detail=f"{type(exc).__name__}: {exc}"[:200])
-    by_date = {str(p.get("extract_date") or ""): p
-               for p in (series.get("periods") or ())}
-    resolution, why, detail = _dated_selection(body, list(by_date))
+    series, resolution, chosen, why, detail = _chosen_series(
+        body, root=root, client_id=client_id, to_run_id=to_run_id,
+        history_model=history_model)
     if why:
         return PipelineOutcome(ok=False, reason=why, detail=detail[:300])
-    chosen = [row["extract_date"] for row in resolution]
+    by_date = {str(p.get("extract_date") or ""): p
+               for p in (series.get("periods") or ())}
     if len(chosen) != 2:
         return PipelineOutcome(
             ok=False, reason=PERIOD_NOT_SUPPORTED,

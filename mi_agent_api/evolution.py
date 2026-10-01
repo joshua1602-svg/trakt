@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 
@@ -732,10 +732,29 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
 # Pipeline evolution (governed weekly extracts)
 # --------------------------------------------------------------------------- #
 @_perf.stage_fn("pipeline_evolution_series")
+def pipeline_extract_dates(pipeline_root: str | os.PathLike, client_id: str,
+                           to_run_id: Optional[str] = None) -> List[str]:
+    """The extract dates `pipeline_evolution` would read, from the inventory
+    alone — no extract is prepared. A question about named snapshots chooses
+    its dates from this list, then asks the series for those dates only."""
+    inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
+    cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
+    return [str(e.get("pipeline_extract_date")) for e in inv.get("extracts", [])
+            if e.get("pipeline_extract_date")
+            and not (cut_ym and str(e["pipeline_extract_date"])[:7] > cut_ym)]
+
+
 def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
                        to_run_id: Optional[str] = None, *,
-                       historical_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                       historical_model: Optional[Dict[str, Any]] = None,
+                       only_dates: Optional[Iterable[str]] = None) -> Dict[str, Any]:
     """Pipeline time series across the governed UNIQUE weekly extracts.
+
+    ``only_dates`` prepares those extracts and no others: each extract's
+    figures are its own, so a question about two named snapshots needs two
+    preparations, not the whole history (a cold "latest against previous" took
+    143 s preparing 90). The trailing five-week average needs the weeks
+    around each one, so it is not published for a partial series.
 
     When a governed ``historical_model`` is supplied the weighted-expected-funded
     amount is weighted by the SAME empirical stage completion rates used by the
@@ -751,9 +770,12 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
     sources: List[str] = []
     dates: List[Optional[str]] = []
 
+    wanted = None if only_dates is None else {str(d) for d in only_dates}
     for ext in extracts:
         edate = ext.get("pipeline_extract_date")
         if cut_ym and edate and edate[:7] > cut_ym:
+            continue
+        if wanted is not None and str(edate) not in wanted:
             continue
         try:
             summary = pipeline_mod.load_extract_summary(
@@ -820,7 +842,8 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
         # Governed trailing five-week average of the SAME weekly series above,
         # using the SAME window and the SAME trailing-mean helper the funnel
         # already publishes per stage. Additive: no existing field changes.
-        "fiveWeekAverage": five_week_average(periods),
+        "fiveWeekAverage": (five_week_average(periods) if wanted is None
+                            else None),
         "lineage": {
             "source": "governed weekly pipeline extracts (deduplicated)",
             "metric": "origination pipeline amount / weighted expected funded per extract",

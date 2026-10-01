@@ -228,3 +228,36 @@ def test_a_summary_naming_a_figure_it_does_not_state_is_refused():
     if result.plan is not None:       # the compiler may already refuse it
         assert pipeline_rt.check_eligibility(result.plan.to_dict())[1] == \
             pipeline_rt.MEASURE_NOT_SUPPORTED
+
+
+# --------------------------------------------------------------------------- #
+# two snapshots prepare two extracts (twins run 2026-10-01: a cold "latest
+# against previous" took 143 s preparing all 90)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("payload", [
+    _SINCE_THE_PREVIOUS,
+    {"schema_version": "candidate_intent/1.0", "capability": "pipeline",
+     "change_form": "metric_delta", "operation": "movement",
+     "population": {"base": "pipeline"},
+     "measures": [{"concept": "pipeline_amount"}],
+     "time": {"form": "relative_pair", "labels": ["latest", "prior"]}},
+])
+def test_a_two_snapshot_question_prepares_only_its_two_extracts(monkeypatch,
+                                                               history, payload):
+    from mi_agent_api import evolution as evolution_mod
+    from mi_agent_api import pipeline_contract as pipeline_mod
+
+    prepared = []
+    real = pipeline_mod.load_extract_summary
+
+    def counting(ext, **kwargs):
+        prepared.append(ext.get("pipeline_extract_date"))
+        return real(ext, **kwargs)
+
+    monkeypatch.setattr(pipeline_mod, "load_extract_summary", counting)
+    plan = _compile(payload).plan.to_dict()
+    outcome = pipeline_rt.execute_dated(plan, root=history, client_id=_CLIENT)
+    assert outcome.ok, outcome.detail
+    assert sorted(prepared) == [_PREVIOUS, _LATEST]
+    assert len(evolution_mod.pipeline_extract_dates(history, _CLIENT)) > 2
