@@ -72,10 +72,15 @@ dimensions:
   forecast_scenario:
     definition: >-
       The scale-up forecast's scenario band: `downside`, `base` or `upside` —
-      the lines the Forecast tab draws around its projection. Filter on ONE
-      value for 'the downside / base / upside forecast'; break down by it for
-      all three. It is the owner's published band, NOT a 'what if' change the
-      question assumes.
+      the lines the Forecast tab draws around its projection. ONLY the
+      scale-up projection's figures carry it: `projected_funded_balance` (the
+      curve) and `forecast_milestone_date` (when a threshold is reached). So
+      'the downside / base / upside forecast' is `projected_funded_balance`
+      filtered on ONE value, and a scenario's milestone is
+      `forecast_milestone_date` filtered on ONE value; break down by it for all
+      three. The forecast funded balance, the run-rate and the weighted
+      pipeline have no scenarios. It is the owner's published band, NOT a
+      'what if' change the question assumes.
     values: [downside, base, upside]
   funding_threshold:
     definition: >-

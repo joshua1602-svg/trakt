@@ -578,3 +578,76 @@ def test_serve_answers_the_forecast_funded_balance(monkeypatch, funded_root,
     assert payload["artifacts"][0]["kpis"][0]["rawValue"] == \
         tab["forecastFundedBalance"]
     assert _governed_plan_coverage(payload)["unaccounted"] == []
+
+
+# --------------------------------------------------------------------------- #
+# ONE SCENARIO of a milestone (twins run 2026-10-01: "When does the upside
+# forecast reach £100m?" was refused — no filter was served on a milestone)
+# --------------------------------------------------------------------------- #
+
+def _scenario(value):
+    return [{"concept": "forecast_scenario", "canonical_field": "forecast_scenario",
+             "comparator": "eq", "value": value}]
+
+
+@pytest.mark.parametrize("scenario", ["upside", "downside", "base"])
+def test_a_milestone_for_one_scenario_is_the_owners_date_for_it(funded_root,
+                                                              scenario):
+    plan = _plan()
+    plan["outputs"][0]["filters"] = _scenario(scenario)
+    assert forecast_rt.check_eligibility(plan) == (True, "", "")
+    outcome = forecast_rt.execute(plan, output_root=funded_root,
+                                  pipeline_root=_NEAR, client_id=_CLIENT)
+    assert outcome.ok, outcome.detail
+    owner = _owner(funded_root, _NEAR, 20_000_000)
+    decided = fx.milestone_answer(owner["completionRunRateForecast"]["milestones"],
+                                  20_000_000, owner["currentFundedBalance"])
+    assert outcome.value == decided["milestone"][f"{scenario}Date"]
+    assert outcome.receipt["scenario"] == scenario
+    assert outcome.receipt["applied_predicates"] == [
+        {"field": "forecast_scenario", "op": "eq", "values": [scenario]}]
+
+
+def test_a_milestone_filtered_on_anything_else_is_still_refused():
+    plan = _plan()
+    plan["outputs"][0]["filters"] = _scenario("optimistic")
+    assert forecast_rt.check_eligibility(plan)[1] == forecast_rt.FILTERS_NOT_SUPPORTED
+
+
+def test_the_answer_leads_with_the_scenario_asked_for(monkeypatch, funded_root):
+    from mi_agent_api.mi_service import _governed_plan_coverage
+
+    # The model's own reading carries a concept, never a column: the compiler
+    # binds it.
+    reading = [{"concept": "forecast_scenario", "comparator": "eq",
+                "value": "upside"}]
+    payload, record = _served(_intent(population={"base": "forecast"},
+                                      filters=reading),
+                              monkeypatch, funded_root)
+    assert payload is not None, record.get("execution")
+    answer = payload["answer"]
+    assert ", upside scenario: around " in answer
+    assert "base " in answer and "downside " in answer
+    assert _governed_plan_coverage(payload)["unaccounted"] == []
+
+
+# --------------------------------------------------------------------------- #
+# A RUN-RATE READ "FOR THE PIPELINE" STAYS REFUSED BY POPULATION (2026-10-01)
+# --------------------------------------------------------------------------- #
+
+def test_a_run_rate_read_over_the_pipeline_is_still_refused():
+    """Tried and withdrawn on 2026-10-01: treating "the pipeline's completion
+    run-rate" as the run-rate would have answered the recorded 2026-09-29
+    reading of "What is the offer to completion pull-through rate?" — the
+    run-rate over the pipeline, a misread — with £ per month. The population
+    refusal is what stopped that wrong answer, so it stays: a run-rate framed
+    over the pipeline is more often a conversion question misread than a
+    run-rate question."""
+    payload = {"schema_version": "candidate_intent/1.0", "capability": "forecast",
+               "operation": "point_in_time", "population": {"base": "pipeline"},
+               "measures": [{"concept": "forecast_completion_rate"}],
+               "time": {"form": "current"}}
+    plan = DeterministicCompiler(CompilerContext()).compile(
+        parse_candidate_intent(payload)).plan.to_dict()
+    assert plan["population"]["base"] == "pipeline"
+    assert forecast_rt.check_eligibility(plan)[1] == forecast_rt.POPULATION_NOT_MEASURED

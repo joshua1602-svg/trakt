@@ -1457,13 +1457,29 @@ def _milestone_sentence(receipt: Mapping[str, Any], outcome: Any, as_at: str
     elif state == fx_mod.MILESTONE_PROJECTED:
         to_go = (f", {_money(receipt.get('gap_to_threshold'))} to go"
                  if receipt.get("gap_to_threshold") else "")
-        answer = (f"{label}: around {row.get('baseDate')} at the base "
-                  f"completion run-rate of {_money(base_rate)}/month "
-                  f"(downside {row.get('downsideDate')}, upside "
-                  f"{row.get('upsideDate')}), from a funded balance of "
-                  f"{_money(receipt.get('current_funded_balance'))}{to_go}. "
-                  f"{as_at}")
-        kpi_value = str(row.get("baseDate"))
+        scenario = str(receipt.get("scenario") or "base")
+        if scenario == "base":
+            answer = (f"{label}: around {row.get('baseDate')} at the base "
+                      f"completion run-rate of {_money(base_rate)}/month "
+                      f"(downside {row.get('downsideDate')}, upside "
+                      f"{row.get('upsideDate')}), from a funded balance of "
+                      f"{_money(receipt.get('current_funded_balance'))}{to_go}. "
+                      f"{as_at}")
+        else:
+            # ONE SCENARIO asked for: its date leads, at its own run-rate, with
+            # the others beside it — every date the owner's row carries.
+            rate = (receipt.get("scenario_monthly_run_rate") or {}).get(scenario)
+            others = ", ".join(f"{s} {row.get(f'{s}Date')}"
+                               for s in ("base", "downside", "upside")
+                               if s != scenario)
+            answer = (f"{label}, {scenario} scenario: around "
+                      f"{row.get(f'{scenario}Date')}"
+                      + (f" at the {scenario} completion run-rate of "
+                         f"{_money(rate)}/month" if rate is not None else "")
+                      + f" ({others}), from a funded balance of "
+                      f"{_money(receipt.get('current_funded_balance'))}{to_go}. "
+                      f"{as_at}")
+        kpi_value = str(row.get(f"{scenario}Date"))
     else:
         answer = (f"{label}: beyond the projection horizon, so no date is "
                   f"given. The funded balance is "

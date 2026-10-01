@@ -286,6 +286,22 @@ def kind_of(plan: Any) -> str:
     return KIND_CATALOGUE if MODEL.measure(_measure(body)) else ""
 
 
+#: The scenario band the owner publishes a milestone date for, each with the
+#: key of its date on the owner's milestone row.
+MILESTONE_SCENARIOS: Tuple[str, ...] = ("downside", "base", "upside")
+SCENARIO_DIMENSION = "forecast_scenario"
+
+
+def milestone_scenario(plan: Any) -> Optional[str]:
+    """The ONE scenario a milestone plan narrows to, or None (none named,
+    something else named, or more than one thing)."""
+    member = _engine.member_of(plan)
+    if member is None or member[0] != SCENARIO_DIMENSION:
+        return None
+    value = str(member[1]).strip().lower()
+    return value if value in MILESTONE_SCENARIOS else None
+
+
 def target_of(plan: Any) -> Optional[Mapping[str, Any]]:
     target = _as_mapping(plan).get("target")
     return target if isinstance(target, Mapping) else None
@@ -352,10 +368,15 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
 
 def _check_milestone(body: Mapping[str, Any],
                      output: Mapping[str, Any]) -> Tuple[bool, str, str]:
-    """The milestone for ONE stated threshold: the owner's rule answers it."""
-    if _plan.plan_filters(body):
+    """The milestone for ONE stated threshold: the owner's rule answers it —
+    for the base scenario, or for ONE scenario of the band the owner
+    publishes the date for (2026-10-01: "when does the upside forecast reach
+    £100m?"), read off its own milestone row, never recomputed."""
+    if _plan.plan_filters(body) and milestone_scenario(body) is None:
         return (False, FILTERS_NOT_SUPPORTED,
-                "no forecast owner narrows a milestone by a predicate")
+                "a milestone is narrowed only to ONE scenario of the band the "
+                "owner publishes its date for "
+                f"({', '.join(MILESTONE_SCENARIOS)})")
     if output.get("dimensions"):
         return (False, DIMENSION_NOT_SUPPORTED,
                 "a milestone for a stated threshold is one date; for the "
@@ -759,12 +780,14 @@ def _execute_milestone(body: Mapping[str, Any], *, request: Mapping[str, Any],
         used = _used_inputs(("funded",), inputs)
     else:
         used = _used_inputs(("funded", "signal"), inputs)
+    scenario = milestone_scenario(body) or "base"
+    date_key = f"{scenario}Date"
     if (decided["state"] == fx_mod.MILESTONE_PROJECTED
-            and not (decided["milestone"] or {}).get("baseDate")):
+            and not (decided["milestone"] or {}).get(date_key)):
         why_not = "; ".join(rr.get("caveats") or ()) or "no positive run-rate"
         raise _Refusal(FORECAST_UNAVAILABLE,
-                       f"the owner projected no base date for this threshold: "
-                       f"{why_not}")
+                       f"the owner projected no {scenario} date for this "
+                       f"threshold: {why_not}")
     skew, ceiling = _vintage(used, policy)
 
     milestone = dict(decided.get("milestone") or {})
@@ -777,9 +800,12 @@ def _execute_milestone(body: Mapping[str, Any], *, request: Mapping[str, Any],
         "result_shape": "scalar",
         "execution_owner": OWNER_EXTRAPOLATION,
         "decision_owner": OWNER_MILESTONE_RULE,
-        # No predicate was requested (a filtered milestone is refused) and none
-        # was applied; no axis likewise. Statements, not omissions.
-        "applied_predicates": [],
+        # The one predicate a milestone takes is its scenario, read off the
+        # owner's row; none otherwise. No axis. Statements, not omissions.
+        "applied_predicates": ([{"field": SCENARIO_DIMENSION, "op": "eq",
+                                 "values": [scenario]}]
+                               if milestone_scenario(body) else []),
+        "scenario": scenario,
         "group_field_keys": [],
         # WHICH INPUTS FED THIS FIGURE, each with the date it is as at, and
         # which ones were declared but did not.
@@ -807,6 +833,6 @@ def _execute_milestone(body: Mapping[str, Any], *, request: Mapping[str, Any],
             "upsideMonths") if k in milestone},
         **notes,
     }
-    value = (milestone.get("baseDate")
+    value = (milestone.get(date_key)
              if decided["state"] == fx_mod.MILESTONE_PROJECTED else None)
     return ForecastOutcome(ok=True, value=value, receipt=receipt)
