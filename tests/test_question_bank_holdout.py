@@ -49,3 +49,36 @@ def test_the_production_script_offers_both_selections():
     assert 'variants) HOLDOUT="all"' in text
     assert '--holdout ${HOLDOUT}' in text
     assert 'KIND="qb_variants_${HOLDOUT}"' in text
+
+
+def test_twins_are_the_conversation_banks_new_twins_each_once():
+    """§34: only twins that are not production-bank questions are asked."""
+    rows = qb.twin_rows()
+    data = yaml.safe_load(qb.CONVERSATION_BANK.read_text())
+    new = {t["twin"]["question"] for c in data["conversations"] for t in c["turns"]
+           if t.get("twin") and not t["twin"].get("bank_id")}
+    assert [r["question"] for r in rows] == list(dict.fromkeys(
+        t["twin"]["question"] for c in data["conversations"] for t in c["turns"]
+        if t.get("twin") and not t["twin"].get("bank_id")))
+    assert {r["question"] for r in rows} == new
+    assert len(rows) == 26
+    assert len({r["id"] for r in rows}) == len(rows)
+    assert {r["category"] for r in rows} == {"conversation_twin"}
+
+
+def test_the_runner_asks_the_twin_rows(monkeypatch, tmp_path):
+    asked = []
+    monkeypatch.setattr(qb, "run_one", lambda row, **_: asked.append(row["id"]) or {
+        "id": row["id"], "category": row["category"], "question": row["question"],
+        "outcome": "ANSWERED", "route": None, "view": None, "seconds": 0.0,
+        "served": "NEW", "serving_reason": "", "timing": {}, "answer": ""})
+    monkeypatch.setattr(qb, "_capture_serving", lambda: None)
+    assert qb.main(["--twins", "--out", str(tmp_path / "o.jsonl")]) == 0
+    assert asked == [r["id"] for r in qb.twin_rows()]
+
+
+def test_the_production_script_offers_the_twins():
+    text = _SCRIPT.read_text()
+    assert 'twins) TWINS="1"' in text
+    assert 'echo "--twins"' in text
+    assert 'KIND="qb_twins"' in text

@@ -35,6 +35,10 @@ DEFAULT_BANKS = [_BANK_DIR / "ere_mi_questions.yaml",
 #: The held-out variants (P0 design §25): each asks what one bank question
 #: asks, in other words, and is compared with it on the same deploy.
 HOLDOUT_BANK = _BANK_DIR / "holdout_variants_20260930b.yaml"
+#: The conversation bank (P0 design §34, D24-D25): each answered follow-up is
+#: scored against a stand-alone twin. The twins that are not production-bank
+#: questions are asked on their own first, so each twin's outcome is known.
+CONVERSATION_BANK = _BANK_DIR / "conversation_bank_20261001.yaml"
 #: Funded, pipeline, forecast and limits (current and forward).
 DEFAULT_CATEGORIES = ["funded_kpi", "funded_breakdown_1d", "pipeline",
                       "pipeline_evolution", "forecast", "forecast_scale",
@@ -118,6 +122,28 @@ def holdout_rows(mode: str) -> List[Dict[str, Any]]:
     return rows
 
 
+def twin_rows() -> List[Dict[str, Any]]:
+    """The conversation bank's NEW stand-alone twins, each once.
+
+    A twin that names a production-bank question (``bank_id``) is that
+    question, already measured on every full-bank run; only the others are
+    asked here. Each keeps the id of the first turn that names it.
+    """
+    data = yaml.safe_load(CONVERSATION_BANK.read_text(encoding="utf-8")) or {}
+    rows: List[Dict[str, Any]] = []
+    seen = set()
+    for conversation in data.get("conversations") or ():
+        for i, turn in enumerate(conversation.get("turns") or ()):
+            twin = turn.get("twin") or {}
+            question = twin.get("question")
+            if not question or twin.get("bank_id") or question in seen:
+                continue
+            seen.add(question)
+            rows.append({"id": f"{conversation['id']}_t{i}_twin",
+                         "category": "conversation_twin", "question": question})
+    return rows
+
+
 def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
             lens: Optional[str], principal: str = "question-bank") -> Dict[str, Any]:
     from trakt_core import perf as _perf
@@ -178,6 +204,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="ask the held-out variants (all), or the recently "
                          "changed questions' variants each after its bank "
                          "question (recent), instead of a bank")
+    ap.add_argument("--twins", action="store_true",
+                    help="ask the conversation bank's new stand-alone twins "
+                         "(those that are not production-bank questions)")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("question_bank_results.jsonl"))
     args = ap.parse_args(argv)
@@ -192,7 +221,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         os.environ.get("MI_AGENT_PLAN_SERVE_PRINCIPALS", "").split(",")}
     print(f"MI_AGENT_PLAN_SERVE={mode}; principal {args.principal!r} "
           f"{'IS' if listed else 'is NOT'} on the allow-list", flush=True)
-    if args.holdout:
+    if args.twins:
+        rows = twin_rows()
+    elif args.holdout:
         rows = holdout_rows(args.holdout)
     else:
         rows = load_bank(args.bank or DEFAULT_BANKS)
