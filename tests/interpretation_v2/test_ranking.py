@@ -98,11 +98,28 @@ def test_the_funded_book_names_the_number_asked_for(monkeypatch, book, semantics
         dict(_intent(**_COUNT_BY_CHANNEL), ranking={"order": "highest", "limit": 2}),
         monkeypatch, book, semantics)
     assert payload is not None, record.get("execution")
-    top = _channel_counts(book).head(2)
-    listed = ", ".join(f"{k} {v}" for k, v in top.items())
-    assert f"— the 2 highest: {listed}." in payload["answer"]
+    counts = _channel_counts(book)
+    listed = ", ".join(f"{k} {v}" for k, v in counts.head(2).items())
+    assert (f"— the 2 highest of {len(counts)} groups: {listed}."
+            in payload["answer"])
     assert len(record["execution"]["grouped_cells"]) == 2
     assert coverage["unaccounted"] == []
+
+
+def test_one_leader_says_how_many_groups_it_was_ranked_against(monkeypatch, book,
+                                                               semantics):
+    """Twins run 2026-10-01 on 2e9e1cc4: "London has the highest Average
+    Balance: £419k (1 group)" — one group SHOWN, eleven compared. The count is
+    the executor's, taken before it cut the ranking to the number asked for."""
+    payload, record, _ = _served(
+        dict(_intent(**_COUNT_BY_CHANNEL), ranking={"order": "highest", "limit": 1}),
+        monkeypatch, book, semantics)
+    groups = len(_channel_counts(book))
+    assert groups > 1
+    assert f"(of {groups} groups)." in payload["answer"]
+    assert "(1 group)" not in payload["answer"]
+    assert f"the highest of {groups} groups" in payload["answer"]
+    assert "· 1 group ·" not in payload["answer"]
 
 
 def test_a_count_ranking_is_ranked_by_the_count_not_the_balance(monkeypatch, book,
@@ -123,7 +140,7 @@ def test_a_count_ranking_is_ranked_by_the_count_not_the_balance(monkeypatch, boo
 
 @pytest.mark.parametrize("ranking, word", [
     ({"order": "highest"}, "largest"), ({"order": "lowest"}, "smallest"),
-    ({"order": "highest", "limit": 2}, "the 2 largest")])
+    ({"order": "highest", "limit": 2}, "the 2 largest of 3 groups")])
 def test_the_pipeline_orders_its_own_breakdown(monkeypatch, ranking, word):
     payload, record = _served_pipeline(
         dict(_PIPELINE_INTENT, operation="rank", dimensions=["pipeline_stage"],
@@ -134,3 +151,22 @@ def test_the_pipeline_orders_its_own_breakdown(monkeypatch, ranking, word):
     values = [r["value"] for r in rows]
     assert values == sorted(values, reverse=ranking["order"] == "highest")
     assert len(rows) == (ranking.get("limit") or len(rows))
+
+
+@pytest.mark.parametrize("order, word", [("highest", "largest"),
+                                         ("lowest", "smallest")])
+def test_one_pipeline_leader_is_named(monkeypatch, order, word):
+    """"the 1 largest: Offer £5.4m (1 groups)" read as a list of one; one
+    leader is named, with the number of groups it led."""
+    payload, record = _served_pipeline(
+        dict(_PIPELINE_INTENT, operation="rank", dimensions=["pipeline_stage"],
+             ranking={"order": order, "limit": 1}), monkeypatch,
+        semantics=_semantics())
+    assert payload is not None, record.get("execution")
+    row = payload["artifacts"][0]["rows"][0]
+    stage = str(row["pipeline_stage"])
+    stage = stage.upper() if stage.upper() == "KFI" else stage.title()
+    assert payload["answer"].startswith(
+        f"{stage} has the {word} live pipeline amount by stage: £")
+    assert "(of 3 groups), as at" in payload["answer"]
+    assert "1 groups" not in payload["answer"]

@@ -575,7 +575,9 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
                             spec)
         if line:
             return line
-    ranked = _ranked_lead(rows, (qr or {}).get("resolved_fields") or {}, hints, spec)
+    ranked = _ranked_lead(rows, (qr or {}).get("resolved_fields") or {}, hints, spec,
+                          ranked_of=((qr or {}).get("metadata") or {}).get(
+                              "groups_before_top_n"))
     if ranked:
         return ranked
     # A SINGLE ROW IS A SINGLE FIGURE, whatever chart was chosen for it.
@@ -613,7 +615,8 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
 
 def _ranked_lead(rows, resolved: Mapping[str, Any],
                  hints: Optional[Dict[str, Any]],
-                 spec: Optional[Mapping[str, Any]]) -> str:
+                 spec: Optional[Mapping[str, Any]],
+                 ranked_of: Optional[int] = None) -> str:
     """"Scotland has the highest Total Balance: £28.9MM (7 groups)."
 
     A RANKING QUESTION IS ANSWERED BY NAMING THE GROUP. "Which region has the
@@ -670,10 +673,17 @@ def _ranked_lead(rows, resolved: Mapping[str, Any],
                                 h.get("scale"))
         listed = ", ".join(f"{str(r.get(dimension) or '').strip()} {_shown_row(r)}"
                            for r in rows)
+        of = (f" of {ranked_of:,} groups"
+              if isinstance(ranked_of, int) and ranked_of > len(rows) else "")
         return (f"{measure[:1].upper()}{measure[1:]} by "
                 f"{_label_for(dimension, resolved)} — the {len(rows):,} "
-                f"{superlative}: {listed}.")
-    groups = "1 group" if len(rows) == 1 else f"{len(rows):,} groups"
+                f"{superlative}{of}: {listed}.")
+    # How many groups were COMPARED: the executor's count before it cut the
+    # ranking to the number asked for, where it cut one.
+    compared = (ranked_of if isinstance(ranked_of, int) and ranked_of > len(rows)
+                else None)
+    groups = (f"of {compared:,} groups" if compared
+              else "1 group" if len(rows) == 1 else f"{len(rows):,} groups")
     return f"{label} has the {superlative} {measure}: {shown} ({groups})."
 
 

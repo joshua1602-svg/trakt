@@ -59,6 +59,24 @@ def test_a_closed_stage_is_not_published_for_the_live_pipeline():
         "the value it narrows to is not one the figure is published for")
 
 
+def test_the_decline_names_the_values_the_figure_is_published_for(monkeypatch):
+    """Twins run 2026-10-01 on 2e9e1cc4: the decline said only "the value it
+    narrows to is not one the figure is published for"; it now names them,
+    as a filter value the book does not record is named."""
+    payload, record = _served(dict(_PIPELINE_INTENT, operation="point_in_time",
+                                   filters=_stage("COMPLETED")), monkeypatch,
+                              semantics=_semantics())
+    facts = record["execution"]["not_published"]
+    assert facts["value"] == "Completed"
+    assert "Offer" in facts["published"]
+    answer = decline.envelope(question="q", body=record,
+                              reason="INELIGIBLE:MEMBER_NOT_PUBLISHED",
+                              view="pipeline")["answer"]
+    assert ("the figure is published for pipeline stage "
+            + ", ".join(facts["published"])) in answer
+    assert "'Completed' is not one of them" in answer
+
+
 def test_one_value_is_not_served_together_with_another_breakdown():
     plan = _plan(operation="breakdown", filters=_stage("OFFER"),
                  dimensions=["broker_channel"])

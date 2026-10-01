@@ -154,6 +154,24 @@
         configured value stands in, and a figure that depends on it is not
         stated and says why. §33.
 
+    D27 THE HISTORICAL COMPLETION RATE                        PROPOSED 2026-10-01
+        Today: of every case ever seen at a stage, the share that has
+        completed SO FAR (`pipeline_history`), so a case still working
+        through Application or Offer counts as not completed. On production
+        (2e9e1cc4): KFI 4.8% (265 of 5,486), Application 42.5% (559 of
+        1,315), while the measured stage rates multiply to about 10.5% from
+        KFI (22.6% x 65.4% x 71.1%) and 46.5% from Application. (a)
+        Proposed: measure it the D26 way — of cases entering the stage, the
+        share expected to complete, with cases still in progress counted as
+        still waiting — from the run-off model the forecast already weights
+        live cases with, so it agrees with the stage rates and IS the rate
+        the forecast assumes for a case new to that stage; a KFI answer says
+        the forecast weights no KFI. (b) Keep it, renamed "completed so far".
+        The forecast is not affected either way: it weights Application and
+        Offer cases by the run-off model (`pipeline_prep` tier 5), not by
+        this rate. The dashboard shows this figure too (the concentration
+        tests' methodology block).
+
     D26 A LAPSED CASE HAS FALLEN OUT                          SETTLED 2026-10-01
         "(a) but I don't think 9 days is fixed is it? A KFI can be live for
         more than 2 weeks." A case still open past its stage's measured

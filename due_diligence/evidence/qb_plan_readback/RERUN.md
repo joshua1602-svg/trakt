@@ -554,3 +554,33 @@ intents added beside the baseline's.
                 retry). Vocabulary 2.22.0: the five fixes and D26 (design
                 §35). Next: the 27 twins and the ten bank questions listed
                 above
+    2026-10-01  18:38:46 UTC twins on 2e9e1cc4 (27 asked): 20 answered, 7
+                declined, no wrong figure. Now answered: ranking on the
+                funded book and the pipeline (A03, A10, A11, D03), "X to
+                completion" as the completion rate (A07: Application 42.5%,
+                KFI 4.8%), the upside milestone (A13: 2026-12), the Offer
+                stage (F04: £9.2m), a two-snapshot comparison in 12s (was
+                143s). Declined, each correctly: Active (the book records
+                Deceased, Inforce, Redeemed), lifetime mortgage (no loan has
+                it), drivers by region (not built), forecast loan count by
+                region (not published), ITL3 both bases (not in the book),
+                the Completed stage (not published for the live pipeline).
+                Found: a ranking cut to one read "(1 group)" / "the 1
+                largest … (1 groups)" — one shown, not one compared; the
+                decline quoted the registry code 'lifetime_mortgage' and the
+                unpublished-stage decline did not name the stages. Cold
+                forecast questions 146s (the forecast series prepares every
+                extract)
+    2026-10-01  18:47:19 UTC ten bank questions on 2e9e1cc4: 9 answered, 1
+                declined. pipeline_010 / _011 ranked; forecast_scale_011 "the
+                base forecast" is the projection (£140.5m by 2028-02; must-
+                answer, 140s cold); forecast_runoff_003 Offer pull-through
+                71.1% (advanced 580, fell out 231, lapsed 5);
+                pipeline_evolution_011 states each stage at each date;
+                forecast_scale_019 the 8-week run rate £4.1m/month;
+                forecast_019 £0, forecast_020 £127.6m. forecast_018 (fine to
+                decline) declined FILTERS_NOT_SUPPORTED. forecast_scale_015
+                "assumed from KFI to completion" answered with the historical
+                rate 4.8% — the forecast weights no KFI, and the historical
+                rate counts cases still in progress as not completed (D27,
+                proposed)

@@ -118,3 +118,20 @@ def test_the_decline_wording_without_a_list():
          "book_values": None}]}}
     text = decline.message(body, "INELIGIBLE:FILTER_VALUE_NOT_IN_BOOK")
     assert "no loan in this book has Broker 'Acme'" in text
+
+
+def test_a_registry_value_is_said_in_words_and_an_empty_field_as_unrecorded():
+    """Twins run 2026-10-01 on 2e9e1cc4: "no loan in this book has Product
+    Type 'lifetime_mortgage'" quoted the registry's code. The value is said
+    as the reading above it says it, and a field the book holds no value for
+    at all is said to be unrecorded."""
+    body = {"execution": {"filter_values_not_in_book": [
+        {"field": "erm_product_type", "label": "Product Type",
+         "values": ["lifetime_mortgage"], "book_values": []}]}}
+    text = decline.message(body, "INELIGIBLE:FILTER_VALUE_NOT_IN_BOOK")
+    assert "this book does not record Product Type for any loan" in text
+    many = {"execution": {"filter_values_not_in_book": [
+        {"field": "erm_product_type", "label": "Product Type",
+         "values": ["lifetime_mortgage"], "book_values": None}]}}
+    text = decline.message(many, "INELIGIBLE:FILTER_VALUE_NOT_IN_BOOK")
+    assert "no loan in this book has Product Type 'lifetime mortgage'" in text

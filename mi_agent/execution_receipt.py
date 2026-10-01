@@ -2933,6 +2933,17 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
     group_count = None
     if getattr(query_result, "result_type", None) == "table":
         group_count = getattr(query_result, "row_count", None)
+    # A RANKING CUT TO THE NUMBER ASKED FOR says how many groups it ranked:
+    # "the highest of 11 groups", never "1 group" for a ranking of eleven.
+    ranking = None
+    ranked_of = meta.get("groups_before_top_n")
+    if (isinstance(ranked_of, int) and group_count is not None
+            and ranked_of > group_count):
+        end = ("lowest" if str(getattr(spec, "sort_direction", None) or "desc")
+               .lower() == "asc" else "highest")
+        ranking = (f"the {end} of {ranked_of:,} groups" if group_count == 1
+                   else f"the {group_count:,} {end} of {ranked_of:,} groups")
+        group_count = None
 
     executed = meta.get("measures_executed") or []
     # The region the figure was measured on, read from the fields execution
@@ -2960,6 +2971,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         population=int(population) if population is not None else None,
         population_total=int(total) if total is not None else None,
         group_count=group_count,
+        ranking=ranking,
         narrowed=narrowed,
         dataset=dataset,
         period=period,

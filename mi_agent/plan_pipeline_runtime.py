@@ -65,6 +65,8 @@ specialist arrives and shows a genuinely common interface, extract it then.
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
 from mi_agent.answer_standard import plural as _plural
@@ -711,6 +713,10 @@ def _execute_current_grouped_amount(plan: Any, *, body: Mapping[str, Any],
     try:
         spec = adapter.spec_for_plan(
             plan, measure_binding=(PIPELINE_AMOUNT_FIELD, SUM))
+        # A RANKING is ordered and cut where every pipeline breakdown is — in
+        # the answer, by the figure itself — so the whole published breakdown
+        # comes back here, whichever pipeline figure was ranked.
+        spec = replace(spec, ranking_mode=None, top_n=None)
         result = execute_mi_query(spec, frame, semantics)
     except Exception as exc:                                         # noqa: BLE001
         return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
@@ -890,6 +896,15 @@ def execute_current(plan: Any, *, source: Any,
                            receipt=receipt)
 
 
+def _reader_member(dimension: str, value: Any) -> str:
+    """A breakdown value as a reader writes it: a stage as KFI, Application,
+    Offer; anything else as the book records it."""
+    text = str(value if value is not None else "").strip()
+    if dimension == "pipeline_stage":
+        return text.upper() if text.upper() == "KFI" else text.title()
+    return text
+
+
 def _execute_member(body: Mapping[str, Any], *, member: Tuple[str, str],
                     source: Any, semantics: Any,
                     history_model: Optional[Mapping[str, Any]]) -> PipelineOutcome:
@@ -915,11 +930,16 @@ def _execute_member(body: Mapping[str, Any], *, member: Tuple[str, str],
     cells = list(outcome.cells or ())
     hit = [c for c in cells if _same_member(c.get(dimension), value)]
     if not hit:
-        published = ", ".join(str(c.get(dimension)) for c in cells) or "nothing"
+        members = [_reader_member(dimension, c.get(dimension)) for c in cells]
         return PipelineOutcome(
             ok=False, reason=MEMBER_NOT_PUBLISHED,
             detail=f"the live pipeline by {dimension} is published for "
-                   f"{published}; {value!r} is not one of them")
+                   f"{', '.join(members) or 'nothing'}; {value!r} is not one of "
+                   f"them",
+            # What the decline names: the published values and the one asked.
+            receipt={"not_published": {
+                "dimension": dimension, "published": members,
+                "value": _reader_member(dimension, value)}})
     receipt = dict(outcome.receipt)
     receipt["group_field_keys"] = []
     receipt["result_shape"] = "scalar"

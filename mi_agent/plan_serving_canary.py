@@ -622,6 +622,8 @@ def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],
     if not outcome.ok:
         body["execution"].update({"attempted": False,
                                   "why_not": f"{outcome.reason}: {outcome.detail}"[:300]})
+        if (outcome.receipt or {}).get("not_published"):
+            body["execution"]["not_published"] = outcome.receipt["not_published"]
         body["disposition"] = evidence.INELIGIBLE
         return None, f"{INELIGIBLE}:{outcome.reason}"
 
@@ -754,6 +756,7 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                       else (lambda r: (r["value"] or 0.0)) if lowest
                       else (lambda r: -(r["value"] or 0.0)))
         limit = ranking.get("limit")
+        ranked_of = len(rows)                 # groups compared, before the cut
         if limit:
             rows = rows[:int(limit)]
         axis_label = _PIPELINE_AXES.get(str(axis), str(axis).replace("_", " "))
@@ -798,14 +801,25 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
             # THE ANSWER STANDARD: the measure, the grouping, the leaders and
             # how many groups — the same sentence a funded breakdown makes.
             word = "smallest" if lowest else "largest"
-            if limit:
-                word = f"the {len(rows):,} {word}"
-            lead = _standard.breakdown_lead(
-                phrase[:1].upper() + phrase[1:], axis_label,
-                [(named(r[str(axis)]), _shown(r["value"])) for r in rows],
-                total=len(rows), word=word,
-                lead=len(rows) if limit else None)
-            answer = f"{lead}{as_at}."
+            if limit and len(rows) == 1:
+                # ONE LEADER NAMES IT: "Offer has the largest ... by stage:
+                # £5.4m (of 3 groups)" — as the funded ranking says it.
+                compared = (f"of {ranked_of:,} groups" if ranked_of > 1
+                            else "1 group")
+                answer = (f"{named(rows[0][str(axis)])} has the {word} {phrase} "
+                          f"by {axis_label}: {_shown(rows[0]['value'])} "
+                          f"({compared}){as_at}.")
+            else:
+                if limit:
+                    word = f"the {len(rows):,} {word}"
+                lead = _standard.breakdown_lead(
+                    phrase[:1].upper() + phrase[1:], axis_label,
+                    [(named(r[str(axis)]), _shown(r["value"])) for r in rows],
+                    total=len(rows), word=word,
+                    lead=len(rows) if limit else None,
+                    ranked_of=(ranked_of if limit and ranked_of > len(rows)
+                               else None))
+                answer = f"{lead}{as_at}."
     elif shape == "dated_summary":
         # WHAT MOVED BETWEEN TWO SNAPSHOTS (D15): every headline figure, from
         # and to, and the change the semantic engine computed.

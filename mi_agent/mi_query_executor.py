@@ -1430,6 +1430,10 @@ def _execute_grouped(spec, work, semantics, warnings, balance_col,
                                balance_col, warnings)
 
     if top_n_allowed and spec.top_n is not None:
+        # How many groups were ranked, before the cut: "the highest of 11",
+        # never "1 group" for a ranking that compared eleven.
+        if coverage is not None:
+            coverage["groups_before_top_n"] = int(len(out))
         out = _apply_top_n(out, metric_col, work, group_cols, agg, balance_col,
                            spec.top_n, rank_priority, warnings,
                            sort_direction=(spec.sort_direction or "desc"))
@@ -1875,6 +1879,8 @@ def execute_mi_query(
                 col = ent.get("canonical_field", key)
                 if col not in measure_cols:
                     measure_cols.append(col)
+    if coverage.get("groups_before_top_n") is not None:
+        metadata["groups_before_top_n"] = coverage["groups_before_top_n"]
     metadata["reconciliation"] = _build_reconciliation(
         df, work, balance_col, spec, coverage, result_type, metadata,
         measure_cols=measure_cols)

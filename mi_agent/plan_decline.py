@@ -260,8 +260,12 @@ def message(body: Mapping[str, Any], reason: str) -> str:
                 + ". " + _NOTHING_GUESSED)
     absent = ((body.get("execution") or {}).get("filter_values_not_in_book")
               if runtime_code(code) == "FILTER_VALUE_NOT_IN_BOOK" else None)
+    unpublished = ((body.get("execution") or {}).get("not_published")
+                   if runtime_code(code) == "MEMBER_NOT_PUBLISHED" else None)
     if absent:
         plain = "; ".join(_not_recorded(a) for a in absent)
+    elif unpublished:
+        plain = _not_published(unpublished)
     elif what == FAILED:
         plain = ("the figure could not be produced reliably for this request, "
                  "so it was withheld")
@@ -286,12 +290,27 @@ def _not_recorded(absent: Mapping[str, Any]) -> str:
     """A filter value the book does not record, said as a fact about the book,
     with the values it does record where they are a short category list."""
     label = str(absent.get("label") or absent.get("field") or "that field")
-    asked = " or ".join(f"'{v}'" for v in absent.get("values") or ())
+    asked = " or ".join(f"'{_value(v)}'" for v in absent.get("values") or ())
     book = absent.get("book_values")
     if book:
         return (f"this book records {label} as {', '.join(book)} — {asked} "
                 f"is not one of them")
+    if book is not None:
+        # The column is there and empty: the book records no value at all.
+        return f"this book does not record {label} for any loan"
     return f"no loan in this book has {label} {asked}"
+
+
+def _not_published(facts: Mapping[str, Any]) -> str:
+    """One value of a published breakdown that the breakdown does not hold:
+    the values it is published for, and the one asked."""
+    published = [str(v) for v in facts.get("published") or ()]
+    label = _named(facts.get("dimension"), _labels())
+    asked = _value(facts.get("value"))
+    if not published:
+        return f"the figure is not published by {label} at all"
+    return (f"the figure is published for {label} {', '.join(published)} — "
+            f"'{asked}' is not one of them")
 
 
 def envelope(*, question: str, body: Mapping[str, Any], reason: str,
