@@ -154,6 +154,17 @@
         configured value stands in, and a figure that depends on it is not
         stated and says why. §33.
 
+    D25 FOLLOW-UP READING AND THE CONVERSATION PASS MARK      SETTLED 2026-10-01
+        "Agree to all three." (1) A new grouping in a follow-up replaces the
+        previous one — "by region?" then "and by age band?" is by age band
+        only; "split that further by" adds a second axis. (2) A declined
+        follow-up leaves the memory on the last answered plan, so the next
+        follow-up is read against that. (3) The conversation bank passes
+        with no wrong answer — every follow-up matches its stand-alone twin
+        or asks back — and every must-start-fresh and must-refuse case
+        passing; an unnecessary ask-back is a miss to fix, not a failure.
+        §34.
+
     D24 CONVERSATION MEMORY                                   SETTLED 2026-10-01
         "Set to 5 minutes." The conversational agent remembers the previous
         answer only, plus a clarifying question it has asked and not yet had
@@ -2397,10 +2408,10 @@ follow-up is scored against its STAND-ALONE TWIN, the same question asked in
 full: the same plan, the same figures, and a statement of what carried over —
 automatic, with no hand scoring and no golden figure. 122 turns are read by
 the model; the 15 memory mechanics (expiry, change of book, cleared chat,
-edited or borrowed memory) are enforced and tested in code. Pass mark
-(proposed): no wrong answer — every follow-up matches its twin or asks back —
-and every must-start-fresh and must-refuse case passes. 26 twins are new
-wordings; they are run on their own first so each twin's outcome is known.
-Two reading conventions the twins assume, for the owner's confirmation: a new
-grouping replaces the previous one ("split further by" adds an axis), and a
-declined follow-up leaves the memory on the last answered plan.
+edited or borrowed memory) are enforced and tested in code. Pass mark (D25):
+no wrong answer — every follow-up matches its twin or asks back — and every
+must-start-fresh and must-refuse case passes. 26 twins are new wordings; they
+are run on their own first so each twin's outcome is known. The reading
+conventions the twins assume are settled (D25): a new grouping replaces the
+previous one ("split further by" adds an axis), and a declined follow-up
+leaves the memory on the last answered plan.

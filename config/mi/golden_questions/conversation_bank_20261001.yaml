@@ -37,7 +37,11 @@
 #                     A twin with no bank_id is new: run the twins on their
 #                     own first (one cheap pass) to record their outcomes.
 #
-# READING CONVENTIONS THE TWINS ASSUME (D24 and §34):
+# PASS MARK (D25): no wrong answer — every follow-up matches its twin or asks
+# back — and every E (start fresh) and F (refuse) case passes. An unnecessary
+# ask-back is a miss to fix, not a failure.
+#
+# READING CONVENTIONS THE TWINS ASSUME (settled: D24, D25):
 #   * Memory is the previous answer only, plus an open ask-back, for 5
 #     minutes idle counted from delivery of the agent's last answer or
 #     question; it ends on a change of book or a cleared chat (D24).
@@ -45,11 +49,11 @@
 #     alone is read against the previous answer (D24, owner 2026-10-01).
 #   * A follow-up keeps everything from the previous answer except what it
 #     changes. A new grouping ("by broker?", "and by stage?") REPLACES the
-#     previous one; "split that further by" adds a second axis.
+#     previous one; "split that further by" adds a second axis (D25).
 #   * Narrowing to one value of the current grouping ("just the 75-80
 #     band") filters to it, and the grouping on that same axis falls away.
 #   * A declined follow-up does not replace the memory: the next follow-up
-#     is read against the last answered plan.
+#     is read against the last answered plan (D25).
 #   * D23 applies to follow-ups as to questions: "how many" is the count,
 #     "how much" the amount.
 #
