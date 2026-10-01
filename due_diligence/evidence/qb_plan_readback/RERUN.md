@@ -500,3 +500,21 @@ intents added beside the baseline's.
                 a cold process (143s). Seen: the "NUTS3" collateral field
                 holds 11 coarse regions (South East, East Anglia), not NUTS3
                 areas
+    2026-10-01  16:38:26 UTC full bank on fe3fb063 (135 asked, files
+                uploaded): 116 answered, 19 declined, all by the governed
+                path. Must-answer 87/88 in one run: the miss is "What is the
+                base forecast?" (forecast_scale_011), read this time as the
+                forecast funded balance narrowed to the base scenario and
+                declined (FILTERS_NOT_SUPPORTED) — the 22:58 run read it as
+                the scale-up projection and answered. Nice-to-have 24/31.
+                Fine-to-decline: 11 declined, 5 answered, each correctly
+                (overdue cases 0, cohort conversion by milestone, completion
+                rate by stage, withdrawn £127.6m, lapsed £538k). Found:
+                "pipeline by stage for October and November" answered with
+                the stage names only, the figures in the table (sentence now
+                states each stage's figure at each date); the 8-week run-rate
+                and "forecast completion basis" read "for the pipeline" and
+                declined POPULATION_NOT_MEASURED; "balance by origination
+                channel" returns the 232 broker names — the book's
+                origination channel carries the broker (a data check for the
+                client); property type is one value (RBLD) for all 568 loans

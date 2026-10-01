@@ -332,3 +332,20 @@ def test_the_weighted_series_is_not_stated_without_measured_rates(history):
     by_date, _ = _owner(history)
     assert all(p["metrics"]["weighted_expected_funded_amount"] is None
                for p in by_date.values())
+
+
+def test_by_stage_at_named_months_states_every_figure(monkeypatch, history):
+    """2026-10-01 full bank [80]: "Show pipeline by stage for October and
+    November" was answered with the stage NAMES only — the figures were in the
+    table. The sentence states each stage's figure at each date."""
+    payload, record = _served(_intent(operation="breakdown",
+                                      dimensions=["pipeline_stage"]),
+                              monkeypatch, history)
+    assert payload is not None, record.get("execution")
+    from mi_agent.plan_serving_canary import _stage_name
+
+    answer = payload["answer"]
+    for row in payload["artifacts"][0]["rows"]:
+        stated = answer.split(f"at {row['period']}: ")[1].split(";")[0]
+        for stage in (k for k in row if k != "period"):
+            assert f"{_stage_name(stage)} £" in stated, (stage, stated)

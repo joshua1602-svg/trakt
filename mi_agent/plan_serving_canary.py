@@ -903,9 +903,16 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                 by_period.setdefault(str(c["period"]), {"period": str(c["period"])})[
                     str(c[axis])] = c["value"]
             rows = [by_period[d] for d in sorted(by_period)]
+            # THE ANSWER STANDARD on a breakdown at named dates: every stage's
+            # figure at each date, largest first — not the stage names alone
+            # (2026-10-01 full bank, [80]: the figures were in the table only).
+            at_each = "; ".join(
+                f"at {row['period']}: " + ", ".join(
+                    f"{_stage_name(st)} {_shown(row.get(st))}"
+                    for st in sorted(stages, key=lambda s_: -(row.get(s_) or 0.0)))
+                for row in rows)
             answer = (f"The {phrase} by stage at the weekly extracts of "
-                      f"{' and '.join(dates)}: "
-                      f"{', '.join(_stage_name(st) for st in stages)}.")
+                      f"{' and '.join(dates)} — {at_each}.")
             columns = ([{"key": "period", "label": "Weekly extract"}]
                        + [{"key": st, "label": st} for st in stages])
         artefacts = [_artefact("table", "Pipeline at the named dates",
