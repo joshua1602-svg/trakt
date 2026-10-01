@@ -91,6 +91,9 @@ DIMENSION_NOT_SUPPORTED = "DIMENSION_NOT_SUPPORTED"
 OPERATION_NOT_SUPPORTED = "OPERATION_NOT_SUPPORTED"
 PERIOD_NOT_SUPPORTED = "PERIOD_NOT_SUPPORTED"
 FILTERS_NOT_SUPPORTED = "FILTERS_NOT_SUPPORTED"
+#: The value a plan narrows to is not among those the published breakdown
+#: holds (a closed stage, which the live pipeline does not count).
+MEMBER_NOT_PUBLISHED = "MEMBER_NOT_PUBLISHED"
 GEOGRAPHY_NOT_SUPPORTED = "GEOGRAPHY_NOT_SUPPORTED"
 COMPARISON_NOT_SUPPORTED = "COMPARISON_NOT_SUPPORTED"
 NOT_SINGLE_OUTPUT = "NOT_SINGLE_OUTPUT"
@@ -327,6 +330,34 @@ def timing_of(plan: Any) -> Optional[str]:
     return str(value).strip().lower() if value is not None else None
 
 
+def member_of(plan: Any) -> Optional[Tuple[str, str]]:
+    """`(dimension, value)` when a plan narrows to ONE value of a breakdown the
+    Pipeline tab publishes ("the pipeline amount at Offer stage"); None for no
+    filter, for the timing filter (D11, its own figure), for more than one
+    filter, or for a dimension the tab does not break the pipeline down by.
+
+    One value of a published breakdown is a published figure: it is read off
+    the breakdown, never recomputed narrowed (twins run 2026-10-01)."""
+    body = _as_mapping(plan)
+    output = _single_output(body) or {}
+    filters = list(body.get("filters") or ()) + list(output.get("filters") or ())
+    if len(filters) != 1 or timing_of(body) is not None:
+        return None
+    member = _plan_reading.member_filter(filters[0]) \
+        if isinstance(filters[0], Mapping) else None
+    if member is None or member[0] not in SUPPORTED_DIMENSIONS:
+        return None
+    return member
+
+
+def _same_member(a: Any, b: Any) -> bool:
+    """One category written two ways (`OFFER`, `Offer`, `pre_offer`)."""
+    def fold(v: Any) -> str:
+        return " ".join(str(v).strip().casefold().replace("_", " ")
+                        .replace("-", " ").split())
+    return fold(a) == fold(b)
+
+
 #: A "WHAT MOVED" SUMMARY OF THE PIPELINE (D15; vocabulary 2.16.0): the
 #: `material_summary` form over the pipeline, which names no measure and is
 #: answered with the change in each of the pipeline's headline figures between
@@ -412,14 +443,19 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
         # other filter would narrow a figure the owner does not publish
         # narrowed, and is refused rather than recomputed here.
         timing = timing_of(body)
-        if timing is None:
+        member = member_of(body)
+        if timing is None and member is None:
             return (False, FILTERS_NOT_SUPPORTED,
                     "the pipeline figures are read from the Pipeline tab's own "
-                    "owners, which publish no narrowed figure except by "
-                    "expected-completion timing; a filtered pipeline question "
-                    "is refused rather than answered by a second "
-                    "implementation")
-        if timing not in TIMING_VALUES:
+                    "owners, which publish a narrowed figure only by "
+                    "expected-completion timing or as one value of a "
+                    "breakdown they publish; this filter is neither, and is "
+                    "refused rather than answered by a second implementation")
+        if member is not None and grouping_axes(body):
+            return (False, FILTERS_NOT_SUPPORTED,
+                    "one value of a published breakdown is one figure; it is "
+                    "not served together with another breakdown")
+        if timing is not None and timing not in TIMING_VALUES:
             return (False, FILTERS_NOT_SUPPORTED,
                     f"{TIMING_DIMENSION}={timing!r} is not a governed value "
                     f"({', '.join(TIMING_VALUES)})")
@@ -478,8 +514,9 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     history = is_temporal(body) or is_dated(body)
     if filters and (history or dimensions):
         return (False, FILTERS_NOT_SUPPORTED,
-                "the tab publishes expected-completion timing for the current "
-                "extract as one figure per value, not over time or broken down")
+                "a narrowed pipeline figure (an expected-completion timing, or "
+                "one value of a published breakdown) is published for the "
+                "current extract as one figure, not over time or broken down")
     if history and dimensions and dimensions[0] not in HISTORY_DIMENSIONS:
         return (False, DIMENSION_NOT_SUPPORTED,
                 f"the weekly pipeline owner breaks down by "
@@ -772,6 +809,10 @@ def execute_current(plan: Any, *, source: Any,
     if timing is not None:
         return _execute_timing(body, measure=measure, kind=kind, timing=timing,
                                live=live, live_scope=live_scope, dataset=dataset)
+    member = member_of(body)
+    if member is not None:
+        return _execute_member(body, member=member, source=source,
+                               semantics=semantics, history_model=history_model)
     if dimensions and (kind == _WEIGHTED or dimensions[0] != "pipeline_stage"):
         return _execute_tab_breakdown(body, measure=measure, kind=kind,
                                       dimension=dimensions[0], live=live,
@@ -846,6 +887,53 @@ def execute_current(plan: Any, *, source: Any,
                        owner=OWNER_OPEN_TOTALS)
     receipt["pipeline_scope"] = _noted(live_scope)
     return PipelineOutcome(ok=True, value=float(value), cells=None,
+                           receipt=receipt)
+
+
+def _execute_member(body: Mapping[str, Any], *, member: Tuple[str, str],
+                    source: Any, semantics: Any,
+                    history_model: Optional[Mapping[str, Any]]) -> PipelineOutcome:
+    """ONE VALUE OF A PUBLISHED BREAKDOWN: the breakdown the Pipeline tab
+    publishes by `member`'s dimension, executed exactly as "by <dimension>"
+    is, with the asked value read off it. Nothing is narrowed or recomputed
+    here, so the figure is the one the tab shows for that value."""
+    dimension, value = member
+    grouped = dict(body)
+    grouped["filters"] = []
+    outputs = []
+    for out in (body.get("outputs") or ()):
+        out = dict(out)
+        out["filters"] = []
+        out["dimensions"] = [{"concept": dimension, "canonical_field": dimension}]
+        outputs.append(out)
+    grouped["outputs"] = outputs
+    grouped["operation"] = "breakdown"
+    outcome = execute_current(grouped, source=source, semantics=semantics,
+                              history_model=history_model)
+    if not outcome.ok:
+        return outcome
+    cells = list(outcome.cells or ())
+    hit = [c for c in cells if _same_member(c.get(dimension), value)]
+    if not hit:
+        published = ", ".join(str(c.get(dimension)) for c in cells) or "nothing"
+        return PipelineOutcome(
+            ok=False, reason=MEMBER_NOT_PUBLISHED,
+            detail=f"the live pipeline by {dimension} is published for "
+                   f"{published}; {value!r} is not one of them")
+    receipt = dict(outcome.receipt)
+    receipt["group_field_keys"] = []
+    receipt["result_shape"] = "scalar"
+    receipt["applied_predicates"] = [{"field": dimension, "op": "eq",
+                                      "values": [value]}]
+    receipt["member"] = {"dimension": dimension,
+                         "value": str(hit[0].get(dimension))}
+    figure = hit[0].get("value")
+    if figure is None:
+        return PipelineOutcome(
+            ok=False, reason=RATE_NOT_MEASURED if receipt.get("withheld") else
+            EXECUTION_FAILED,
+            detail=f"the published breakdown states no figure for {value!r}")
+    return PipelineOutcome(ok=True, value=float(figure), cells=None,
                            receipt=receipt)
 
 

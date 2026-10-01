@@ -67,6 +67,12 @@ ADMITTED = {
     # D22 (§32.3): the run-rate over a named window of weeks, read as a range
     # of 8 weekly periods, is the history owner's calendar 8-week run-rate.
     125: "forecast",
+    # One value of a published breakdown (twins run 2026-10-01): this
+    # run's reading of "excluded because of withdrawn status" is the pipeline
+    # at stage WITHDRAWN. It now reaches the pipeline runtime, which declines
+    # it at execution — a closed stage is not a value the live pipeline is
+    # published for (MEMBER_NOT_PUBLISHED). Admitted, still not answered.
+    104: "pipeline",
 }
 
 #: Plans the runtime would answer with a figure the question did not ask for.

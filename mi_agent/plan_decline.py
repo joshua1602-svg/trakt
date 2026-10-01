@@ -64,6 +64,8 @@ _SPECIFIC: Mapping[str, str] = {
     "FIELD_NOT_IN_BOOK": "this book does not record the information it needs",
     "FILTER_VALUE_NOT_IN_BOOK": "this book does not record the value it "
                                 "narrows to",
+    "MEMBER_NOT_PUBLISHED": "the value it narrows to is not one the figure is "
+                            "published for",
     # D21: not a failure to read — the figure is not stated until the history
     # it depends on is enough, so "try again" would be wrong.
     "RATE_NOT_MEASURED": "the client's history is not yet enough to measure "

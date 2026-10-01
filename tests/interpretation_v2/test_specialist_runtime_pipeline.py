@@ -358,8 +358,9 @@ def test_the_pipeline_runtime_never_reads_the_question():
 
 
 def test_unsupported_pipeline_shapes_refuse_rather_than_approximate():
-    # a filtered pipeline question
-    filtered = _plan(filters=[{"concept": "erm_product_type", "comparator": "eq",
+    # a filtered pipeline question that is not one value of a published
+    # breakdown (a negation narrows the figure; the tab publishes no such one)
+    filtered = _plan(filters=[{"concept": "erm_product_type", "comparator": "ne",
                                "value": "drawdown"}])
     assert pipeline_rt.check_eligibility(filtered)[1] == (
         pipeline_rt.FILTERS_NOT_SUPPORTED)

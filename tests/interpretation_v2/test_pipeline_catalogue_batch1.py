@@ -213,9 +213,13 @@ def test_timing_with_a_breakdown_is_refused():
 
 
 def test_any_other_filter_is_still_refused():
-    ok, why, _ = pipeline_rt.check_eligibility(_plan(filters=[
-        {"concept": "pipeline_stage", "comparator": "eq", "value": "OFFER"}]))
-    assert (ok, why) == (False, pipeline_rt.FILTERS_NOT_SUPPORTED)
+    """One value of a published breakdown is served (twins run 2026-10-01,
+    `test_one_value_of_a_published_breakdown.py`); a filter that is not one
+    equality on a dimension the tab breaks the pipeline down by is not."""
+    for flt in ({"concept": "pipeline_stage", "comparator": "ne", "value": "OFFER"},
+                {"concept": "account_status", "comparator": "eq", "value": "Active"}):
+        ok, why, _ = pipeline_rt.check_eligibility(_plan(filters=[flt]))
+        assert (ok, why) == (False, pipeline_rt.FILTERS_NOT_SUPPORTED), flt
 
 
 def test_the_weekly_history_breaks_down_by_stage_only():

@@ -729,6 +729,15 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                               pipeline_rt.SUPPORTED_MEASURES[m]
                               for m in composition.siblings(plan)
                               if m in pipeline_rt.SUPPORTED_MEASURES}))
+        elif receipt.get("member"):
+            # One value of a published breakdown, named on the sentence.
+            member = receipt["member"]
+            dim = str(member.get("dimension") or "")
+            dim_label = _PIPELINE_AXES.get(dim, dim.replace("_", " "))
+            shown_value = (_stage_name(member.get("value"))
+                           if dim == "pipeline_stage" else str(member.get("value")))
+            answer = (f"The {phrase} for {dim_label} {shown_value} is "
+                      f"{_shown(value)}{as_at}.")
         else:
             answer = f"The {phrase} is {_shown(value)}{as_at}."
     elif shape == "grouped":
