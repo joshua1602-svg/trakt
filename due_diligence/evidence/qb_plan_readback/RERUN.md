@@ -597,3 +597,8 @@ intents added beside the baseline's.
                 minus its 24 `holdout_recent` rows, spent on the 13:49 and
                 later fixes) — one log and one .jsonl, scored with
                 score_variants.py --variants <it> --bank <it>
+    2026-10-01  20:49 UTC 79968046 deployed (run 36924056833, success):
+                vocabulary 2.23.0, D27, the forecast extrapolation preparing
+                only what it reads, the ranking and decline wording. 20:54
+                UTC 42fc3768 deployed (run 36924542901, success): the
+                runner's `signoff` selection. Next: the sign-off run
