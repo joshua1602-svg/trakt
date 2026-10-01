@@ -199,6 +199,19 @@ too (otherwise NNEG exposure was pushed off the slide).
   touched.
 - **Targeted suites:** every deck, deck-generation, insight-engine and currency test —
   broad regression below.
+- **Broad regression** — the whole `tests/` tree run on unmodified main (`99b46ebc`) and on
+  this branch, in shards, failure IDs diffed:
+
+  | | main | this branch |
+  |---|---|---|
+  | passed | 9,703 | 9,771 (+68 = the new tests) |
+  | failed | 112 | 112 — the identical set |
+
+  One extra failure appeared once on this branch
+  (`test_occ_day1_hardening::TestRestartAfterInterruption::test_the_operator_can_restart_and_gets_the_same_output`):
+  a threaded wait-for-status test run while both trees' suites shared four cores. It
+  passes alone on this branch, and nothing on the OCC path reads the fields this change
+  adds. The 112 shared failures are all on main today and none touches the deck.
 - **One regression caught during visual QA and fixed:** the new dark cards swallowed the
   waterfall opening bar (drawn in a surface colour); it now uses `navy-500`.
 
