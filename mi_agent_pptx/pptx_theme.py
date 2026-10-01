@@ -62,6 +62,11 @@ class PptxTheme:
     bg_panel_alt: str = "#1c2027"  # StatTile: --color-navy-800 (raised)
     bg_inset: str = "#151920"      # --color-navy-850 (table head / inset)
     bg_well: str = "#0a0b0d"       # --color-navy-950: the track a bar sits in
+    #: A neutral QUANTITY drawn as a bar — a waterfall's opening balance. The
+    #: lightest step of the slate ladder (--color-navy-500): plainly visible on
+    #: a card, carrying no accent. ``navy`` (navy-800) is a surface, and once
+    #: cards became the dark well a navy-800 bar all but vanished into it.
+    bar_neutral: str = "#454e5c"
     line: str = "#262a31"          # --color-line (panel + control edges)
     line_soft: str = "#1a1c20"     # --color-line-soft (row hairline / grid)
     line_strong: str = "#3a3f48"   # --color-line-strong (structural; neutral rail)

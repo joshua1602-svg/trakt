@@ -90,7 +90,7 @@ def render_bridge_waterfall(out_path, steps, width_in, height_in, theme=THEME,
     colours (base navy, add periwinkle, total mint).
     """
     from pathlib import Path as _P
-    colors = {"base": theme.navy, "add": theme.peri, "sub": theme.negative,
+    colors = {"base": theme.bar_neutral, "add": theme.peri, "sub": theme.negative,
               "total": theme.mint}
     fig = plt.figure(figsize=(width_in, height_in), dpi=dpi)
     fig.patch.set_facecolor(theme.bg_panel)
@@ -448,7 +448,7 @@ class ChartResolver:
                                      f"Dimension '{spec.get('dimension')}' unavailable for a bridge.")
         # Colours mirror the React waterfall (base / inflow / fallout / total).
         col = {"add": self.theme.peri, "sub": self.theme.negative,
-               "total": self.theme.mint, "base": self.theme.navy}
+               "total": self.theme.mint, "base": self.theme.bar_neutral}
         n = len(items)
         bar_w = 0.62
         levels: List[float] = []

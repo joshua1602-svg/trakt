@@ -58,6 +58,7 @@ def _css_token(name: str) -> str:
     ("mint", "--color-mint-400"),
     ("rose", "--color-rose-400"),
     ("cyan_500", "--color-cyan-500"),
+    ("bar_neutral", "--color-navy-500"),
     ("peri", "--color-cyan-400"),
 ])
 def test_every_deck_token_is_the_dashboards(field, token):
@@ -73,6 +74,18 @@ def test_cards_sit_darker_than_the_slide_and_tiles_one_step_above_cards():
     assert lum(THEME.bg_panel) < lum(THEME.bg_page)
     assert lum(THEME.bg_panel) < lum(THEME.bg_panel_alt) < lum(THEME.bg_page)
     assert lum(THEME.bg_well) < lum(THEME.bg_panel)
+
+
+def test_a_neutral_bar_stays_visible_on_a_card():
+    """A waterfall's opening bar was drawn in navy-800 — a SURFACE colour. Once
+    cards became the dark well it all but disappeared, leaving its label
+    floating over nothing. A neutral quantity needs real contrast with the card."""
+    def lum(hx):
+        r, g, b = (int(hx[i:i + 2], 16) for i in (1, 3, 5))
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    assert lum(THEME.bar_neutral) - lum(THEME.bg_panel) > 35
+    src = (_ROOT / "mi_agent_pptx" / "chart_resolver.py").read_text(encoding="utf-8")
+    assert '"base": theme.navy' not in src and '"base": self.theme.navy' not in src
 
 
 def test_figures_are_set_in_a_monospace_face():
