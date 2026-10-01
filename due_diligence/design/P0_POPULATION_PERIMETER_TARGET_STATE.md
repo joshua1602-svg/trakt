@@ -166,8 +166,13 @@
         of the cases that will ever advance have advanced — now with the
         cases still waiting counted (a competing-risks estimate, censored at
         the last extract), so slow cases still in progress no longer shorten
-        it. A read-only check shows production's windows by both methods and
-        how long KFIs actually take before this is deployed. Also: "X to
+        it. The read-only check on production (2026-10-01, RERUN.md): the
+        KFI window is 9 days by both methods — of 1,422 KFIs that became
+        applications, 0.1% took over 14 days and none over 30, while 4,298
+        KFIs have sat open over 90 days. KFI to Application reads 22.6%
+        (22.7% at a 14-day window, 24.4% at 90: the figure does not hang on
+        the window); Application is unchanged (65.4%, 120 days); Offer
+        moves from 80 to 82 days and 71.5% to 71.1%. Also: "X to
         completion" from KFI or Application is the completion rate from X,
         not the one-step pull-through (catalogue wording, 2026-10-01 twins
         run).

@@ -535,3 +535,18 @@ intents added beside the baseline's.
                   forecast_scale_011,forecast_scale_015,forecast_scale_019,
                   forecast_018,forecast_019,forecast_020,
                   pipeline_evolution_011
+    2026-10-01  D26 read-only stage window check on fe3fb063 (owner, SSH;
+                history 2025-09-08 to 2026-09-24, 6,223 cases; totals only).
+                KFI: window 9 days by both methods. Of 1,422 KFIs that became
+                applications, 0.1% took over 14 days and none over 30. 4,800
+                KFIs are still open, 4,298 of them over 90 days old — the
+                extracts never close a KFI that does not proceed. KFI to
+                Application pull-through 100% -> 22.6% (1,388 advanced; 4,745
+                lapsed). Insensitive to the window: 22.7% at 14 days, 23.0% at
+                30, 24.4% at 90. APPLICATION: window 120 days both ways,
+                65.4% unchanged, none lapsed (all 17 open under 31 days).
+                OFFER: window 80 -> 82 days, 71.5% -> 71.1% (5 lapsed).
+                KFIs are not in the forward forecast, so the forecast moves
+                only by the Offer window's two days. For the client: are
+                KFIs re-issued for the same borrower? If so, 22.6% is per
+                KFI, not per borrower
