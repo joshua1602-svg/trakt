@@ -550,3 +550,7 @@ intents added beside the baseline's.
                 only by the Offer window's two days. For the client: are
                 KFIs re-issued for the same borrower? If so, 22.6% is per
                 KFI, not per borrower
+    2026-10-01  18:31 UTC 2e9e1cc4 deployed (run 36907157740, success, no
+                retry). Vocabulary 2.22.0: the five fixes and D26 (design
+                §35). Next: the 27 twins and the ten bank questions listed
+                above
