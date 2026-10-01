@@ -468,3 +468,35 @@ intents added beside the baseline's.
                 Found: "lapsed" is stated two ways ([133] the weighted stages,
                 £538k / 4 cases; [135] every stage, 4,698 cases, mostly KFIs
                 past a measured 9-day window)
+    2026-10-01  10:32 UTC fe3fb063 deployed (run 36849588712): D23 "how
+                much / how many" (vocabulary 2.21.0) and the runner's `twins`
+                selection (§34)
+    2026-10-01  16:26:14 UTC twins on fe3fb063 (26 asked, files uploaded):
+                15 answered, 11 declined, all by the governed path. Answered
+                right (13): simple-average LTV by region / age band; the
+                funded balance's change since last month (+£5.9m) and its
+                drivers; the pipeline's largest LTV band and region; the
+                aged-75-80 and 40-50%-LTV slices (loan count, WA rate 9.7%,
+                £41.5m, by age band); latest-vs-previous by stage; balance by
+                property region at NUTS3. ANSWERED WRONG (2): "application to
+                completion pull-through" was answered with the stage
+                pull-through from Application (65.4%, Application to OFFER)
+                and "KFI to completion" with KFI to Application (100.0%,
+                advanced 1,388, fell out 0) — "X to completion" is the
+                historical completion rate from X; the two coincide only at
+                Offer. The KFI 100% also shows no case is ever recorded as
+                falling out at KFI: a KFI that does not proceed stays open.
+                Declined rightly (5): drivers by region (not built), forecast
+                loan count by region (not published), ITL3 both bases (the
+                book does not carry ITL3), the Offer-stage filter (F04, as
+                designed). Declined, gaps (6): ranking on the funded book
+                ([A03] [D03], OPERATION_NOT_GENERIC) and on the pipeline
+                ([A10], the capability lists no rank); a filter to one value
+                of a published figure ([A13] the upside milestone,
+                FILTERS_NOT_SUPPORTED); a filter value the book does not
+                record ([A04] lifetime mortgage: no rows; [A06] Active: empty
+                population) withheld as unreliable rather than said. Slow:
+                the latest-vs-previous comparison prepared all 90 extracts on
+                a cold process (143s). Seen: the "NUTS3" collateral field
+                holds 11 coarse regions (South East, East Anglia), not NUTS3
+                areas
