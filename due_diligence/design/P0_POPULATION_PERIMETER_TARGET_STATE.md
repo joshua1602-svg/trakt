@@ -154,6 +154,18 @@
         configured value stands in, and a figure that depends on it is not
         stated and says why. §33.
 
+    D24 CONVERSATION MEMORY                                   SETTLED 2026-10-01
+        "Set to 5 minutes." The conversational agent remembers the previous
+        answer only, plus a clarifying question it has asked and not yet had
+        answered, for 5 minutes idle. Idle is counted from the moment the
+        agent's last answer or question is delivered, so a slow answer never
+        uses up the user's time to reply; any message from the user starts
+        it again. Memory also ends on a change of topic or book. After it
+        ends, the next message is a fresh question, and a reply that only
+        made sense against the forgotten turn is told so rather than guessed
+        at. Nothing is kept beyond that except the audit log each question
+        already writes. §34.
+
     D23 LOW-RISK AMBIGUITY IS DEFAULTED, NOT ASKED            SETTLED 2026-09-30
         "For low risk, yes default to amount." and "It is also simple: 'how
         much' = amount, 'how many' = count". A question's words choose
@@ -2344,7 +2356,7 @@ past a measured 9-day window) by the expected completion date. The owner:
 "keep as is for now — a low-priority question that can be configured with
 client preferences." Both stay as built, each stating its own basis.
 
-## 34. The conversational agent — proposed (2026-09-30)
+## 34. The conversational agent — proposed (2026-09-30); memory settled (D24)
 
 From one question at a time to a conversation, without loosening governance:
 the conversation is carried as the previous turn's governed PLAN, never as
@@ -2355,11 +2367,18 @@ what it carried over. A clarifying question holds the half-built plan for that
 conversation; the reply fills the missing slot. Context never crosses from one
 book to another silently, and a follow-up never widens what the user may see.
 
-Memory (proposed, for the owner's confirmation): the previous answer only, plus
-an open clarifying question — a follow-up refines exactly one plan — expiring
-after 15 minutes idle or on a change of topic; nothing kept beyond that except
-the audit log each question already writes. Widened to the last three answers
-only if "compare it with the one before" proves to be needed.
+Memory (D24, owner 2026-10-01: "set to 5 minutes"): the previous answer only,
+plus an open clarifying question — a follow-up refines exactly one plan —
+expiring after 5 minutes idle or on a change of topic or book. Idle runs from
+the delivery of the agent's last answer or question, not from when the
+question was asked: a cold first answer can take minutes (318 s on the
+2026-09-30 22:58 run, evidence/qb_plan_readback/RERUN.md), and that time must
+not be taken from the user's reply. Expiry is stated, never silent — a reply
+that depended on the forgotten turn is answered as a fresh question and told
+the earlier context has lapsed. Nothing kept beyond that except the audit log
+each question already writes. Widened to the last three answers only if
+"compare it with the one before" proves to be needed. The 5 minutes is one
+setting the conversation owner reads, not a figure in code.
 
 Low-risk ambiguity is defaulted, not asked (D23). Phases: (1) clarification as
 a two-turn exchange; (2) follow-ups as plan changes; (3) references and
