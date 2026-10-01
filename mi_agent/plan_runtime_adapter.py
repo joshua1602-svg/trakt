@@ -37,7 +37,7 @@ suppress-everything guard with the flag off by default.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import (Any, Dict, FrozenSet, Iterable, List, Mapping, Optional,
                     Sequence, Tuple)
 
@@ -159,6 +159,14 @@ FILTER_NOT_EXPRESSIBLE = "FILTER_NOT_EXPRESSIBLE"
 #: governed answer, because an unproven population is exactly the state in which
 #: a pipeline question is answered with funded numbers.
 EXECUTED_POPULATION_UNPROVEN = "EXECUTED_POPULATION_UNPROVEN"
+#: A filter names a value this book does not record (twins run 2026-10-01:
+#: "lifetime mortgage", "Active"). A fact about the book, said as one — never
+#: "withheld as unreliable", and never answered from a neighbouring value.
+FILTER_VALUE_NOT_IN_BOOK = "FILTER_VALUE_NOT_IN_BOOK"
+#: A field with more distinct values than this is not a category list to name
+#: back to the reader (an identifier, a free-text field): the decline then
+#: says the value is not recorded without listing what is.
+NAMEABLE_VALUES = 25
 #: The plan asks for a population this runtime does not execute.
 POPULATION_NOT_EXECUTABLE = "POPULATION_NOT_EXECUTABLE"
 #: The plan asks for one population and the runtime loaded another.
@@ -719,6 +727,90 @@ def fields_not_in_book(spec: MIQuerySpec, semantics: Any,
     return sorted({str(meta.get("canonical_field"))
                    for meta in result.resolved_fields.values()
                    if str(meta.get("canonical_field")) not in available})
+
+
+def _spelling(value: Any) -> str:
+    """A category's spelling with case, spacing, underscores and hyphens
+    folded away: `lifetime_mortgage`, `Lifetime Mortgage` and
+    `lifetime-mortgage` are one value written three ways."""
+    folded = str(value).strip().casefold().replace("_", " ").replace("-", " ")
+    return " ".join(folded.split())
+
+
+def filter_values_in_book(spec: MIQuerySpec, semantics: Any, frame: Any
+                          ) -> Tuple[MIQuerySpec, List[Dict[str, Any]]]:
+    """`(spec, absent)`: each categorical filter checked against the values
+    this book actually records, before anything executes.
+
+    A governed value list is the REGISTRY's (`lifetime_mortgage`); a book
+    writes its own (`Lifetime Mortgage`). A value the book spells differently
+    is rewritten to the book's own spelling, so the executor's match finds it.
+    A value the executor's own domain resolution translates (a region name to
+    the codes a book carries) is left for it to translate. A value the book
+    does not record at all is returned in `absent` — with the values it does
+    record, where they are a short category list — so the caller declines in
+    words instead of executing a filter that can only match nothing.
+
+    Only equality and membership on a column the book physically carries are
+    checked; a derived band or a column the book lacks is the executor's (and
+    `fields_not_in_book`'s) to decide.
+    """
+    filters = dict(getattr(spec, "filters", None) or {})
+    columns = getattr(frame, "columns", None)
+    if not filters or columns is None:
+        return spec, []
+    from mi_agent.mi_query_executor import (_resolve_domain_value,
+                                            resolve_semantic_field)
+
+    absent: List[Dict[str, Any]] = []
+    rewritten: Dict[str, Any] = {}
+    for field_key, raw in filters.items():
+        op, value = (("eq", raw) if not isinstance(raw, Mapping)
+                     else (str(raw.get("op") or "eq").lower(), raw.get("value")))
+        if op not in ("eq", "in", "equals"):
+            continue
+        members = (list(value) if isinstance(value, (list, tuple, set))
+                   else [value])
+        if not members or not all(isinstance(m, str) for m in members):
+            continue
+        try:
+            entry = resolve_semantic_field(field_key, semantics)
+            canonical = entry.get("canonical_field", field_key)
+        except Exception:                                    # noqa: BLE001
+            entry, canonical = {}, field_key
+        if canonical not in columns:
+            continue
+        col = frame[canonical]
+        present = col.dropna().astype(str).str.strip()
+        present = sorted({v for v in present.unique() if v})
+        by_spelling: Dict[str, List[str]] = {}
+        for v in present:
+            by_spelling.setdefault(_spelling(v), []).append(v)
+        resolved: List[str] = []
+        missing: List[str] = []
+        for member in members:
+            hit = by_spelling.get(_spelling(member))
+            if hit:
+                resolved.extend(hit)
+            elif _resolve_domain_value(entry.get("value_domain"), member, col):
+                resolved.append(member)
+            else:
+                missing.append(member)
+        if missing:
+            absent.append({
+                "field": canonical,
+                "label": str(entry.get("business_name") or entry.get("label")
+                             or canonical.replace("_", " ")),
+                "values": missing,
+                "book_values": (present if len(present) <= NAMEABLE_VALUES
+                                else None)})
+            continue
+        if resolved != members:
+            rewritten[field_key] = (resolved[0] if len(resolved) == 1 and op != "in"
+                                    else {"op": "in", "value": resolved})
+    if rewritten and not absent:
+        spec = replace(spec, filters={**filters, **rewritten})
+    return spec, absent
 
 
 def requested_semantics(plan: Any) -> Dict[str, Any]:

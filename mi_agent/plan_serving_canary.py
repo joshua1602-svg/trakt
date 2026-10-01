@@ -2338,6 +2338,20 @@ def _serve_plan(body: Dict[str, Any], *, plan: Dict[str, Any], question: str,
                              "fields_not_in_book": missing}
         body["disposition"] = evidence.INELIGIBLE
         return None, f"{INELIGIBLE}:{FIELD_NOT_IN_BOOK}"
+    # A FILTER VALUE THIS BOOK DOES NOT RECORD is the same kind of fact: the
+    # filter could only match nothing, so it is declined in words naming what
+    # the book does record. A value the book merely spells differently is
+    # rewritten to the book's spelling first.
+    spec, absent = adapter.filter_values_in_book(
+        spec, semantics, frame)
+    if absent:
+        body["execution"] = {"attempted": False,
+                             "why_not": (f"{adapter.FILTER_VALUE_NOT_IN_BOOK}: "
+                                         + "; ".join(f"{a['field']}={a['values']}"
+                                                     for a in absent))[:300],
+                             "filter_values_not_in_book": absent}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{adapter.FILTER_VALUE_NOT_IN_BOOK}"
     body["execution"] = {"attempted": True, "bound_spec": spec.to_dict(),
                          "requested_semantics": adapter.requested_semantics(plan)}
     try:

@@ -62,6 +62,8 @@ _SPECIFIC: Mapping[str, str] = {
                             "client, so 'scale' has no threshold to measure "
                             "against",
     "FIELD_NOT_IN_BOOK": "this book does not record the information it needs",
+    "FILTER_VALUE_NOT_IN_BOOK": "this book does not record the value it "
+                                "narrows to",
     # D21: not a failure to read — the figure is not stated until the history
     # it depends on is enough, so "try again" would be wrong.
     "RATE_NOT_MEASURED": "the client's history is not yet enough to measure "
@@ -254,7 +256,11 @@ def message(body: Mapping[str, Any], reason: str) -> str:
         return ("I have not answered this: "
                 + (why[0] if why else "it is outside what I can answer")
                 + ". " + _NOTHING_GUESSED)
-    if what == FAILED:
+    absent = ((body.get("execution") or {}).get("filter_values_not_in_book")
+              if runtime_code(code) == "FILTER_VALUE_NOT_IN_BOOK" else None)
+    if absent:
+        plain = "; ".join(_not_recorded(a) for a in absent)
+    elif what == FAILED:
         plain = ("the figure could not be produced reliably for this request, "
                  "so it was withheld")
     elif what == UNAVAILABLE:
@@ -272,6 +278,18 @@ def message(body: Mapping[str, Any], reason: str) -> str:
         return (f"I understood this as {reading}, but I have not answered it: "
                 f"{plain}. {_NOTHING_GUESSED}")
     return f"I have not answered this: {plain}. {_NOTHING_GUESSED}"
+
+
+def _not_recorded(absent: Mapping[str, Any]) -> str:
+    """A filter value the book does not record, said as a fact about the book,
+    with the values it does record where they are a short category list."""
+    label = str(absent.get("label") or absent.get("field") or "that field")
+    asked = " or ".join(f"'{v}'" for v in absent.get("values") or ())
+    book = absent.get("book_values")
+    if book:
+        return (f"this book records {label} as {', '.join(book)} — {asked} "
+                f"is not one of them")
+    return f"no loan in this book has {label} {asked}"
 
 
 def envelope(*, question: str, body: Mapping[str, Any], reason: str,
