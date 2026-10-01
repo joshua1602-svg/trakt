@@ -586,9 +586,11 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
     # Weight the pipeline by the SAME governed historical stage rates as the
     # point-in-time bridge, so Model C's 'weighted expected pipeline' matches the
     # Forecast tab instead of silently using the config-only fallback.
+    # Model C reads the latest funded period alone, so only that month's
+    # pipeline extracts are prepared — not every extract of the history.
     forecast = evolution_mod.forecast_evolution(
         output_root, pipeline_root, client_id, to_run_id, historical_model=history_model,
-        scope=scope)
+        scope=scope, latest_only=True)
     # NOTE: a third traversal of the weekly pipeline series used to sit here —
     # ``pipeline = evolution_mod.pipeline_evolution(...)`` — whose result was
     # never read by anything below (verified by AST: the name had zero Load
@@ -629,7 +631,10 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
         funnel = evolution_mod.pipeline_funnel_evolution(
             pipeline_root, client_id, to_run_id, lag_weeks=lag_weeks,
             # Reuses the frames forecast_evolution already prepared above.
-            historical_model=history_model)
+            historical_model=history_model,
+            # Model B reads the headline figures only: the trailing extracts
+            # they come from, not the whole history.
+            tail=evolution_mod.funnel_tail_needed(lag_weeks))
     except Exception:  # noqa: BLE001 - forecast must not 500 on a funnel error
         funnel = {"summary": {}}
     fsum = funnel.get("summary", {}) or {}

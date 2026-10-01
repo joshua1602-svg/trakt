@@ -255,9 +255,42 @@ def test_a_stage_that_records_no_withdrawals_is_not_reported_as_converting_all(y
     kfi = model["runoff"]["stages"]["KFI"]
     assert kfi["fellOut"] == 0                       # nothing recorded
     assert kfi["lapsed"] > kfi["advanced"]
-    assert kfi["pullThrough"] == pytest.approx(0.30, abs=0.06)
+    assert kfi["pullThrough"] == pytest.approx(0.30, abs=0.03)
+
+
+def test_the_pull_through_counts_the_cases_entering_the_stage(year):
+    """D27: the share advanced of cases that LEFT the stage drops the old
+    cases that advanced before the first extract but keeps the old ones that
+    never did, and so reads low (26% against a true 30% here). The run-off
+    model enters a case already in the stage at the first extract late, so it
+    recovers the true rate — the probability the forecast itself uses."""
+    _root, model, *_ = year
+    kfi = model["runoff"]["stages"]["KFI"]
+    counted = kfi["advanced"] / (kfi["advanced"] + kfi["fellOut"] + kfi["lapsed"])
+    assert abs(kfi["pullThrough"] - 0.30) < abs(counted - 0.30)
     assert kfi["pullThrough"] == pytest.approx(
-        kfi["advanced"] / (kfi["advanced"] + kfi["fellOut"] + kfi["lapsed"]), abs=1e-4)
+        runoff.advance_from(kfi, 0)[0], abs=1e-4)
+
+
+def test_the_completion_rate_is_each_step_multiplied_to_completion(year):
+    """D27: KFI to completion is KFI's pull-through x Application's x
+    Offer's — the rate the stage answers agree with, and the probability the
+    forecast gives a case new to the stage. Truth here: 0.30 x 0.65 x 0.67."""
+    _root, model, *_ = year
+    stages = model["runoff"]["stages"]
+    rates = model["historicalCompletionRateByStage"]
+    chain = (stages["KFI"]["pullThrough"] * stages["APPLICATION"]["pullThrough"]
+             * stages["OFFER"]["pullThrough"])
+    assert rates["KFI"]["rate"] == pytest.approx(chain, abs=1e-4)
+    assert rates["KFI"]["rate"] == pytest.approx(0.30 * APP_TO_OFFER
+                                                 * OFFER_TO_COMPLETION, abs=0.02)
+    assert rates["APPLICATION"]["rate"] == pytest.approx(
+        runoff.complete_from(model["runoff"], "APPLICATION", 0, (None, None))[0],
+        abs=1e-3)
+    # the count so far is the evidence, and reads lower
+    assert rates["KFI"]["completedSoFar"] / rates["KFI"]["observed"] < rates["KFI"]["rate"]
+    assert rates["KFI"]["forecastWeighted"] is False and rates["KFI"]["note"]
+    assert rates["OFFER"]["note"] is None
 
 
 def test_the_lapsed_cases_are_published_with_the_evidence(year):
@@ -299,4 +332,23 @@ def test_an_open_case_inside_the_window_is_still_open_not_lapsed():
     assert app["windowDays"] == 14
     assert (app["advanced"], app["fellOut"]) == (4, 0)
     assert (app["stillOpen"], app["lapsed"]) == (1, 1)     # 9 days vs 90
+    # D27: the lapsed case was already 31 days into the stage at the first
+    # extract, past the 14-day window, so it was never seen while it could
+    # still advance; every case seen from its entry advanced.
+    assert app["pullThrough"] == pytest.approx(1.0)
+
+
+def test_a_case_seen_lapsing_from_its_entry_lowers_the_pull_through():
+    """D26 with D27: a case that entered inside the history and sat past the
+    window without advancing counts against the rate."""
+    advanced = [{"application_date": "2026-01-01", "offer_date": "2026-01-08",
+                 "first_seen": {"APPLICATION": "2026-01-02", "OFFER": "2026-01-09"},
+                 "final_stage": "OFFER", "seen_open": True}] * 4
+    lapsing = [{"application_date": "2026-01-02",
+                "first_seen": {"APPLICATION": "2026-01-02"},
+                "final_stage": "APPLICATION", "seen_open": True}]
+    model = runoff.fit_runoff(advanced + lapsing, "2026-01-01", "2026-03-01",
+                              settings={"min_events": 1})
+    app = model["stages"]["APPLICATION"]
+    assert app["lapsed"] == 1
     assert app["pullThrough"] == pytest.approx(4 / 5)

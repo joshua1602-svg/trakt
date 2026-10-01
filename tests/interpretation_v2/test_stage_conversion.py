@@ -127,9 +127,21 @@ def test_offer_to_completion_pull_through_is_the_run_off_models(history):
 
 
 def test_the_assumed_kfi_to_completion_rate_is_the_forecasts_stage_rate(history):
-    out = _run(_plan("stage_completion_rate",
-                     filters=_stage("origin_stage", "KFI")), history)
-    assert out.value == history["historicalCompletionRateByStage"]["KFI"]["rate"]
+    rate = history["historicalCompletionRateByStage"]["KFI"]["rate"]
+    plan = _plan("stage_completion_rate", filters=_stage("origin_stage", "KFI"))
+    if rate is None:
+        # D27 with D21: no KFI was ever seen leaving the stage in this book,
+        # so its way to completion is not measured — and the decline says so.
+        out = stage_rt.execute(plan, root=None, client_id=_CLIENT,
+                               history_model=history)
+        assert not out.ok and out.reason == engine.FIGURE_WITHHELD
+        assert "does not yet measure every step" in out.detail
+        return
+    out = _run(plan, history)
+    assert out.value == rate
+    # D27: the forecast weights no KFI, and the answer's owner says so.
+    assert out.receipt["member_notes"] == [
+        history["historicalCompletionRateByStage"]["KFI"]["note"]]
 
 
 def test_pull_through_by_stage_names_the_stages_the_owner_flagged(history):
@@ -214,6 +226,25 @@ def test_the_pull_through_answer_names_the_stage_and_its_evidence(monkeypatch,
     if not stage["sufficient"]:
         assert "Provisional: the owner measured it on too few cases" in answer
     assert f"advanced {stage['advanced']}, fell out {stage['fellOut']}" in answer
+
+
+def test_the_kfi_completion_rate_says_the_forecast_weights_no_kfi(monkeypatch,
+                                                                history):
+    """D27 (owner 2026-10-01): asked what the forecast assumes from KFI, the
+    answer was the KFI rate alone; the forecast weights no KFI, and now says
+    so. The count so far is the evidence, not the rate."""
+    rates = history["historicalCompletionRateByStage"]
+    if rates["KFI"]["rate"] is None:
+        pytest.skip("no KFI leaves the stage in this book (declined, above)")
+    payload = _served(_intent("stage_completion_rate",
+                              filters=_stage("origin_stage", "KFI")),
+                      monkeypatch, history)
+    answer = payload["answer"]
+    assert answer.startswith(
+        f"Historical completion rate (from stage: KFI): "
+        f"{rates['KFI']['rate'] * 100:.1f}%.")
+    assert f"completed so far {rates['KFI']['completedSoFar']}" in answer
+    assert answer.endswith("The forecast weights no KFI case: it is top of funnel.")
 
 
 # --------------------------------------------------------------------------- #

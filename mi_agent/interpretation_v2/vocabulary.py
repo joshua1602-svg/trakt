@@ -175,7 +175,11 @@ from mi_agent import semantic_model as _semantic_model
 #: pipeline may be ranked; "X to completion" from KFI or Application is the
 #: completion rate, not the one-step pull-through; the scenario band belongs
 #: to the scale-up projection and the milestone dates only.
-VOCABULARY_VERSION = "2.22.0"
+#: 2.23.0 (D27, owner 2026-10-01): a stage's completion rate and its
+#: one-step pull-through are the run-off model's own — of the cases ENTERING
+#: the stage, cases still in progress counted as waiting — and the forecast
+#: weights no KFI.
+VOCABULARY_VERSION = "2.23.0"
 
 
 # --------------------------------------------------------------------------- #

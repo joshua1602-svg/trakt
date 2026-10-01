@@ -173,21 +173,11 @@ def build_historical_completion_model(
         days = (dones - firsts).days
         elapsed[stage].extend(int(d) for d in days if pd.notna(d) and d >= 0)
 
-    rate_by_stage: Dict[str, Any] = {}
     timing_by_stage: Dict[str, Any] = {}
-    stage_rates: Dict[str, float] = {}
     for stage in ACTIVE_STAGES:
-        obs = observed[stage]
-        comp = completed[stage]
-        sufficient = obs >= min_observations
-        rate = round(comp / obs, 4) if obs else None
-        rate_by_stage[stage] = {"rate": rate, "observed": obs, "completed": comp,
-                                "sufficient": bool(sufficient and rate is not None)}
         if elapsed[stage]:
             timing_by_stage[stage] = {"medianDays": int(statistics.median(elapsed[stage])),
                                       "observed": len(elapsed[stage])}
-        if sufficient and rate is not None:
-            stage_rates[stage] = rate
 
     # WHEN THE LIVE PIPELINE IS EXPECTED TO COMPLETE, from the book's own history
     # (owner decision 2026-09-30: "a date answer based on historical time to
@@ -212,13 +202,6 @@ def build_historical_completion_model(
         c = sum(1 for t in timelines.values() if term in t["ever"])
         if c:
             excluded_stage_counts[term] = c
-    stages_historical = sorted(stage_rates.keys())
-    # Stages with cases but too little history to measure a rate. The key
-    # (`stagesUsingConfigFallback`) is kept for its readers; since D21 nothing
-    # stands in for the missing rate — the stage's cases are not weighted.
-    stages_config_fallback = sorted(s for s in ACTIVE_STAGES
-                                    if observed[s] > 0 and s not in stage_rates)
-
     runoff = _runoff.fit_runoff(
         ({"kfi_date": t.get("kfi_date"), "application_date": t.get("application_date"),
           "offer_date": t.get("offer_date"), "completed_on": t.get("completed_on"),
@@ -227,6 +210,41 @@ def build_historical_completion_model(
          for t in timelines.values()),
         min(dates) if dates else None, max(dates) if dates else None,
         runoff_settings)
+
+    # D27 (owner decision 2026-10-01): THE HISTORICAL COMPLETION RATE of a
+    # stage is the chance a case new to it completes, from the run-off model
+    # — each step's measured pull-through along the way to completion, cases
+    # still in progress counted as still waiting. "Completed so far / ever
+    # seen" counted every case still working through the pipeline as one that
+    # did not complete, and so read low (4.8% from KFI on production, where
+    # the measured steps multiply to about 10%). The count is kept as the
+    # evidence. It is the probability the forecast gives a case that has just
+    # entered the stage; the forecast weights no KFI (top of funnel).
+    rate_by_stage: Dict[str, Any] = {}
+    stage_rates: Dict[str, float] = {}
+    runoff_stages = runoff.get("stages") or {}
+    for stage in ACTIVE_STAGES:
+        fitted = runoff_stages.get(stage) or {}
+        rate = fitted.get("completionFromEntry")
+        enough = bool(rate is not None and fitted.get("completionFromEntrySufficient"))
+        weighted = stage in _runoff.FORECAST_STAGES
+        rate_by_stage[stage] = {
+            "rate": rate, "sufficient": enough,
+            "observed": observed[stage], "completedSoFar": completed[stage],
+            "completed": completed[stage],
+            "basis": "runoff_from_entry",
+            "forecastWeighted": weighted,
+            "note": (None if weighted else
+                     f"The forecast weights no {_stage_words(stage)} case: it "
+                     f"is top of funnel.")}
+        if enough:
+            stage_rates[stage] = rate
+    stages_historical = sorted(stage_rates.keys())
+    # Stages with cases but too little history to measure a rate. The key
+    # (`stagesUsingConfigFallback`) is kept for its readers; since D21 nothing
+    # stands in for the missing rate — the stage's cases are not weighted.
+    stages_config_fallback = sorted(s for s in ACTIVE_STAGES
+                                    if observed[s] > 0 and s not in stage_rates)
 
     # WHEN THE LIVE PIPELINE IS EXPECTED TO COMPLETE, from the book's own history
     # (owner decision 2026-09-30: "a date answer based on historical time to
@@ -258,6 +276,16 @@ def build_historical_completion_model(
         "stagesUsingConfigFallback": stages_config_fallback,
         "excludedStageCounts": excluded_stage_counts,
         "historicalCompletionRateByStage": rate_by_stage,
+        # D21 with D27: a stage whose way to completion the history cannot yet
+        # measure (a step no case was ever seen leaving) states no rate, and
+        # this is why.
+        "historicalCompletionRateWithheld": (
+            "the client's history does not yet measure every step to "
+            "completion from " + ", ".join(
+                _stage_words(st) for st, row in rate_by_stage.items()
+                if row["rate"] is None)
+            if any(row["rate"] is None for row in rate_by_stage.values())
+            else None),
         "historicalCompletionTimingByStage": timing_by_stage,
         "expectedCompletionByStage": expected_by_stage,
         "expectedCompletion": expected_all,
@@ -272,6 +300,12 @@ def build_historical_completion_model(
         "cohortProgression": cohort_progression,
         "cumulativeCohortConversion": cumulative_cohort_conversion,
     }
+
+
+def _stage_words(stage: str) -> str:
+    """A stage as a reader writes it: KFI, Application, Offer."""
+    text = str(stage or "").upper()
+    return text if text == "KFI" else text.title()
 
 
 #: D22 (owner decision 2026-09-30): the completion run-rate is measured on

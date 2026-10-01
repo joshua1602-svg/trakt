@@ -993,11 +993,21 @@ def _lagged_value(series: List[Optional[float]], lag: int) -> Tuple[Optional[flo
     return series[idx], idx
 
 
+def funnel_tail_needed(lag_weeks: Optional[int]) -> int:
+    """How many trailing extracts the funnel's headline summary reads: the
+    trailing five-week flows (six stock points) and the KFI stock `lag_weeks`
+    extracts before the latest. A caller reading only those figures needs
+    only those extracts prepared (`pipeline_funnel_evolution(tail=...)`)."""
+    lag = max(0, int(lag_weeks or 0))
+    return max(lag + 1, _CONVERSION_WINDOW + 1)
+
+
 @_perf.stage_fn("pipeline_funnel_series")
 def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
                               to_run_id: Optional[str] = None,
                               lag_weeks: Optional[int] = None, *,
-                              historical_model: Optional[Dict[str, Any]] = None
+                              historical_model: Optional[Dict[str, Any]] = None,
+                              tail: Optional[int] = None
                               ) -> Dict[str, Any]:
     """Weekly origination funnel: KFI / Application / Offer / Completion per
     governed weekly extract, FLOW-FIRST.
@@ -1026,10 +1036,23 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
     median KFI->completion lag in weeks (from the historical completion model);
     when unknown the rate is computed unlagged and flagged as such. Reuses the
     governed weekly pipeline extracts (same source as ``pipeline_evolution``).
+
+    ``tail`` prepares only the last ``tail`` extracts (to the cut). The
+    headline figures — latest stock and flow, the trailing five-week flows and
+    the lagged KFI stock — are the full series' own when ``tail`` is at least
+    ``funnel_tail_needed(lag_weeks)``; the series, ``weeksObserved`` and the
+    trend then cover the tail only. The forecast extrapolation reads the
+    headline figures alone, and a cold forecast question used to prepare all
+    90 of ERE's extracts for them (140 s).
     """
     inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
     extracts = inv.get("extracts", [])
     cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
+    if tail is not None:
+        kept = [e for e in extracts
+                if not (cut_ym and e.get("pipeline_extract_date")
+                        and str(e["pipeline_extract_date"])[:7] > cut_ym)]
+        extracts = kept[-max(1, int(tail)):]
 
     weeks: List[Optional[str]] = []
     sources: List[str] = []
@@ -1195,7 +1218,8 @@ def forecast_evolution(output_root: str | os.PathLike,
                        to_run_id: Optional[str] = None, *,
                        historical_model: Optional[Dict[str, Any]] = None,
                        scope=None,
-                       include_pipeline: bool = True) -> Dict[str, Any]:
+                       include_pipeline: bool = True,
+                       latest_only: bool = False) -> Dict[str, Any]:
     """Forecast bridge over time: funded balance per run + the latest weighted
     pipeline contribution available at/under that run's month. A governed
     ``historical_model`` weights the pipeline by the same empirical stage rates as
@@ -1204,10 +1228,24 @@ def forecast_evolution(output_root: str | os.PathLike,
     ``scope`` narrows the funded side to the selected portfolios.
     ``include_pipeline=False`` is used when the governed capability resolver says
     no portfolio in scope originates — the funded series is still returned, with
-    no fabricated pipeline contribution."""
+    no fabricated pipeline contribution.
+
+    ``latest_only`` returns the LATEST funded period alone, with its pipeline
+    contribution from that month's extracts only — the same figure, without
+    preparing every extract of every earlier month (the forecast
+    extrapolation reads that period and nothing else)."""
     funded = funded_evolution(output_root, client_id, to_run_id, scope=scope)
+    if latest_only:
+        funded = dict(funded, periods=list(funded.get("periods") or [])[-1:])
+    only_dates = None
+    if latest_only and include_pipeline:
+        month = ((funded.get("periods") or [{}])[-1] or {}).get("period") or ""
+        only_dates = [d for d in pipeline_extract_dates(pipeline_root, client_id,
+                                                        to_run_id)
+                      if month and d[:7] == month]
     pipe = (pipeline_evolution(pipeline_root, client_id, to_run_id,
-                               historical_model=historical_model)
+                               historical_model=historical_model,
+                               only_dates=only_dates)
             if include_pipeline else {"periods": []})
     # Index pipeline weighted-expected by year-month (latest extract per month).
     weighted_by_month: Dict[str, float] = {}

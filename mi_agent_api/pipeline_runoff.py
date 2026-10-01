@@ -246,6 +246,19 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
                 censored += 1
         sufficient = advanced >= min_events
         exits = advanced + fell_out + lapsed
+        hazard_advance = [round(adv_ev[k] / at_risk[k], 6) if at_risk[k] else 0.0
+                          for k in range(max_weeks + 1)]
+        hazard_fallout = [round(out_ev[k] / at_risk[k], 6) if at_risk[k] else 0.0
+                          for k in range(max_weeks + 1)]
+        # D27: THE PULL-THROUGH IS THE MODEL'S OWN — the chance a case new to
+        # the stage advances, from the weekly hazards: a case still waiting is
+        # counted as waiting, a case already in the stage at the first extract
+        # enters late, and a case past the window (lapsed, D26) has stopped
+        # advancing. A count ratio leaves the waiting out and keeps the old
+        # cases that never advanced while dropping the old ones that did, so
+        # it reads low. This is the probability the forecast gives such a case.
+        p_advance, _ = advance_from({"hazardAdvance": hazard_advance,
+                                     "hazardFallout": hazard_fallout}, 0)
         stages[stage] = {
             # D21 (owner decision 2026-09-30): measured, or none — no
             # configured window stands in for history that is not there.
@@ -261,13 +274,15 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
             # open past it cannot be told from one still within it.
             "lapsed": lapsed if window is not None else None,
             "stillOpen": censored,
-            "pullThrough": (round(advanced / exits, 4) if exits else None),
-            "hazardAdvance": [round(adv_ev[k] / at_risk[k], 6) if at_risk[k] else 0.0
-                              for k in range(max_weeks + 1)],
-            "hazardFallout": [round(out_ev[k] / at_risk[k], 6) if at_risk[k] else 0.0
-                              for k in range(max_weeks + 1)],
+            "pullThrough": (round(p_advance, 4) if exits else None),
+            "hazardAdvance": hazard_advance,
+            "hazardFallout": hazard_fallout,
             "casesObserved": max(at_risk) if at_risk else 0,
         }
+    for stage in STAGES:
+        rate, enough = completion_from_entry(stages, stage)
+        stages[stage]["completionFromEntry"] = rate
+        stages[stage]["completionFromEntrySufficient"] = enough
     offer = stages["OFFER"]
     app = stages["APPLICATION"]
     return {
@@ -299,6 +314,26 @@ def evidence(model: Optional[Dict[str, Any]]) -> Dict[str, Any]:
                                         "pullThrough")}
             for st, sm in (m.get("stages") or {}).items()},
     }
+
+
+def completion_from_entry(stages: Dict[str, Any], stage: str
+                          ) -> Tuple[Optional[float], bool]:
+    """D27: `(rate, sufficient)` — the chance a case NEW to `stage` completes:
+    each step's measured pull-through, multiplied along the way to
+    completion. It is the probability the forecast gives a case that has just
+    entered the stage (`complete_from` at no time in stage). Sufficient only
+    when every step on the way is measured on enough history — otherwise it
+    is stated as provisional, as a step's own pull-through is; None when a
+    step has no pull-through at all."""
+    p, sufficient = 1.0, True
+    while stage != "COMPLETED":
+        sm = stages.get(stage) or {}
+        if sm.get("pullThrough") is None:
+            return None, False
+        p *= float(sm["pullThrough"])
+        sufficient = sufficient and bool(sm.get("sufficient"))
+        stage = _NEXT[stage]
+    return round(p, 4), sufficient
 
 
 def advance_from(stage_model: Dict[str, Any], dwell_days: float

@@ -1161,6 +1161,10 @@ def render_catalogue(plan: Mapping[str, Any], outcome: Any, *, question: str,
 
     answer, artefacts, _ = _catalogue_answer(receipt, outcome, as_at, _artefact)
     answer = f"{answer}{_provisional_clause(receipt)}"
+    # The owner's own caveat for the member asked (D27: "The forecast weights
+    # no KFI case: it is top of funnel.").
+    for note in receipt.get("member_notes") or ():
+        answer = f"{answer} {note}"
     notes = _catalogue_notes(receipt)
     for name, row in sorted(inputs.items()):
         notes.append({"field": f"input:{name}",

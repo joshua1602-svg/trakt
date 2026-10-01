@@ -154,23 +154,26 @@
         configured value stands in, and a figure that depends on it is not
         stated and says why. §33.
 
-    D27 THE HISTORICAL COMPLETION RATE                        PROPOSED 2026-10-01
-        Today: of every case ever seen at a stage, the share that has
-        completed SO FAR (`pipeline_history`), so a case still working
-        through Application or Offer counts as not completed. On production
-        (2e9e1cc4): KFI 4.8% (265 of 5,486), Application 42.5% (559 of
-        1,315), while the measured stage rates multiply to about 10.5% from
-        KFI (22.6% x 65.4% x 71.1%) and 46.5% from Application. (a)
-        Proposed: measure it the D26 way — of cases entering the stage, the
-        share expected to complete, with cases still in progress counted as
-        still waiting — from the run-off model the forecast already weights
-        live cases with, so it agrees with the stage rates and IS the rate
-        the forecast assumes for a case new to that stage; a KFI answer says
-        the forecast weights no KFI. (b) Keep it, renamed "completed so far".
-        The forecast is not affected either way: it weights Application and
-        Offer cases by the run-off model (`pipeline_prep` tier 5), not by
-        this rate. The dashboard shows this figure too (the concentration
-        tests' methodology block).
+    D27 THE HISTORICAL COMPLETION RATE                        SETTLED 2026-10-01
+        "(a)". A stage's completion rate is the chance a case ENTERING it
+        completes: each step's pull-through multiplied along the way to
+        completion, from the run-off model the forecast weights live cases
+        with — so a case still in progress counts as still waiting, not as
+        one that did not complete. "Completed so far / ever seen" (4.8% from
+        KFI, 42.5% from Application on production) stays as the evidence.
+        To make the stage answers agree with it, the one-step pull-through
+        is the same model's too: the share of cases ENTERING the stage that
+        advance, where the count ratio of cases that LEFT it dropped the old
+        cases that advanced before the first extract but kept the old ones
+        that never did, and read low. On a simulated book with known rates
+        (30% / 65% / 67%) the count ratio read KFI 26% and KFI-to-completion
+        7–9% (truth 13.1%); the model reads 29–30% and 12–14%. It is the
+        probability the forecast gives a case new to the stage, so "the rate
+        the forecast assumes" is this figure, and a KFI answer says the
+        forecast weights no KFI. A stage whose way to completion no case was
+        seen leaving states no rate and says why (D21). Production figures
+        move on deploy: expect KFI to Application above the 22.6% count
+        ratio (§36). The forecast's own weighting is unchanged.
 
     D26 A LAPSED CASE HAS FALLEN OUT                          SETTLED 2026-10-01
         "(a) but I don't think 9 days is fixed is it? A KFI can be live for
@@ -2507,3 +2510,27 @@ and a test records why.
 Recorded for the client, not changed: the origination-channel field holds
 broker names; property type holds one value (RBLD); the field named NUTS3
 holds 11 coarse regions.
+
+## 36. D27 and a forecast that prepares only what it reads (2026-10-01)
+
+    D27        `pipeline_runoff.fit_runoff`: `pullThrough` is the model's own
+               chance a case new to the stage advances (`advance_from` at no
+               time in stage); `completionFromEntry` multiplies the steps to
+               completion and is `complete_from` at entry.
+               `pipeline_history.historicalCompletionRateByStage` reads it
+               (rate, sufficient, observed, completedSoFar, forecastWeighted,
+               note) — the figure the dashboard's methodology block and the
+               agent both show. The semantic engine states an owner's note
+               with the figure (`note:`); the KFI rate carries "The forecast
+               weights no KFI case: it is top of funnel." Vocabulary 2.23.0.
+    SPEED      `forecast_extrapolation.build_extrapolation` — the Forecast
+               tab's owner and the agent's — read the latest funded month's
+               weighted pipeline and the funnel's headline figures, and
+               prepared all 90 extracts twice to get them (about 140 s on a
+               cold process). It now prepares that month's extracts
+               (`forecast_evolution(latest_only=True)`) and the trailing
+               extracts the funnel's figures come from
+               (`pipeline_funnel_evolution(tail=funnel_tail_needed(lag))`).
+               Every published figure is unchanged — tested field for field
+               against the same owner over every extract
+               (`tests/test_forecast_prepares_only_what_it_reads.py`).

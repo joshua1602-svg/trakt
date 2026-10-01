@@ -584,3 +584,10 @@ intents added beside the baseline's.
                 rate 4.8% — the forecast weights no KFI, and the historical
                 rate counts cases still in progress as not completed (D27,
                 proposed)
+    2026-10-01  Built, not deployed: D27 (a) — the completion rate and the
+                one-step pull-through are the run-off model's own (design
+                D27, §36; vocabulary 2.23.0, the runner refuses older) — and
+                the forecast extrapolation preparing only the extracts its
+                figures read (cold forecast questions were ~140s). With the
+                ranking and decline wording (7d1cacd5). Next: deploy, then the
+                full 135 bank and the unspent held-out variants on that build

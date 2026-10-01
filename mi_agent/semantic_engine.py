@@ -269,6 +269,10 @@ def serve_figure(m: _model.Measure, payload: Mapping[str, Any], *,
         if flag:
             extra["provisional_members"] = [
                 c[axis] for c in cells if not c.get(flag)]
+        notes = [str(c["note"]) for c in cells
+                 if binding.get("note") and c.get("note")]
+        if notes:
+            extra["member_notes"] = list(dict.fromkeys(notes))
         path = binding.get("rows") or binding.get("map") or {
             k: spec.get("value") for k, spec in (binding.get("members") or {}).items()}
         return "grouped", None, cells, path, extra
@@ -359,6 +363,11 @@ def _evidence(member: Tuple[str, str], payload: Mapping[str, Any],
     flag = binding.get("provisional_unless")
     if flag:
         out["provisional"] = not row.get(flag)
+    # The owner's own caveat for this member, stated with the figure (D27:
+    # "the forecast weights no KFI case").
+    note = row.get(binding["note"]) if binding.get("note") else None
+    if note:
+        out["member_notes"] = [str(note)]
     return out
 
 
@@ -371,8 +380,10 @@ def _breakdown(axis: str, payload: Mapping[str, Any],
     flag = binding.get("provisional_unless")
     carried = (*also, *((flag,) if flag else ()))
     if "map" in binding:
+        note = binding.get("note")
         return [{axis: str(key), "value": (row or {}).get(binding["value"]),
-                 **{name: (row or {}).get(name) for name in carried}}
+                 **{name: (row or {}).get(name) for name in carried},
+                 **({"note": (row or {}).get(note)} if note else {})}
                 for key, row in (_model.read(payload, binding["map"]) or {}).items()]
     return [{axis: str(row.get(binding["key"])), "value": row.get(binding["value"]),
              **{name: row.get(name) for name in also}}
