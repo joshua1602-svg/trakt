@@ -221,12 +221,20 @@ def build_historical_completion_model(
     # evidence. It is the probability the forecast gives a case that has just
     # entered the stage; the forecast weights no KFI (top of funnel).
     rate_by_stage: Dict[str, Any] = {}
+    # THE FORECAST'S WEIGHTING IS NOT CHANGED by D27: it weights a live case
+    # by the run-off model (`pipeline_prep`, tier 5) and falls back to this
+    # count ratio only where the run-off cannot price the case — a thin
+    # history, never production's. That fallback keeps its rule exactly.
     stage_rates: Dict[str, float] = {}
     runoff_stages = runoff.get("stages") or {}
     for stage in ACTIVE_STAGES:
+        obs, comp = observed[stage], completed[stage]
+        if obs and obs >= min_observations:
+            stage_rates[stage] = round(comp / obs, 4)
         fitted = runoff_stages.get(stage) or {}
         rate = fitted.get("completionFromEntry")
-        enough = bool(rate is not None and fitted.get("completionFromEntrySufficient"))
+        enough = bool(rate is not None and fitted.get("completionFromEntrySufficient")
+                      and obs >= min_observations)
         weighted = stage in _runoff.FORECAST_STAGES
         rate_by_stage[stage] = {
             "rate": rate, "sufficient": enough,
@@ -237,8 +245,6 @@ def build_historical_completion_model(
             "note": (None if weighted else
                      f"The forecast weights no {_stage_words(stage)} case: it "
                      f"is top of funnel.")}
-        if enough:
-            stage_rates[stage] = rate
     stages_historical = sorted(stage_rates.keys())
     # Stages with cases but too little history to measure a rate. The key
     # (`stagesUsingConfigFallback`) is kept for its readers; since D21 nothing

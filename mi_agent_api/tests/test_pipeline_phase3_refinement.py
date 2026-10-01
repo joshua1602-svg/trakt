@@ -168,8 +168,14 @@ class TestHistoricalModel(unittest.TestCase):
         offer = m["historicalCompletionRateByStage"]["OFFER"]
         self.assertEqual(offer["observed"], 14)
         self.assertEqual(offer["completed"], 10)
-        self.assertAlmostEqual(offer["rate"], round(10 / 14, 4), places=4)
-        self.assertTrue(offer["sufficient"])
+        # D27: the 4 still at Offer are waiting, not failures — every Offer
+        # seen to leave completed — and 10 completions are fewer than the
+        # run-off model measures a rate on, so the rate is provisional.
+        self.assertEqual(offer["rate"],
+                         m["runoff"]["stages"]["OFFER"]["completionFromEntry"])
+        self.assertAlmostEqual(offer["rate"], 1.0, places=4)
+        self.assertFalse(offer["sufficient"])
+        # The forecast's fallback weighting keeps its own rule (unchanged).
         self.assertEqual(m["stage_rates"]["OFFER"], round(10 / 14, 4))
 
     def test_window_is_chronological(self):
