@@ -164,7 +164,10 @@
         ends, the next message is a fresh question, and a reply that only
         made sense against the forgotten turn is told so rather than guessed
         at. Nothing is kept beyond that except the audit log each question
-        already writes. §34.
+        already writes. A change of topic is defined by one rule (owner,
+        2026-10-01): a complete question never inherits — only a message
+        that cannot stand alone ("and by broker?", "what about last
+        month?") is read against the previous answer. §34.
 
     D23 LOW-RISK AMBIGUITY IS DEFAULTED, NOT ASKED            SETTLED 2026-09-30
         "For low risk, yes default to amount." and "It is also simple: 'how
@@ -2385,3 +2388,19 @@ a two-turn exchange; (2) follow-ups as plan changes; (3) references and
 comparisons across turns (on answer composition, §28.1); (4) a multi-turn bank
 with a pass mark per conversation, as D13 is for single questions. After the
 D13 sign-off.
+
+The multi-turn bank is drafted ahead of the build, as its specification:
+`config/mi/golden_questions/conversation_bank_20261001.yaml` — 40
+conversations, 97 follow-ups, in six groups (one change; chains; ask-back and
+reply; unclear follow-ups; must start fresh; must refuse). Each answered
+follow-up is scored against its STAND-ALONE TWIN, the same question asked in
+full: the same plan, the same figures, and a statement of what carried over —
+automatic, with no hand scoring and no golden figure. 122 turns are read by
+the model; the 15 memory mechanics (expiry, change of book, cleared chat,
+edited or borrowed memory) are enforced and tested in code. Pass mark
+(proposed): no wrong answer — every follow-up matches its twin or asks back —
+and every must-start-fresh and must-refuse case passes. 26 twins are new
+wordings; they are run on their own first so each twin's outcome is known.
+Two reading conventions the twins assume, for the owner's confirmation: a new
+grouping replaces the previous one ("split further by" adds an axis), and a
+declined follow-up leaves the memory on the last answered plan.
