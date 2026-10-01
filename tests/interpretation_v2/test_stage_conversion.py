@@ -119,8 +119,11 @@ def test_offer_to_completion_pull_through_is_the_run_off_models(history):
     stage = history["runoff"]["stages"]["OFFER"]
     assert out.value == stage["pullThrough"]
     assert out.receipt["provisional"] is (not stage["sufficient"])
+    # D26: the lapsed cases (open past the stage's window) are stated beside
+    # the recorded withdrawals — both are fall-outs of the pull-through.
     assert out.receipt["member_evidence"] == {"advanced": stage["advanced"],
-                                              "fellOut": stage["fellOut"]}
+                                              "fellOut": stage["fellOut"],
+                                              "lapsed": stage["lapsed"]}
 
 
 def test_the_assumed_kfi_to_completion_rate_is_the_forecasts_stage_rate(history):

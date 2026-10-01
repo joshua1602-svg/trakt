@@ -96,17 +96,23 @@ measures:
         value: pullThrough
         # The owner's evidence for each stage, and its own flag for a rate
         # measured on too few cases: stated with the figure, never dropped.
-        also: [advanced, fellOut]
+        # `lapsed` (D26): cases still open past the stage's measured window,
+        # counted as fallen out beside the recorded withdrawals.
+        also: [advanced, fellOut, lapsed]
         provisional_unless: sufficient
     definition: >-
-      Of the cases that LEFT a stage, the share that advanced to the next
-      stage rather than falling out (withdrawn or lapsed): KFI to Application,
-      Application to Offer, Offer to Completion — 'offer to completion
-      pull-through' is origin_stage OFFER. Measured from the weekly extracts by
-      the pipeline run-off model. Filter on ONE origin_stage; break it down by
-      origin_stage for every stage. It is NOT the cohort conversion (which
-      follows the KFI cohort all the way to funding) and NOT the forecast's
-      completion run-rate.
+      ONE STEP ONLY: of the cases that left a stage, the share that advanced
+      to the NEXT stage rather than falling out (withdrawn, or lapsed — still
+      sitting in the stage past its measured validity window): KFI to
+      Application, Application to Offer, Offer to Completion. Only from Offer
+      is the next stage completion itself, so only origin_stage OFFER answers
+      a rate that ends at completion. A rate from KFI or from Application
+      that ends at completion spans several steps and is NOT this measure: it
+      is stage_completion_rate from that stage. Measured from the weekly
+      extracts by the pipeline run-off model. Filter on ONE origin_stage;
+      break it down by origin_stage for every stage's one-step rate. It is NOT
+      the cohort conversion (which follows the KFI cohort all the way to
+      funding) and NOT the forecast's completion run-rate.
 
   stage_completion_rate:
     label: Historical completion rate
@@ -122,13 +128,19 @@ measures:
         also: [observed, completed]
         provisional_unless: sufficient
     definition: >-
-      Of the cases observed at a stage, the share that went on to complete —
-      the historical rate the forecast weights a live case at that stage with,
-      so the completion rate ASSUMED from a stage (from KFI, say) is that
-      origin_stage. Filter on ONE origin_stage; break it down by
-      origin_stage for every stage. It is NOT the pull-through to the NEXT
-      stage, NOT the cohort conversion, and NOT the completion run-rate in £
-      per month.
+      ALL THE WAY TO COMPLETION: of the cases observed at a stage, the share
+      that went on to complete (fund), however many steps that took. It is
+      the rate for a question that starts at KFI or at Application and ends
+      at completion or funding, by whatever name the reader gives it
+      (conversion, pull-through, completion or funding rate). From Offer the
+      next step IS completion, so a pull-through or conversion from Offer to
+      completion is Offer's one-step stage_pull_through. This measure is
+      also the historical rate the forecast weights a live case at a stage
+      with, so the completion rate the forecast ASSUMES from any stage,
+      Offer included, is this measure at that origin_stage. Filter on ONE
+      origin_stage; break it down by origin_stage for every stage. It is NOT
+      the one-step move to the NEXT stage (stage_pull_through), NOT the
+      cohort conversion, and NOT the completion run-rate in £ per month.
 
   expected_completion_date:
     label: Expected completion date

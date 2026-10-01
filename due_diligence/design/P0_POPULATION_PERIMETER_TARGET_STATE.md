@@ -154,6 +154,24 @@
         configured value stands in, and a figure that depends on it is not
         stated and says why. §33.
 
+    D26 A LAPSED CASE HAS FALLEN OUT                          SETTLED 2026-10-01
+        "(a) but I don't think 9 days is fixed is it? A KFI can be live for
+        more than 2 weeks." A case still open past its stage's measured
+        validity window has lapsed and counts as fallen out of the stage's
+        pull-through, beside the recorded withdrawals — as it already carries
+        no forecast weight (D17). The client's extracts never record a KFI
+        withdrawal (a KFI that does not proceed stays open), so "KFI to
+        Application" read 100%. The window is not fixed: it is measured from
+        the client's history on every extract change, as the day by which 95%
+        of the cases that will ever advance have advanced — now with the
+        cases still waiting counted (a competing-risks estimate, censored at
+        the last extract), so slow cases still in progress no longer shorten
+        it. A read-only check shows production's windows by both methods and
+        how long KFIs actually take before this is deployed. Also: "X to
+        completion" from KFI or Application is the completion rate from X,
+        not the one-step pull-through (catalogue wording, 2026-10-01 twins
+        run).
+
     D25 FOLLOW-UP READING AND THE CONVERSATION PASS MARK      SETTLED 2026-10-01
         "Agree to all three." (1) A new grouping in a follow-up replaces the
         previous one — "by region?" then "and by age band?" is by age band

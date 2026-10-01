@@ -1149,7 +1149,8 @@ def _provisional_clause(receipt: Mapping[str, Any]) -> str:
     the figure — with the counts it rests on — rather than dropped."""
     evidence_words = ", ".join(
         f"{_camel_words(name)} {count}"
-        for name, count in (receipt.get("member_evidence") or {}).items())
+        for name, count in (receipt.get("member_evidence") or {}).items()
+        if count is not None)
     if receipt.get("provisional"):
         return (" Provisional: the owner measured it on too few cases to rely "
                 "on" + (f" ({evidence_words})" if evidence_words else "") + ".")

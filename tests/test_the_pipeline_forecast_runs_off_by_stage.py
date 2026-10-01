@@ -237,3 +237,66 @@ def test_the_methodology_version_moved_with_the_forecast():
     browser holding an old ETag would otherwise get a 304)."""
     from mi_agent_api import serving_cache
     assert serving_cache.METHODOLOGY_VERSION != "1"
+
+
+# --------------------------------------------------------------------------- #
+# D26 (owner decision 2026-10-01): a case open past its stage's window has
+# lapsed, so it counts as fallen out — and the window is measured with the
+# cases still waiting counted
+# --------------------------------------------------------------------------- #
+
+def test_a_stage_that_records_no_withdrawals_is_not_reported_as_converting_all(year):
+    """Production: "KFI to Application" read 100.0% (advanced 1,388, fell out
+    0) because a KFI that does not proceed is never recorded as withdrawn —
+    it stays open. The simulated book is the same: 30% of KFIs apply and the
+    rest simply stay KFIs. Counting a KFI open past the measured window as
+    lapsed recovers the true rate."""
+    _root, model, *_ = year
+    kfi = model["runoff"]["stages"]["KFI"]
+    assert kfi["fellOut"] == 0                       # nothing recorded
+    assert kfi["lapsed"] > kfi["advanced"]
+    assert kfi["pullThrough"] == pytest.approx(0.30, abs=0.06)
+    assert kfi["pullThrough"] == pytest.approx(
+        kfi["advanced"] / (kfi["advanced"] + kfi["fellOut"] + kfi["lapsed"]), abs=1e-4)
+
+
+def test_the_lapsed_cases_are_published_with_the_evidence(year):
+    _root, model, *_ = year
+    evidence = runoff.evidence(model["runoff"])
+    assert all("lapsed" in s for s in evidence["stages"].values())
+
+
+def test_the_window_counts_the_cases_still_waiting():
+    """A percentile of the completed advances alone shortens the window by
+    the slow cases still in progress. Old cohort: half advance on day 2, half
+    on day 20. A recent cohort shows its fast half advancing on day 2 and its
+    slow half still waiting on day 10. Of the advances SEEN, 80% took 2 days;
+    of the advances that will happen, 80% take until day 20 — which the
+    estimate counting the waiting cases measures."""
+    old = [(0, 2, "advance")] * 5 + [(0, 20, "advance")] * 5
+    recent = [(0, 2, "advance")] * 15 + [(0, 10, "open")] * 15
+    seen = [x for _, x, o in old + recent if o == "advance"]
+    assert runoff._quantile(seen, 0.8) == 2
+    assert runoff._advance_window(old + recent, 0.8) == 20
+
+
+def test_an_open_case_inside_the_window_is_still_open_not_lapsed():
+    cases = [{"application_date": "2026-01-01", "offer_date": "2026-01-08",
+              "first_seen": {"APPLICATION": "2026-01-02", "OFFER": "2026-01-09"},
+              "final_stage": "OFFER", "seen_open": True}] * 2 + [
+             {"application_date": "2026-01-01", "offer_date": "2026-01-15",
+              "first_seen": {"APPLICATION": "2026-01-02", "OFFER": "2026-01-16"},
+              "final_stage": "OFFER", "seen_open": True}] * 2 + [
+             {"application_date": "2026-02-20",
+              "first_seen": {"APPLICATION": "2026-02-20"},
+              "final_stage": "APPLICATION", "seen_open": True},
+             {"application_date": "2025-12-01",
+              "first_seen": {"APPLICATION": "2026-01-01"},
+              "final_stage": "APPLICATION", "seen_open": True}]
+    model = runoff.fit_runoff(cases, "2026-01-01", "2026-03-01",
+                              settings={"min_events": 1})
+    app = model["stages"]["APPLICATION"]
+    assert app["windowDays"] == 14
+    assert (app["advanced"], app["fellOut"]) == (4, 0)
+    assert (app["stillOpen"], app["lapsed"]) == (1, 1)     # 9 days vs 90
+    assert app["pullThrough"] == pytest.approx(4 / 5)
