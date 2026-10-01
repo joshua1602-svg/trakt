@@ -602,3 +602,32 @@ intents added beside the baseline's.
                 only what it reads, the ranking and decline wording. 20:54
                 UTC 42fc3768 deployed (run 36924542901, success): the
                 runner's `signoff` selection. Next: the sign-off run
+    2026-10-01  21:02:55 UTC SIGN-OFF RUN on 42fc3768 (vocabulary 2.23.0;
+                216 asked, all recorded; files uploaded): the 135 bank
+                questions and the 81 unspent held-out variants, 37 minutes,
+                median 9.1s a question. D13: MUST ANSWER 88/88 served, in one
+                run. Nice-to-have 24/31 (declined: broker over time, stage
+                migration over time, forecast by broker, forecast by expected
+                month, pipeline needed to reach £100m and the 25% what-if
+                (asked back), the 12-week run rate read "for the pipeline").
+                Fine-to-decline: 11 declined, 5 answered, each correctly.
+                Against the 16:38 run: the base forecast now answers
+                (£140.5m by 2028-02); October and November by stage state
+                every figure; D27 — KFI to completion 10.4% (was 4.8%; the
+                cohort funded to date is 9.4%), Offer pull-through 70.3% (the
+                model's, beside advanced 580, fell out 231, lapsed 5); the
+                8-week run rate answers and the 12-week one declined (the
+                model put the run rate "for the pipeline" on one of the two
+                in each run; nice-to-have; the refusal is kept, §31). No
+                answer found wrong. Variants: 78 SAME, 1 DECLINED as its
+                bank question (fine to decline; an ask-back that did not say
+                what it needed), 2 DIFFERENT — each read its own wording:
+                "monthly trend in the weighted amount" as the 13-month series
+                (£11.5m to £6.9m) where the bank's "by month" reads by
+                expected completion month (£6.9m in total, the same book);
+                "October against November" as the change (KFI +£106.6m)
+                where the bank's "for October and November" states both
+                (£227.8m, £334.5m). Neither is a wrong figure. Speed: forecast
+                questions read 20 extracts, not 180 (warm here, after "pipeline
+                amount evolution by week", the one question that reads all 90:
+                140s)
