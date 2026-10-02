@@ -108,7 +108,7 @@ def test_a_safety_decline_is_recorded_and_not_asked_again(sdk):
 
 
 def test_a_model_that_accepts_a_forced_call_is_still_forced(sdk):
-    """Claude Opus 5 (the signed-off build) keeps its forced call and no retry."""
+    """Claude Opus 5 (the previous baseline) keeps its forced call and no retry."""
     sent, script = sdk
     script.append(_message(_block("text", text="no")))
     out = _emit(AnthropicInterpreterClient(api_key="k", model="claude-opus-5"))

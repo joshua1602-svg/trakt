@@ -2842,3 +2842,29 @@ recorded replay pins both moves (126 read right, 134 the old misread).
 On what Claude Opus 5.5 recorded: 193 readings unchanged; the eight that change
 are the five named-month readings, the LTV bands, and the two run-rates
 (the 12-week run rate, nice to have, and the yearly-basis variant).
+
+### 40.3 Promoted: Claude Opus 5.5 is the baseline (2026-10-02)
+
+The sign-off set on the deployed candidate, 14:01 UTC on 91c550c4 (the two
+contract fixes of §40.1 and the rule of §40.2 with it), all 216 recorded:
+
+    MUST ANSWER        88/88 answered; held-out must 75/75. All 163 answers
+                       word for word the Claude Opus 5 baseline's, the five
+                       October/November readings among them
+    WRONG              none
+    VARIANTS           78 same, 1 declined as its bank question, 2 different
+                       readings — the baseline's own three, accepted at its
+                       sign-off (each variant reads its own wording)
+    NICE / FINE        nice to have 25/31 (24); fine to decline: 13 declined,
+                       3 answered (11, 5) — "historical conversion basis" and
+                       "which stages use historical rates?" ask which rate is
+                       meant rather than picking one; the 12-week run rate is
+                       answered (§40.2)
+    SPEED              median 8.8s a question (9.1s); the model step 5.2s (5.6s)
+
+It matches the baseline on every must-answer question and beats it on the
+rest, so it is the baseline: config/mi/model_view_baseline.json records
+91c550c4, this run and the fingerprint 2affd8d9…, keeps the Claude Opus 5
+baseline under `previous`, and holds no candidate. The guard now accepts
+2affd8d9 alone. Next: the conversation bank (§39) on Claude Opus 5.5, which
+records the conversation reader's results beside its pinned view.

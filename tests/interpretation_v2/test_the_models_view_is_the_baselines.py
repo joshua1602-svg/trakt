@@ -1,10 +1,12 @@
 """Nothing reaches the model without being measured (owner, 2026-10-02).
 
-The sign-off run on 42fc3768 — must-answer 88/88, no wrong answer, 78 of 81
-held-out variants identical — measured ONE model view: the system prompt,
-the governed context and catalogue, the user message around the question,
-the intent tool and the call's settings. The model's readings depend on every
-character of it, so any change to it is a change to the model's behaviour.
+The sign-off run recorded as the baseline (91c550c4 on Claude Opus 5.5 since
+design §40.3; 42fc3768 on Claude Opus 5 before it) — must-answer 88/88, no
+wrong answer, 78 of 81 held-out variants identical — measured ONE model view:
+the system prompt, the governed context and catalogue, the user message around
+the question, the intent tool and the call's settings. The model's readings
+depend on every character of it, so any change to it is a change to the
+model's behaviour.
 
 This pins the view's fingerprint to the baseline's. A change that moves it
 fails here — on purpose. To move the baseline: deploy the change, run the

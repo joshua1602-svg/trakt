@@ -742,3 +742,14 @@ intents added beside the baseline's.
                 candidate model view. Next: `run_production_bank.sh
                 <principal> signoff` on it — promotable on must-answer 88/88
                 and no wrong answer
+    2026-10-02  14:01:27 UTC SIGN-OFF RUN on the Claude Opus 5.5 candidate
+                (91c550c4), complete (216, files uploaded): must-answer
+                88/88; held-out must 75/75; all 163 must answers word for word
+                the Claude Opus 5 baseline's; no wrong answer, no error;
+                variants 78 same / 1 declined as bank / 2 different (the
+                baseline's own two, accepted at its sign-off). Nice to have
+                25/31 (24); fine to decline 13 declined, 3 answered (11, 5).
+                Median 8.8s (9.1s). PROMOTED (design §40.3): the baseline is
+                now 91c550c4 on claude-opus-5-5, view 2affd8d9…; Claude Opus 5
+                kept as `previous`. Next: `run_production_bank.sh <principal>
+                conversations`, scored with score_conversations.py

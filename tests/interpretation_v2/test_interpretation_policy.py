@@ -320,8 +320,8 @@ def test_the_model_and_tool_configuration_did_not_change():
     from mi_agent.interpretation_v2.opus_interpreter import (
         CONFIGURED_MODEL, INTENT_TOOL_NAME, AnthropicInterpreterClient)
 
-    # Claude Opus 5.5 since design §40 — the candidate under measurement
-    # against the Claude Opus 5 baseline.
+    # Claude Opus 5.5 since design §40: measured as the candidate against the
+    # Claude Opus 5 baseline, and the baseline since §40.3.
     assert CONFIGURED_MODEL == "claude-opus-5-5"
     assert INTENT_TOOL_NAME == "emit_candidate_intent"
     client = AnthropicInterpreterClient.__init__
