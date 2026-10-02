@@ -13,7 +13,7 @@ info:
     Trakt portfolio MI and artefact retrieval for Microsoft 365 Copilot.
     Answers come from Trakt's deterministic MI engine and published pipeline
     outputs — never from model estimation.
-  version: 3.0.1
+  version: 3.0.2
 servers:
   - url: https://trakt-mi-api.azurewebsites.net
     description: Trakt MI API (set to your deployment URL before packaging)
@@ -21,7 +21,7 @@ security:
   - entraBearer: []
 paths:
   /v1/copilot/mi/query:
-    post:
+    get:
       operationId: askTraktMi
       summary: Ask the Trakt MI Agent a portfolio question
       description: >-
@@ -36,12 +36,28 @@ paths:
         compute portfolio figures yourself — always call this action.
       parameters:
         - $ref: '#/components/parameters/PackageVersion'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CopilotMiQueryRequest'
+        - name: question
+          in: query
+          required: true
+          description: The portfolio MI question, in natural language. Rewrite
+            follow-up questions into standalone questions before calling.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2000
+        - name: portfolioId
+          in: query
+          required: false
+          description: Optional portfolio/run selector '{client_id}/{run_id}'.
+            Omit to query the current active reporting dataset.
+          schema:
+            type: string
+        - name: asOfDate
+          in: query
+          required: false
+          description: Optional as-of date label (YYYY-MM-DD).
+          schema:
+            type: string
       responses:
         '200':
           description: The MI Agent's answer (ok=false carries a controlled error).
@@ -106,7 +122,7 @@ components:
         to the version this package was built from.
       schema:
         type: string
-        default: "3.0.1"
+        default: "3.0.2"
   securitySchemes:
     entraBearer:
       type: oauth2

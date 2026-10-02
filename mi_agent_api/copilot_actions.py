@@ -66,7 +66,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -346,7 +346,7 @@ def _supporting_values(artifacts: List[Dict[str, Any]]
 # --------------------------------------------------------------------------- #
 @router.post(
     "/mi/query",
-    operation_id="askTraktMi",
+    operation_id="askTraktMiPost",
     summary="Ask the Trakt MI Agent a portfolio question",
     description=("Answers a natural-language portfolio MI question using Trakt's "
                  "deterministic MI engine (never model-invented figures). Returns "
@@ -449,6 +449,47 @@ def ask_trakt_mi(req: CopilotMiQueryRequest, request: Request):
         workspaceUrl=workspace_url,
         packageVersion=copilot_package.COPILOT_PACKAGE_VERSION,
     )
+
+
+@router.get(
+    "/mi/query",
+    operation_id="askTraktMi",
+    summary="Ask the Trakt MI Agent a portfolio question",
+    description=("The same governed question as the POST form, expressed as a "
+                 "read-only GET. This is the form the Microsoft 365 Copilot "
+                 "package calls: Copilot asks the user to confirm every "
+                 "non-GET plugin call, and a question changes nothing, so a "
+                 "GET is both honest and the better experience. Behaviour, "
+                 "authentication and the answer are identical to the POST."),
+    response_model=CopilotMiAnswer,
+    responses={401: {"model": CopilotError}, 403: {"model": CopilotError},
+               503: {"model": CopilotError}},
+    dependencies=[Depends(copilot_auth_guard)],
+)
+def ask_trakt_mi_get(
+    request: Request,
+    response: Response,
+    question: str = Query(..., min_length=1, max_length=2000,
+                          description="The portfolio MI question, in natural "
+                                      "language."),
+    portfolioId: Optional[str] = Query(
+        None, description="Optional portfolio/run selector "
+                          "'{client_id}/{run_id}'. Omit to query the current "
+                          "active reporting dataset."),
+    asOfDate: Optional[str] = Query(
+        None, description="Optional as-of date label (YYYY-MM-DD)."),
+):
+    answer = ask_trakt_mi(
+        CopilotMiQueryRequest(question=question, portfolioId=portfolioId,
+                              asOfDate=asOfDate),
+        request)
+    # An answer is specific to the caller, the dataset and the moment: never let
+    # an intermediary cache or share it, which a GET would otherwise permit.
+    if isinstance(answer, Response):          # a controlled error response
+        answer.headers["Cache-Control"] = "no-store"
+        return answer
+    response.headers["Cache-Control"] = "no-store"
+    return answer
 
 
 # --------------------------------------------------------------------------- #
