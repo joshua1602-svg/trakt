@@ -350,7 +350,8 @@ def _supporting_values(artifacts: List[Dict[str, Any]]
             title = normalise_payload(art.get("title"))
             if truncated:
                 notes.append(
-                    f"'{title or kind}': showing {len(rows)} of {total} rows. "
+                    f"'{title or kind}': showing the first {len(rows)} of {total} "
+                    f"rows (Copilot response limit). "
                     f"Every figure in the answer is computed over all {total} "
                     f"rows by the Trakt engine; do not recompute totals or "
                     f"percentages from the rows shown.")

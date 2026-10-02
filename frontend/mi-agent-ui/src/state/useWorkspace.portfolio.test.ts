@@ -148,7 +148,6 @@ function makeClient(over: Partial<AgentClient> = {}): AgentClient {
     getForecastSnapshot: vi.fn(stub),
     getFundedEvolution: stub,
     getPipelineEvolution: stub,
-    getPipelineMovement: async () => ({ dataset: "pipeline_movement" as const, portfolioId: "p", available: false, reason: "no extracts", stages: [] }),
     getForecastEvolution: stub,
     getFunnelEvolution: stub,
     getRiskLimits: stub,

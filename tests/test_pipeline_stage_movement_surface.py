@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """tests/test_pipeline_stage_movement_surface.py
 
-Pipeline stage movement, on the route and in the pack.
+The pipeline stage-movement reconciliation, held to its identity.
 
-Phase 3 built the reconciliation and nothing rendered it: no HTTP route, no
-React component, no slide. This pins that both surfaces read ONE payload — the
-engine supplies the reconciled movement, the renderer decides presentation —
-and that the identity holds on counts and on money.
+The surfaces read main's governed stage-transition payload (one movement
+endpoint, ``/mi/insight/movement-detail``; parity pinned in
+tests/mi_agent_pptx/test_stage_transition_parity.py). This engine
+reconciliation is kept, and tested here directly: the identity it holds on
+counts and on money is worth holding to.
 """
 
 from __future__ import annotations
@@ -72,24 +73,20 @@ def deployed(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def payload(deployed):
-    from fastapi.testclient import TestClient
-    from mi_agent_api.app import app
+    from mi_agent_api import evolution
 
-    got = TestClient(app).get("/mi/evolution/pipeline-movement",
-                              params={"client_id": deployed})
-    assert got.status_code == 200, got.text
-    return got.json()
+    out = evolution.pipeline_stage_movement(os.environ["MI_AGENT_PIPELINE_ROOT"],
+                                            deployed)
+    assert out.get("available"), out.get("reason")
+    return out
 
 
 # --------------------------------------------------------------------------- #
-# The route.
+# The reconciliation.
 # --------------------------------------------------------------------------- #
 
-def test_the_route_exists_and_serves_the_reconciliation(payload):
-    """Catches: an engine capability with no way for any surface to reach it."""
-    assert payload["dataset"] == "pipeline_movement"
-    assert payload["available"] is True, payload.get("reason")
-    assert payload["stages"], payload
+def test_the_engine_serves_the_reconciliation(payload):
+    assert payload["stages"], "no stage reconciled"
 
 
 def test_case_movements_reconcile(payload):
@@ -130,7 +127,7 @@ def test_departures_are_split_by_where_the_case_went(payload):
             stage["departureCaseCount"], stage["stage"]
 
 
-def test_the_route_names_the_identifier_it_joined_on(payload):
+def test_the_reconciliation_names_the_identifier_it_joined_on(payload):
     assert payload.get("identifierField")
     assert payload.get("openingWeek") and payload.get("closingWeek")
 
@@ -143,16 +140,3 @@ def test_missing_stable_identity_suppresses_the_analysis_rather_than_guessing():
     out = evolution.pipeline_stage_movement("/nonexistent-root", "nobody")
     assert out["available"] is False
     assert out["reason"]
-
-
-# --------------------------------------------------------------------------- #
-# One payload, two surfaces.
-# --------------------------------------------------------------------------- #
-
-# THE DECK NO LONGER DRAWS THIS RECONCILIATION. Two "Pipeline Stage Movement"
-# slides existed — this one and the governed stage-transition payload — and one
-# title cannot mean two pages, so the deck carries the transition payload and
-# its parity is pinned by tests/mi_agent_pptx/test_stage_transition_parity.py.
-#
-# Everything above still applies: /mi/evolution/pipeline-movement is live, the
-# dashboard reads it, and the identity it reconciles is worth holding to.
