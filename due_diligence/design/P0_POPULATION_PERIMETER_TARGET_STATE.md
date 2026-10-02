@@ -2714,6 +2714,57 @@ Not in phase 2: comparing across answers ("compare it with the one before")
 (the browser's own follow-up guessing, `lib/analysisContext.ts`, is replaced
 by it), which ships from main.
 
+### 39.1 The reader's reading conventions, and a held-out set (2026-10-02)
+
+The first conversation run (14:49 UTC on 91c550c4) was stopped at 15:10 by a
+deploy of main over the App Service; the 45 turns it recorded scored 39 pass,
+5 miss, 1 wrong. Every miss and the wrong answer come from two habits of the
+reader, not of the signed-off interpreter:
+
+    "AND" READ AS "ADD"   After "which broker has the largest pipeline", a
+               new grouping opening with "and" was added to the broker one,
+               not put in its place, and the two-way ranking was declined. D25
+               already says a new grouping replaces the earlier one ("and by
+               stage?" is its own example); the reader followed it in one
+               conversation and not in another. The next follow-up was then
+               read against the broker question (D25: a declined follow-up
+               does not replace the memory) — the wrong answer, stated as what
+               it read, but not the twin's figure.
+    ASKING WHAT WORDS MEAN  The reader asked which grain "over time" meant,
+               which window "the standard" one is, which cases "the live
+               cases" are, and whether "all products again" split or widened.
+               Each has a governed meaning or default the interpreter holds
+               (D20; the default run-rate window; the live pipeline), and the
+               interpreter asks itself when a question is unclear.
+
+RULES, reader 1.1.0 — reading conventions, stated once, for any wording:
+
+    rule 4     A new grouping replaces the earlier question's, however the
+               message opens; it is added only when the message says so in
+               words (split further, within each, as well as, two named
+               together). A change taken back — to the usual, standard or
+               default setting, or to everything again — is the earlier
+               question without it.
+    rule 6     The reader asks only what in the conversation a message refers
+               to. It never asks what a word means or which period, grain,
+               window, basis or part of the book is intended: the user's words
+               go into the complete question, and the interpreter — which holds
+               the definitions and defaults — reads them.
+
+This is the split the standard design makes: the rewrite step makes a
+follow-up standalone, and the semantic layer resolves what it means. The
+reader's view moves (d1b7a39b → 24933398); it had not been measured, and the
+conversation run measures it. The interpreter's view is unchanged.
+
+HELD OUT. The rules were drawn from the first conversation bank, so a second
+set tests them on wording they were not drawn from:
+config/mi/golden_questions/conversation_holdout_20261002.yaml, 21
+conversations and 24 follow-ups (group H), written before any run of it — the
+same patterns on other groupings and in other words, two complete questions
+that must not carry, two declines and an ask. The whole-bank run plays it
+after the first set (168 turns, 88 twins, ~256 questions) and the scorer
+reports it on its own line. Nothing is changed against a row of it.
+
 ## 40. Claude Opus 5.5 — the candidate under measurement (2026-10-02)
 
 Owner, 2026-10-02: "We must upgrade to Opus 5.5." Claude Opus 5 is not being

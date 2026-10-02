@@ -33,11 +33,12 @@
 # ask-back handed back, then the reply's stand-alone twin (~18 questions). The
 # conversation is switched on for that run's process only — no user's service
 # changes.
-# `conversations` plays the WHOLE conversation bank (§34, §39): every turn of
-# the 35 conversations the model reads (123), each message sent with the
-# continuation the previous one handed back, then each turn's stand-alone twin
-# (72 distinct; one asked earlier in the run is reused) — ~195 questions and
-# ~90 conversation readings. Scored with
+# `conversations` plays the WHOLE conversation bank (§34, §39) and its held-out
+# set (§39.1): every turn of the 35 + 21 conversations the model reads
+# (123 + 45), each message sent with the continuation the previous one handed
+# back, then each turn's stand-alone twin (88 distinct; one asked earlier in
+# the run is reused) — ~256 questions and ~115 conversation readings. Scored
+# with
 #     python due_diligence/evidence/qb_plan_readback/score_conversations.py <it>.jsonl
 # The conversation is switched on for that run's process only.
 #
@@ -68,7 +69,7 @@ if [[ -z "${PRINCIPAL}" || -z "${SELECTION}" || $# -gt 2 ]]; then
   echo "  twins            the conversation bank's new stand-alone twins (~27)" >&2
   echo "  signoff          the whole bank, then the unspent held-out variants (~216)" >&2
   echo "  askback          the ask-back conversations, replies and their twins (~22)" >&2
-  echo "  conversations    the whole conversation bank and its twins (~195)" >&2
+  echo "  conversations    the whole conversation bank, its held-out set and their twins (~256)" >&2
   echo "Nothing was asked." >&2
   exit 2
 fi

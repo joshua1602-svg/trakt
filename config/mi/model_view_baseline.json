@@ -59,9 +59,10 @@
   },
   "conversation_reader": {
     "what_this_is": "The conversation reader's view (design §39): everything it is shown for every message. It turns a follow-up or a reply into one complete question for the interpreter above, whose view is unchanged. Pinned like the interpreter's: a change to it fails test_the_models_view_is_the_baselines until the conversation bank is re-run on it and matches or beats the results recorded here.",
-    "fingerprint": "d1b7a39b47834bf71c9d84c8a694308d09419f8743458b607fcbb2cccfafde68",
+    "fingerprint": "24933398fed82f748426db5e6076a5eba37adf96903cb044532716f4dc4b52a5",
     "measured_by": null,
     "results": null,
-    "model": "claude-opus-5-5"
+    "model": "claude-opus-5-5",
+    "rules": "1.1.0 (§39.1): a new grouping replaces the earlier one however the message opens, and is added only when the message says so (D25); a change taken back is the earlier question without it; the reader asks only what a message refers to, never what it means"
   }
 }

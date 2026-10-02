@@ -187,6 +187,21 @@ def test_a_malformed_reading_is_not_used(payload, why):
     assert not got.ok and why in got.error
 
 
+def test_the_reader_is_told_the_d25_reading_conventions():
+    """§39.1: "and" or "what about" before a grouping does not add it — a new
+    grouping replaces the earlier one unless the message says in words to add
+    it; a change taken back is the earlier question without it; and the
+    reader asks only what a message refers to, never what it means (the
+    interpreter holds the definitions and defaults)."""
+    from mi_agent.interpretation_v2.conversation_reader import SYSTEM_PROMPT
+    rules = " ".join(SYSTEM_PROMPT.split())
+    assert "A new grouping replaces the earlier question's grouping, however" in rules
+    assert "only when the message says so in words" in rules
+    assert "takes a change back" in rules
+    assert "Never ask what a word or phrase means" in rules
+    assert "keep the user's own words for it in the complete question" in rules
+
+
 def test_a_reading_may_not_add_a_number_the_conversation_does_not_hold():
     """Rule 3, enforced: no period, amount or threshold nobody stated."""
     got = _check({"outcome": "complete",

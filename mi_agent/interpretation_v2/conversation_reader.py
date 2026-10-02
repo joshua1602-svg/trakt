@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .vocabulary import GovernedVocabulary, load_governed_vocabulary
 
-READER_VERSION = "interpretation_v2.conversation_reader/1.0.0"
+READER_VERSION = "interpretation_v2.conversation_reader/1.1.0"
 READER_TOOL_NAME = "record_complete_question"
 
 #: What a reading can be.
@@ -87,20 +87,30 @@ conversation supplies.
 amount, threshold, place, name, grouping or restriction that neither the \
 earlier question nor the message states.
 
-4. A new grouping replaces the earlier question's grouping. A message that \
-asks to split further, or to add a grouping, keeps the earlier grouping and \
-adds the new one. A message that narrows to one value of the earlier \
-grouping keeps the figure, restricts it to that value, and drops that \
-grouping.
+4. A new grouping replaces the earlier question's grouping, however the \
+message opens — with "and", with "what about", or with the grouping alone. \
+The earlier grouping is kept, and the new one added, only when the message \
+says so in words: split further, within each, as well as, or two groupings \
+named together. A message that narrows to one value of the earlier grouping \
+keeps the figure, restricts it to that value, and drops that grouping. A \
+message that takes a change back — to the usual, standard or default \
+setting, or to everything again — is the earlier question without that \
+detail; where the earlier question does not have it, the earlier question \
+as it stands.
 
 5. A message that answers a detail the agent asked for supplies that detail: \
 write the question the agent asked about, completed with it — and, where that \
 question was itself a follow-up, read with the last question answered.
 
-6. If the message refers to something that is not clear, and one more detail \
-from the user would settle it, return outcome "ask" with that one detail as a \
-short question the user can answer — naming the choices when there are only \
-a few.
+6. Ask only when you cannot tell what in the conversation the message \
+refers to — which figure, grouping, period or value of the earlier question \
+it changes — and one more detail from the user would settle that: return \
+outcome "ask" with that one detail as a short question the user can answer, \
+naming the choices when there are only a few. Never ask what a word or \
+phrase means, or which period, grain, window, basis or part of the book the \
+user intends: keep the user's own words for it in the complete question. The \
+reader of complete questions holds the book's definitions and defaults, and \
+asks the user itself when a question is unclear.
 
 7. If the message refers to something the conversation does not hold — you \
 are shown only the last question the agent answered and any detail asked for \

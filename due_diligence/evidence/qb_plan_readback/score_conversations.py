@@ -2,7 +2,8 @@
 """Does a follow-up get its stand-alone twin's answer? (P0 design §34, §39; D25)
 
 `run_production_bank.sh <principal> conversations` plays every conversation of
-`config/mi/golden_questions/conversation_bank_20261001.yaml` the model reads,
+`config/mi/golden_questions/conversation_bank_20261001.yaml` and its held-out
+set `conversation_holdout_20261002.yaml` that the model reads,
 each message sent with the continuation the previous one handed back, and
 asks each turn's stand-alone twin — the same question asked in full — beside
 it. This scores each turn against what the bank expects of it:
@@ -26,7 +27,10 @@ it. This scores each turn against what the bank expects of it:
                a decline was expected
 
 PASS MARK (D25): no WRONG — every follow-up matches its twin or asks back —
-and every group E (start fresh) and F (refuse) turn passes.
+and every group E (start fresh) and F (refuse) turn passes. The held-out
+conversations (group H, §39.1) are played in the same run and reported on
+their own line: the same mark, on wording the reader's rules were not drawn
+from.
 
     python due_diligence/evidence/qb_plan_readback/score_conversations.py \\
         qb_conversations_conversations_<stamp>.jsonl
@@ -162,6 +166,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             if str(t.get("category") or "").rsplit("_", 1)[-1] in ("E", "F")]
     must_failed = [t["id"] for t in must
                    if score(t, twins.get(t["id"]))[0] != "PASS"]
+    held_out = tally.get("H")
+    if held_out:
+        print(f"\nHELD-OUT (H, §39.1): {held_out['PASS']} pass / "
+              f"{held_out['MISS']} miss / {held_out['WRONG']} wrong — wording "
+              f"the reader's rules were not drawn from")
     print(f"\nD25: wrong answers {len(wrong)}"
           + (f" ({', '.join(wrong)})" if wrong else "")
           + f"; start-fresh and refuse turns {len(must) - len(must_failed)}/{len(must)}"

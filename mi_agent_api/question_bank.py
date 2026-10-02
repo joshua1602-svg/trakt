@@ -39,6 +39,11 @@ HOLDOUT_BANK = _BANK_DIR / "holdout_variants_20260930b.yaml"
 #: scored against a stand-alone twin. The twins that are not production-bank
 #: questions are asked on their own first, so each twin's outcome is known.
 CONVERSATION_BANK = _BANK_DIR / "conversation_bank_20261001.yaml"
+#: The held-out conversations (§39.1): the same patterns in other words, kept
+#: apart from the bank the reader's rules were drawn from. Played after it by
+#: the whole-bank run, and scored as their own group (H).
+CONVERSATION_HOLDOUT = _BANK_DIR / "conversation_holdout_20261002.yaml"
+CONVERSATION_BANKS = (CONVERSATION_BANK, CONVERSATION_HOLDOUT)
 #: Funded, pipeline, forecast and limits (current and forward).
 DEFAULT_CATEGORIES = ["funded_kpi", "funded_breakdown_1d", "pipeline",
                       "pipeline_evolution", "forecast", "forecast_scale",
@@ -215,15 +220,18 @@ def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
 
 
 def conversation_rows(groups: str = "C") -> List[Dict[str, Any]]:
-    """The conversation bank's conversations in `groups` (`all` for every
-    group), as the turns a run plays in order (§34, §39): every turn the
-    model reads. The `run: code` turns — the memory's mechanics — need no
-    model and are enforced on every build
+    """The conversations in `groups` (`all` for every group) of the
+    conversation bank and its held-out set, as the turns a run plays in order
+    (§34, §39, §39.1): every turn the model reads. The `run: code` turns —
+    the memory's mechanics — need no model and are enforced on every build
     (`test_conversation_bank_mechanics.py`)."""
-    data = yaml.safe_load(CONVERSATION_BANK.read_text(encoding="utf-8")) or {}
+    conversations = [conversation for path in CONVERSATION_BANKS
+                     for conversation in (yaml.safe_load(
+                         path.read_text(encoding="utf-8")) or {}
+                     ).get("conversations") or ()]
     wanted = {g.strip().upper() for g in groups.split(",") if g.strip()}
     out: List[Dict[str, Any]] = []
-    for conversation in data.get("conversations") or ():
+    for conversation in conversations:
         group = str(conversation.get("group") or "").upper()
         if "ALL" not in wanted and group not in wanted:
             continue

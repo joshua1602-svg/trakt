@@ -118,14 +118,18 @@ def test_the_production_script_offers_the_signoff():
 
 
 def test_every_turn_the_model_reads_is_played():
-    """§39: every live turn of every conversation, in order; the memory's
-    mechanics (`run: code`) are enforced in code, not played."""
-    data = yaml.safe_load(qb.CONVERSATION_BANK.read_text())
-    live = [(c["id"], i) for c in data["conversations"]
+    """§39, §39.1: every live turn of every conversation, the bank's and then
+    the held-out set's, in order; the memory's mechanics (`run: code`) are
+    enforced in code, not played."""
+    live = [(c["id"], i) for path in qb.CONVERSATION_BANKS
+            for c in yaml.safe_load(path.read_text())["conversations"]
             for i, t in enumerate(c["turns"]) if t.get("run") == "live"]
     rows = qb.conversation_rows("all")
     assert [(r["conversation"], r["turn"]) for r in rows] == live
-    assert len(rows) == 123
+    assert len(rows) == 123 + 45
+    held_out = qb.conversation_rows("H")
+    assert len(held_out) == 45
+    assert {r["category"] for r in held_out} == {"conversation_H"}
     group_c = qb.conversation_rows("C")
     assert {r["category"] for r in group_c} == {"conversation_C"}
     assert {"ask_back", "fill", "carry"} <= {r["expect"] for r in group_c}
