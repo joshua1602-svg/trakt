@@ -684,3 +684,6 @@ intents added beside the baseline's.
                 conversations` (123 turns and 72 twins, ~195 questions;
                 conversation switched on for that run only), scored with
                 score_conversations.py
+    2026-10-02  11:31 UTC 8321dfb7 deployed (run 37001204626, success):
+                conversation phase 2 (§39), switched off for users. Next:
+                `run_production_bank.sh <principal> conversations`
