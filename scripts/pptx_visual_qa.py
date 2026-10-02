@@ -359,8 +359,57 @@ def approve_limits(client: str):
 # Generation, through the React route.
 # --------------------------------------------------------------------------- #
 
+#: Facility shapes the Borrowing Base page has to be right for. ``drawn`` has
+#: approved eligibility rules and a supplied drawing, so every measure resolves
+#: and loans fall out for named reasons; ``undrawn`` is the ERE prototype's
+#: shape — no drawing supplied, so headroom and utilisation must name the
+#: missing input rather than print a dash or a zero.
+_FACILITIES = {
+    "drawn": {
+        "facility_label": "QA Warehouse Facility", "facility_type": "warehouse",
+        "commitment": 150_000_000, "advance_rate": 0.85,
+        "concentration_denominator_floor": 33_000_000,
+        "current_drawn_amount": 61_500_000,
+        "current_drawn_amount_as_of": "2026-06-30",
+        "environment": "production",
+        "eligibility": {"rule_version": "qa-1", "rules": [
+            {"rule_id": "max_current_ltv", "field": "current_loan_to_value",
+             "operator": "max", "value": 60.0,
+             "description": "Current LTV must not exceed 60%"},
+            {"rule_id": "min_youngest_age", "field": "youngest_borrower_age",
+             "operator": "min", "value": 60,
+             "description": "Youngest borrower at least 60"}]},
+        "concentration": {"population": "eligible_mortgage_loans",
+                          "borrowing_base_treatment": "monitor_only"},
+    },
+    "undrawn": {
+        "facility_label": "QA Warehouse Facility", "facility_type": "warehouse",
+        "commitment": 250_000_000, "advance_rate": 1.03,
+        "concentration_denominator_floor": 33_000_000,
+        "current_drawn_amount": None, "environment": "prototype",
+        "eligibility": {"rule_version": "prototype-0", "rules": [],
+                        "prototype_assume_financing_portfolio_eligible": True},
+        "concentration": {"population": "eligible_mortgage_loans",
+                          "borrowing_base_treatment": "monitor_only"},
+    },
+}
+
+
+def configure_facility(tmp: Path, client: str, shape: str):
+    """Point the facility register at a one-entry register for *client*."""
+    import yaml
+    register = tmp / "funding_facilities.yaml"
+    register.write_text(yaml.safe_dump({
+        "schema_version": "1.0.0", "config_version": f"qa-{shape}",
+        "facilities": [{"client_id": client, "facility_id": f"QA_{shape.upper()}",
+                        "currency": "GBP", **_FACILITIES[shape]}]}),
+        encoding="utf-8")
+    os.environ["TRAKT_FUNDING_FACILITIES_PATH"] = str(register)
+
+
 def generate(tmp: Path, client: str, book: str, currency: str, out: Path, *,
-             pipeline: bool = True, limits: bool = True):
+             pipeline: bool = True, limits: bool = True,
+             facility: str = ""):
     from fastapi.testclient import TestClient
 
     root = write_book(tmp / "runs", client, book)
@@ -385,6 +434,10 @@ def generate(tmp: Path, client: str, book: str, currency: str, out: Path, *,
 
     os.environ["TRAKT_STORAGE_BACKEND"] = "file"
     os.environ["TRAKT_RUNTIME_MODE"] = "test"
+    if facility:
+        configure_facility(tmp, client, facility)
+    else:
+        os.environ["TRAKT_FUNDING_FACILITIES_PATH"] = str(tmp / "no_facilities.yaml")
     if limits:
         approve_limits(client)
 
@@ -527,6 +580,9 @@ def main():
     ap.add_argument("--out", default="artifacts/pptx_qa")
     ap.add_argument("--only", default="",
                     help="comma-separated variant names, e.g. seasoned_book_gbp")
+    ap.add_argument("--facility", default="", choices=["", *_FACILITIES],
+                    help="configure a funding facility, so the Borrowing Base "
+                         "page renders")
     args = ap.parse_args()
     out_root = _REPO / args.out
     out_root.mkdir(parents=True, exist_ok=True)
@@ -554,7 +610,8 @@ def main():
         try:
             path = out_root / f"{name}.pptx"
             content, meta = generate(tmp, client, book, ccy, path,
-                                     pipeline=has_pipeline, limits=has_limits)
+                                     pipeline=has_pipeline, limits=has_limits,
+                                     facility=args.facility)
             if content is None:
                 report[name] = {"ok": False, **meta}
                 print(f"[{name}] FAILED: {meta.get('error')}")

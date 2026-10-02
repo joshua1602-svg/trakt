@@ -208,7 +208,22 @@ slides:
     title: "Portfolio Health and Watch Items"
     question: "What requires attention before the next reporting period?"
 
-  # 19 ------------------------------------ Concentration Tests and Headroom
+  # 19 ------------------------------------------------------ Borrowing Base
+  # BEFORE the limits, because it is the question the limits are asked about.
+  # The dashboard orders it the same way: BorrowingBasePanel leads the
+  # Eligibility & Concentrations tab, above the tests.
+  #
+  # Governed throughout — eligibility, advance rate, cap, headroom, deficiency
+  # and both utilisations are mi_agent.borrowing_base's, carried on the
+  # concentration envelope. Omitted where no facility is configured, which is
+  # most books: this is a funding-facility page, not a portfolio page.
+  - id: borrowing_base
+    type: borrowing_base
+    title: "Borrowing Base"
+    question: "How much can this facility draw, and how much is left?"
+    when: "has_borrowing_base"
+
+  # 20 ------------------------------------ Concentration Tests and Headroom
   # The governed, operator-approved concentration capability
   # (/mi/concentration-tests). Carries CURRENT funded, EXPECTED forecast and the
   # ALL-PIPELINE-CONVERTS stress as three distinct states — the stress is never
@@ -219,7 +234,7 @@ slides:
     question: "Am I operating within approved limits, and where could pressure emerge?"
     when: "has_concentration"
 
-  # 20 ---------------------------------------------------------- Risk Limits
+  # 21 ---------------------------------------------------------- Risk Limits
   # The legacy extracted monitor. Shown only when no approved concentration
   # configuration exists, so the two never appear together saying similar things.
   - id: risk
@@ -228,7 +243,7 @@ slides:
     question: "Am I operating within approved limits?"
     when: "has_risk and not has_concentration"
 
-  # 21 ------------------------------------------- Data and Methodology
+  # 22 ------------------------------------------- Data and Methodology
   # Investor-safe: scope, source dates, coverage, basis of preparation and the
   # omission ledger. Never storage locations, endpoints or module names.
   - id: methodology

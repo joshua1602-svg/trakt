@@ -94,7 +94,7 @@ emphasis."* The deck's palette was updated to Slate & Cyan; its **grammar** was 
 
 | dashboard | deck on main |
 |---|---|
-| **Eligibility & Concentrations › Borrowing base** | none — the concentration envelope the deck already fetches **carries `borrowingBase`; no slide reads it** |
+| **Eligibility & Concentrations › Borrowing base** | none — the concentration envelope the deck already fetches **carries `borrowingBase`; no slide reads it** *(ported in the follow-up, §6)* |
 | Concentrations: 6 KPIs incl. **Deteriorating** and **Unavailable**; Funded / Expected / **Full Pipeline** columns; **Move F→E**; 2dp | 5 KPIs, no stress column, no movement, 1dp |
 | **Pipeline › Stratifications** | none |
 | **Forecast › Forecast Evolution** (actual vs the prior run's forecast) | none |
@@ -187,6 +187,34 @@ too (otherwise NNEG exposure was pushed off the slide).
 ![After — stratifications](img/deck_after_strat.png)
 ![After — concentration](img/deck_after_concentration.png)
 
+### Borrowing Base — ported (follow-up)
+
+Ported from `claude/pptx-analytical-surfacing-final` (`c2e35e28`), then rebuilt on this
+branch's design grammar. It sits **before Concentration** (and so before Risk Limits), as
+`BorrowingBasePanel` leads the dashboard's Eligibility & Concentrations tab, and is
+**omitted with its reason** where no facility is configured — which is every book today
+except the ERE prototype.
+
+- **Same five measures, same order, same tones as the panel:** eligible collateral,
+  borrowing base, facility drawn, headroom, facility utilisation — mono figures, headroom
+  mint, utilisation amber at 90% and rose at 100%. The eligibility split
+  (eligible / ineligible / undetermined) is native, copyable table text with the
+  financing-portfolio and concentration-denominator line beneath it.
+- **Nothing is computed.** Every figure is `mi_agent.borrowing_base`'s, read off the
+  concentration envelope the deck already fetched and was discarding.
+- **`NOT_CALCULABLE` is printed as the missing input**, in the panel's words —
+  "facility drawings not supplied" — never a dash or a zero. This is the ERE prototype's
+  state today: no drawing is supplied, so headroom and utilisation cannot be stated.
+- **A defect in the ported code, fixed:** under the prototype assumption every loan is
+  eligible *with the prototype reason*, and the "Why loans are not eligible" card listed
+  all of them as excluded. Eligible-loan reasons are now filtered out, and a missing rule
+  input reads "Input missing — Max current LTV" rather than the derivation's raw code.
+- Rendered through the real generate route with two facility registers (the QA harness
+  takes `--facility drawn|undrawn`): 23 slides with a facility, 22 without.
+
+![Borrowing Base — drawn facility, approved rules](img/deck_borrowing_base_drawn.png)
+![Borrowing Base — ERE-style prototype, no drawings supplied](img/deck_borrowing_base_prototype.png)
+
 ---
 
 ## 7. Verification
@@ -219,10 +247,9 @@ too (otherwise NNEG exposure was pushed off the slide).
 
 ## 8. What is still open
 
-1. **The unmerged capability work** (§4) — borrowing base, pipeline stratifications,
-   forecast evolution, the information-first selector and concentration history were all
-   built on `claude/pptx-analytical-surfacing-final` and never merged. The borrowing-base
-   data is already fetched on every build and discarded. Porting is a decision for the owner.
+1. **The remaining unmerged capability work** (§4) — pipeline stratifications, forecast
+   evolution, the information-first selector and concentration history are still only on
+   `claude/pptx-analytical-surfacing-final`. The borrowing base has been ported (§6).
 2. **Pack length** — Origination Funnel, Origination Flow and Stage Movement all render on
    one book; three fixed stratification pages draw six of eleven dimensions; a one-category
    "Direct 100%" panel still renders. These are composition questions, out of scope here.
