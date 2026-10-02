@@ -249,6 +249,29 @@ def _norm_text(series: pd.Series) -> pd.Series:
     return series.astype(str).str.strip().str.lower()
 
 
+_LOAN_KEY_COL = "__loan_key__"
+
+
+def _loan_keys(df: pd.DataFrame, lib: ConcentrationLibrary) -> Optional[pd.Series]:
+    """One identifier per loan, or ``None``. In a combined funded + pipeline
+    frame a pipeline case has no loan id yet, so its case identifier stands
+    in, keyed by source so the two id spaces cannot collide."""
+    spec = lib.role("loan_id")
+    cols = [c for c in (list(spec.candidates) if spec else [])
+            + ["pipeline_case_identifier"] if c in df.columns]
+    if not cols:
+        return None
+    keys = pd.Series(pd.NA, index=df.index, dtype="object")
+    for c in cols:
+        keys = keys.fillna(df[c].where(df[c].notna()).astype("object"))
+    if keys.isna().all():
+        return None
+    keys = keys.astype(str).where(keys.notna())
+    if COMPONENT_COL in df.columns:
+        keys = (df[COMPONENT_COL].astype(str) + ":" + keys).where(keys.notna())
+    return keys
+
+
 @lru_cache(maxsize=16)
 def _region_taxonomy(client_id: Optional[str]):
     try:
@@ -770,10 +793,22 @@ def _eval_borrower_aggregate_share(df, lib, metric, params, external=None):
     if total is None:
         return _no_denominator(metric, basis, len(df))
     col = resolve_role_column(df, lib, "borrower_id")
+    note = ""
     if col is None:
-        return MetricComputation.missing("borrower_id",
-                                         role_candidates(lib, "borrower_id"),
-                                         unit=metric.unit, total_loans=len(df))
+        # No borrower identifier: each loan is one borrower (owner decision for
+        # ERE, 2026-10-02 — an equity-release borrower holds one loan). Said on
+        # every result, because on a book where a borrower holds several loans
+        # this understates the aggregate.
+        keys = _loan_keys(df, lib)
+        if keys is None:
+            return MetricComputation.missing(
+                "borrower_id", role_candidates(lib, "borrower_id")
+                + role_candidates(lib, "loan_id"),
+                unit=metric.unit, total_loans=len(df))
+        df = df.assign(**{_LOAN_KEY_COL: keys})
+        col = _LOAN_KEY_COL
+        note = ("No borrower identifier on the tape: each loan is treated as "
+                "one borrower, so the aggregate is per loan.")
     amount = _param(metric, params, "amount")
     if amount is None:
         return MetricComputation(
@@ -793,8 +828,11 @@ def _eval_borrower_aggregate_share(df, lib, metric, params, external=None):
     else:
         breached = per_borrower > float(amount)
     mask = (df[col].notna() & breached).fillna(False)
-    return _share_result(df, mask, bal, total, metric, basis,
-                         {"borrower_id": col, "aggregate_balance": value_col})
+    out = _share_result(df, mask, bal, total, metric, basis,
+                        {"borrower_id": col, "aggregate_balance": value_col})
+    if note:
+        out.notes = note
+    return out
 
 
 def _eval_joint_borrower_share(df, lib, metric, params, external=None):
@@ -805,16 +843,23 @@ def _eval_joint_borrower_share(df, lib, metric, params, external=None):
     if total is None:
         return _no_denominator(metric, basis, len(df))
     joint_basis = str(_param(metric, params, "joint_basis") or "structure_flag")
-    if joint_basis == "borrower_count":
-        col = resolve_role_column(df, lib, "borrower_count")
-        if col is None:
-            return MetricComputation.missing(
-                "borrower_count", role_candidates(lib, "borrower_count"),
-                unit=metric.unit, total_loans=len(df))
+    note = ""
+    count_col = (resolve_role_column(df, lib, "borrower_count")
+                 if joint_basis == "borrower_count" else None)
+    if count_col is not None:
+        col = count_col
         counts = coerce_numeric(df[col])
         joint = (counts >= 2).fillna(False)
         resolved = {"borrower_count": col}
     else:
+        if joint_basis == "borrower_count":
+            # No borrower count on the tape. The MI's single / joint
+            # classification (``borrower_type``: joint iff a second
+            # applicant is present) answers the same question — two
+            # borrowers — so it is reused, and said so.
+            note = ("No borrower count on the tape: the MI single / joint "
+                    "classification is used (joint = a second borrower is "
+                    "present).")
         col = resolve_role_column(df, lib, "borrower_structure")
         if col is None:
             return MetricComputation.missing(
@@ -825,7 +870,10 @@ def _eval_joint_borrower_share(df, lib, metric, params, external=None):
         resolved = {"borrower_structure": col}
     if bool(params.get("invert")):
         joint = df[col].notna() & ~joint
-    return _share_result(df, joint, bal, total, metric, basis, resolved)
+    out = _share_result(df, joint, bal, total, metric, basis, resolved)
+    if note:
+        out.notes = note
+    return out
 
 
 def _eval_arrears_share(df, lib, metric, params, external=None):

@@ -239,6 +239,43 @@ class TestRegionsMatchThroughTheGovernedTaxonomy:
         assert r.value == 25.0
 
 
+class TestBorrowerTestsOnAnEquityReleaseTape:
+    """ERE's tape has no borrower count and no borrower identifier. The MI
+    already classifies single / joint (``borrower_type``), and each loan is
+    one borrower (owner decisions, 2026-10-02)."""
+
+    @pytest.fixture()
+    def book(self):
+        return pd.DataFrame({
+            "loan_identifier": ["781202", "786352", "789252", "790001"],
+            "current_outstanding_balance": [100_000, 300_000, 200_000, 400_000],
+            "original_principal_balance": [90_000, 1_200_000, 180_000, 950_000],
+            "borrower_type": ["joint", "single", "joint", "single"],
+        })
+
+    def test_two_borrowers_reads_the_single_joint_classification(self, lib, book):
+        r = run(lib, book, "borrower_joint_share", {"joint_basis": "borrower_count"})
+        assert r.value == 30.0          # 100k + 200k of 1,000k
+        assert "single / joint classification" in r.notes
+        single = run(lib, book, "borrower_joint_share",
+                     {"joint_basis": "borrower_count", "invert": True})
+        assert single.value == 70.0
+
+    def test_a_borrower_count_on_the_tape_still_wins(self, lib, book):
+        counted = book.assign(number_of_borrowers=[1, 1, 2, 2])
+        r = run(lib, counted, "borrower_joint_share",
+                {"joint_basis": "borrower_count"})
+        assert r.value == 60.0          # 200k + 400k
+        assert not r.notes
+
+    def test_the_large_borrower_aggregate_is_per_loan(self, lib, book):
+        r = run(lib, book, "borrower_aggregate_balance_share",
+                {"amount": 1_000_000})
+        assert r.value == 30.0          # the one loan over 1m originally: 300k
+        assert r.loans_in_numerator == 1
+        assert "each loan is treated as one borrower" in r.notes
+
+
 class TestRatesAndLtv:
     def test_gross_wac(self, lib, funded_frame):
         w = funded_frame.current_outstanding_balance
