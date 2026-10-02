@@ -267,8 +267,6 @@ def test_the_measured_policy_has_not_moved_since_it_was_measured():
     code, and the next benchmark would be measuring two changes at once — which
     is the same failure the original guard existed to prevent.
     """
-    import subprocess
-
     # Repointed once, at the slice 3 portfolio affordance. The interpreter moved
     # to describe the portfolio axes, so the 57-question probe at 5ae1f73 stopped
     # describing this code and the guard would otherwise let the NEXT change ride
@@ -277,19 +275,23 @@ def test_the_measured_policy_has_not_moved_since_it_was_measured():
     # every pre-existing metadata tool schema byte-identical.
     # Repointed again at the one-call interpreter (88a50290, P0 design §21):
     # the governed catalogue moved into the prompt and the retrieval loop went,
-    # so the behaviour measured at 88fdf7f9 no longer describes this code. The
-    # next bank run on the deployed change is its measurement.
-    measured_at = "88a50290"
-    diff = subprocess.run(
-        ["git", "diff", "--name-only", measured_at, "--",
-         "mi_agent/interpretation_v2/opus_interpreter.py"],
-        cwd=_REPO_ROOT, capture_output=True, text=True)
-    if diff.returncode != 0:
-        pytest.skip("measured commit not reachable in this checkout")
-    changed = [line for line in diff.stdout.splitlines() if line.strip()]
-    assert changed == [], (
-        f"the interpreter moved since its behaviour was measured at "
-        f"{measured_at}: {changed}")
+    # so the behaviour measured at 88fdf7f9 no longer describes this code.
+    #
+    # Repointed a third time, from the FILE to WHAT THE MODEL IS SHOWN
+    # (2026-10-02, design §37). The sign-off run on 42fc3768 measured one
+    # model view, and its fingerprint is pinned to that baseline — which is
+    # what this guard always meant: the measured numbers describe the code
+    # only while the model reads what it read then. The file itself may move
+    # without moving that (the fingerprint function; the reply path of §38,
+    # which only a reply to an ask-back reads and the `askback` run measures).
+    import json
+
+    from mi_agent.interpretation_v2.opus_interpreter import model_view_fingerprint
+    baseline = json.loads((_REPO_ROOT / "config/mi/model_view_baseline.json")
+                          .read_text(encoding="utf-8"))
+    assert model_view_fingerprint() == baseline["model_view_fingerprint"], (
+        f"what the model is shown moved since it was measured at "
+        f"{baseline['commit'][:8]}")
 
 
 def test_production_surfaces_are_untouched():
