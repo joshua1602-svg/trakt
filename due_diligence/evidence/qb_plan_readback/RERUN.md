@@ -736,3 +736,9 @@ intents added beside the baseline's.
                 bands 1, run-rates 2). The recorded 2026-09-29 misread of the
                 Offer pull-through is now answered in £ per month — the cost,
                 accepted. Next: deploy, sign-off again on the candidate
+    2026-10-02  13:57 UTC 91c550c4 deployed (run 37015696086, success):
+                named months (§40.1), grouped distribution as a breakdown
+                (§40.1), the run-rate rule (§40.2); Claude Opus 5.5 still the
+                candidate model view. Next: `run_production_bank.sh
+                <principal> signoff` on it — promotable on must-answer 88/88
+                and no wrong answer
