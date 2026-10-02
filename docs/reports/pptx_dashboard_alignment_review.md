@@ -96,9 +96,9 @@ emphasis."* The deck's palette was updated to Slate & Cyan; its **grammar** was 
 |---|---|
 | **Eligibility & Concentrations › Borrowing base** | none — the concentration envelope the deck already fetches **carries `borrowingBase`; no slide reads it** *(ported in the follow-up, §6)* |
 | Concentrations: 6 KPIs incl. **Deteriorating** and **Unavailable**; Funded / Expected / **Full Pipeline** columns; **Move F→E**; 2dp | 5 KPIs, no stress column, no movement, 1dp |
-| **Pipeline › Stratifications** | none |
-| **Forecast › Forecast Evolution** (actual vs the prior run's forecast) | none |
-| Funded › Evolution: balance, **loan count**, WA LTV, **WA rate** | balance and WA LTV only |
+| **Pipeline › Stratifications** | none *(ported, §6)* |
+| **Forecast › Forecast Evolution** (actual vs the prior run's forecast) | none *(ported, §6)* |
+| Funded › Evolution: balance, **loan count**, WA LTV, **WA rate** | balance and WA LTV only *(ported, §6)* |
 | Funded › Cohorts: static pool — seasoning, surviving, retention, roll-up, exits | vintage formation and cohort progression |
 | Pipeline › Stage Movement | **parity** — both carry moved / arrived / reconciliation |
 | Geography | parity (when ITL3 resolves) |
@@ -215,6 +215,55 @@ except the ERE prototype.
 ![Borrowing Base — drawn facility, approved rules](img/deck_borrowing_base_drawn.png)
 ![Borrowing Base — ERE-style prototype, no drawings supplied](img/deck_borrowing_base_prototype.png)
 
+
+### The remaining capability work — ported (second follow-up)
+
+Everything `claude/pptx-analytical-surfacing-final` built after it last synced with main
+(`8958a23c`), brought over as a three-way merge onto this branch (`70f40f4d`). Main's deck
+code at `99b46ebc` is byte-identical to that sync point, so the old branch's own work is
+exactly `8958a23c..tip`; its report documents and QA artefacts were left behind.
+
+**What the pack gains** (seasoned GBP book, 20 slides, previously 22):
+
+| page | what it answers |
+|---|---|
+| **Executive Position** | one opening page: funded, pipeline and forecast tiles, the funded trend, the closest limit |
+| **Funded Stock** / **Funded Evolution** | balance over time; balance, loan count, WA LTV and WA rate by month (a measure that held is *said* to have held, not charted as noise) |
+| **Funded Stratifications** (+ Secondary) | dimensions chosen by **information**, not a fixed list; the ledger says which were weighed and why they are not drawn |
+| **Funded Balance Movement** | the loan-level bridge: opening + new − redeemed − defaulted − matured ± continuing = closing |
+| **Pipeline Stratifications** | the dashboard's Pipeline › Stratifications |
+| **Forecast Evolution** | actual funded vs the prior run's forecast, with its accuracy stated |
+| **Forward View by Constituent Book** | per-book projection on multi-book portfolios |
+| **Concentration history** | utilisation of each limit over time, and a Prior column with how far each test travelled |
+
+Pages now appear when the book supports them (Funnel and Origination Flow give way to
+Stage Movement; Portfolio Composition only for multi-book or multi-type books), which is
+why packs are shorter: **15 / 20 / 21 / 20 / 15** slides across the five sample books.
+
+**Where the two lines of work met, and what was decided:**
+
+- **Pipeline — main's definition stands.** Main's #505 had already made the snapshot the
+  open pipeline; that stays the one implementation. `total_pipeline_amount` keeps main's
+  meaning (the whole extract) because the MI Query Agent's plan runtime reconciles it
+  against per-stage sums, and the forecast reconciles from it. The old branch's live /
+  terminal split arrives as **additional** fields. Its fix to unweighted expected funding —
+  which was summing completed and withdrawn cases — is taken; nothing in production read
+  that field.
+- **Bar order — one owner.** The shared `mi_agent_api.presentation` module orders bars for
+  both surfaces; this branch's separate port of `stratOrder.ts` was removed, because the
+  publication gate checked against the shared module and disagreed with the page.
+- **Design — this branch's grammar throughout.** The new pages draw on the dashboard tiles,
+  figure face, cyan bar lists and covenant formatting; the tile gains the old branch's
+  measure-basis line. The concentration table keeps both: Prior / Current / Expected with
+  operator limits at 2dp, and the travel note beside the status badge.
+- Currency, the publish fix and Borrowing Base keep this branch's versions.
+
+![Executive Position](img/port_executive.png)
+![Funded Balance Movement](img/port_balance_movement.png)
+![Pipeline Stratifications](img/port_pipeline_strat.png)
+![Forecast Evolution](img/port_forecast_evolution.png)
+![Concentration with history](img/port_concentration_history.png)
+
 ---
 
 ## 7. Verification
@@ -247,12 +296,10 @@ except the ERE prototype.
 
 ## 8. What is still open
 
-1. **The remaining unmerged capability work** (§4) — pipeline stratifications, forecast
-   evolution, the information-first selector and concentration history are still only on
-   `claude/pptx-analytical-surfacing-final`. The borrowing base has been ported (§6).
-2. **Pack length** — Origination Funnel, Origination Flow and Stage Movement all render on
-   one book; three fixed stratification pages draw six of eleven dimensions; a one-category
-   "Direct 100%" panel still renders. These are composition questions, out of scope here.
+1. **The unmerged capability work is now ported** (§6). The old branch can be retired once
+   this one merges.
+2. **Pack length** — addressed by the ported composition (§6): pages appear when the book
+   supports them, and dimensions are chosen by information.
 3. **Dated copies are write-once** — governance decision (§6).
 4. **Deployment** — `deploy-mi-api.yml` is `workflow_dispatch` only. Nothing here reaches
    the App Service until it is run; the publish fix in particular only helps once deployed.
