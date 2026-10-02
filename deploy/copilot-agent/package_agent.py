@@ -2,7 +2,8 @@
 """package_agent.py — build the sideloadable Trakt Copilot agent package.
 
 Zips the declarative-agent artefacts in this directory (Teams app manifest,
-declarative agent, API plugin, OpenAPI spec) plus generated placeholder icons
+declarative agent, API plugin, OpenAPI spec) plus the icons (``color.png`` /
+``outline.png`` here, drawn by ``make_icons.py``; solid placeholders otherwise)
 into ``dist/trakt-copilot-agent.zip``, ready for upload to Microsoft 365 admin
 center / Teams "Upload a custom app".
 
@@ -233,8 +234,13 @@ def build(out_dir: Path, *, require_resolved: bool = False,
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for name in PACKAGE_FILES:
             zf.writestr(name, rendered[name])
-        zf.writestr("color.png", _png(192, 192, (*ACCENT_RGB, 255)))
-        zf.writestr("outline.png", _png(32, 32, (255, 255, 255, 255)))
+        for icon, placeholder in (
+                ("color.png", _png(192, 192, (*ACCENT_RGB, 255))),
+                ("outline.png", _png(32, 32, (255, 255, 255, 255)))):
+            # The committed icons (see make_icons.py) when present; the
+            # generated solid squares only as a fallback for a bare checkout.
+            real = HERE / icon
+            zf.writestr(icon, real.read_bytes() if real.exists() else placeholder)
     return zip_path
 
 

@@ -281,6 +281,31 @@ def test_the_oauth_id_can_come_from_the_environment(monkeypatch):
     assert package_agent.resolve_oauth_config_id(None) == PILOT_OAUTH_ID
 
 
+def _png_size(data: bytes) -> tuple[int, int]:
+    import struct
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    return struct.unpack(">II", data[16:24])
+
+
+def test_the_package_ships_the_committed_icons_at_the_sizes_teams_requires(tmp_path):
+    import zipfile
+    zip_path = package_agent.build(tmp_path, copilot_only=True)
+    with zipfile.ZipFile(zip_path) as archive:
+        color = archive.read("color.png")
+        outline = archive.read("outline.png")
+    assert color == (AGENT_DIR / "color.png").read_bytes()
+    assert outline == (AGENT_DIR / "outline.png").read_bytes()
+    assert _png_size(color) == (192, 192)
+    assert _png_size(outline) == (32, 32)
+
+
+def test_the_manifest_points_at_the_public_website():
+    developer = json.loads(
+        (AGENT_DIR / "manifest.json").read_text(encoding="utf-8"))["developer"]
+    assert developer["websiteUrl"] == "https://www.traktinfra.io/"
+    assert "copilot-test" not in json.dumps(developer)
+
+
 # --------------------------------------------------------------------------- #
 # The bot messaging endpoint
 # --------------------------------------------------------------------------- #
