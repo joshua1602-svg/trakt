@@ -206,10 +206,22 @@ def _resolve_pipeline(client_id: str, to_run_id: Optional[str], scope=None
             (report or {}).get("completionProbabilityBasis")
         evidence = historical_model_evidence(model, basis)
         m = model or {}
+        runoff = evidence.get("runoff") or {}
+        summary = (report or {}).get("completion_probability_summary") or {}
         meta = {
             "available": True,
-            "methodology": "completion_trend_model",
-            "methodologyVersion": "1",
+            # The forecast the expected state actually weights by: the stage
+            # run-off model when it is fitted, the flat stage rates otherwise.
+            "methodology": ("stage_runoff" if runoff.get("available")
+                            else "completion_trend_model"),
+            "methodologyVersion": "2" if runoff.get("available") else "1",
+            "runoff": runoff,
+            "notForecast": {
+                "kfiCount": summary.get("not_forecast_count"),
+                "kfiAmount": summary.get("not_forecast_amount"),
+                "lapsedCount": summary.get("expired_count"),
+                "lapsedAmount": summary.get("expired_amount"),
+            },
             "basis": basis,
             "observationWindowStart": evidence.get("observationWindowStart"),
             "observationWindowEnd": evidence.get("observationWindowEnd"),

@@ -17,7 +17,54 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+const pct = (v: number | null | undefined) => (v == null ? "n/a" : `${(v * 100).toFixed(0)}%`);
+const title = (s: string) => `${s.charAt(0)}${s.slice(1).toLowerCase()}`;
+
+/** The stage run-off forecast — what the expected state actually weights by. */
+function RunoffBlock({ forecast }: { forecast: ForecastMethodology }) {
+  const runoff = forecast.runoff!;
+  const windows = Object.entries(runoff.stages ?? {})
+    .filter(([, s]) => s.windowDays != null)
+    .map(([st, s]) => `${title(st)} ${s.windowDays}d${s.windowBasis === "fallback" ? " (configured)" : ""}`);
+  const nf = forecast.notForecast ?? {};
+  return (
+    <dl data-testid="methodology-block" className="rounded-lg border border-[var(--color-line-soft)] bg-navy-950/40 p-2">
+      <Row label="Model">
+        Stage run-off measured from the client's weekly pipeline extracts. No machine
+        learning; no invented probabilities.
+      </Row>
+      <Row label="Window">
+        {formatDate(forecast.observationWindowStart)} →{" "}
+        {formatDate(forecast.observationWindowEnd)} · {forecast.weeklyExtractsUsed}{" "}
+        weekly extracts
+      </Row>
+      <Row label="Pull-through">
+        Application → Offer {pct(runoff.appToOfferPullThrough)} · Offer → Completion{" "}
+        {pct(runoff.offerToCompletionPullThrough)}. A live case's chance of completing
+        falls with the time it has already spent in its stage.
+      </Row>
+      {windows.length > 0 && (
+        <Row label="Validity">
+          {windows.join(" · ")}. A case past its stage window is treated as lapsed.
+        </Row>
+      )}
+      <Row label="Not forecast">
+        {nf.kfiCount ?? 0} KFIs (top of funnel) · {nf.lapsedCount ?? 0} past their stage
+        window. Withdrawn and completed cases are never counted.
+      </Row>
+      <Row label="Full Pipeline">
+        Every live Application and Offer at 100%, ignoring probabilities. A
+        maximum-exposure stress, not a prediction.
+      </Row>
+      {forecast.currentSnapshot && (
+        <Row label="Sources">{forecast.currentSnapshot} (current snapshot)</Row>
+      )}
+    </dl>
+  );
+}
+
 export function MethodologyBlock({ forecast }: { forecast: ForecastMethodology }) {
+  if (forecast.runoff?.available) return <RunoffBlock forecast={forecast} />;
   const rates = forecast.stageRates ?? {};
   const timing = forecast.stageTiming ?? {};
   const stageBits = ["KFI", "APPLICATION", "OFFER"]

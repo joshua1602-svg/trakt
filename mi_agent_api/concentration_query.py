@@ -267,6 +267,10 @@ def answer(question: str, envelope: Dict[str, Any]) -> Dict[str, Any]:
     if intent == "get_forecast_methodology":
         if not forecast.get("available"):
             return _no_states(intent)
+        runoff = forecast.get("runoff") or {}
+        if runoff.get("available"):
+            return {"intent": intent, "answer": _runoff_methodology(forecast),
+                    "rows": [], "warnings": warnings, "testId": None}
         rates = forecast.get("stageRates") or {}
         rate_bits = []
         for stage in ("KFI", "APPLICATION", "OFFER"):
@@ -553,3 +557,44 @@ def answer(question: str, envelope: Dict[str, Any]) -> Dict[str, Any]:
                      f"{envelope.get('priorReportingDate')}.")
     return {"intent": "get_concentration_summary", "answer": " ".join(parts),
             "rows": tests, "warnings": warnings, "testId": None}
+
+
+def _runoff_methodology(forecast: Dict[str, Any]) -> str:
+    """How the Expected Forecast was built, when it uses the stage run-off."""
+    runoff = forecast.get("runoff") or {}
+    stages = runoff.get("stages") or {}
+
+    def pct(v: Any) -> str:
+        return f"{float(v) * 100:.0f}%" if v is not None else "n/a"
+
+    windows = "; ".join(
+        f"{st.title()} {sm.get('windowDays')} days ({sm.get('windowBasis')})"
+        for st, sm in stages.items() if sm.get("windowDays") is not None)
+    nf = forecast.get("notForecast") or {}
+    parts = [
+        "The Expected Forecast uses the stage run-off model measured from the "
+        "client's weekly pipeline extracts — no machine learning, no invented "
+        "probabilities.",
+        f"Observation window {forecast.get('observationWindowStart')} → "
+        f"{forecast.get('observationWindowEnd')} across "
+        f"{forecast.get('weeklyExtractsUsed')} weekly extract(s).",
+        f"Measured pull-through: Application → Offer "
+        f"{pct(runoff.get('appToOfferPullThrough'))}, Offer → Completion "
+        f"{pct(runoff.get('offerToCompletionPullThrough'))}. A live case's "
+        "chance of completing falls with the time it has already spent in its "
+        "stage.",
+    ]
+    if windows:
+        parts.append(f"Stage validity windows: {windows}. A case past its "
+                     "window is treated as lapsed.")
+    parts.append(
+        f"Not forecast: {nf.get('kfiCount') or 0} KFI(s), which are top of "
+        f"funnel, and {nf.get('lapsedCount') or 0} case(s) past their stage "
+        "window. Withdrawn and completed cases are never counted.")
+    parts.append(
+        "Each live Application and Offer contributes balance × its completion "
+        "probability to both numerator and denominator. Full Pipeline takes "
+        "every live Application and Offer at 100% — the maximum-exposure "
+        "stress, not a prediction.")
+    return " ".join(parts)
+
