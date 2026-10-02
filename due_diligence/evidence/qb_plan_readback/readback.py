@@ -203,7 +203,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     bank = load_bank(Path(args.bank))
     scm, user, password = ra.publish_profile_credentials(profile)
     sink = ra.Sink(scm, user, password, args.evidence_path)
-    rows, detail = sink.records()
+    # A sink being appended to while it is read (a bank run still asking)
+    # can end a transfer short; the read is retried, never trusted partial.
+    for attempt in range(3):
+        rows, detail = sink.records()
+        if rows is not None or "IncompleteRead" not in str(detail):
+            break
+        print(f"the sink read ended short ({detail}); reading again")
+        import time
+        time.sleep(10)
     if rows is None:
         print(f"::error::the sink could not be read: {detail}")
         return 2
