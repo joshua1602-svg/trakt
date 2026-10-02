@@ -404,6 +404,31 @@ def build_tool_schema() -> Dict[str, Any]:
     }
 
 
+def model_view(vocabulary: Optional[GovernedVocabulary] = None) -> Dict[str, Any]:
+    """EVERYTHING THE MODEL IS SHOWN for a stand-alone question, as production
+    builds it: the system blocks (a client's own source portfolios aside —
+    they are per request), the user message around the question, the intent
+    tool, and the call's settings. Its fingerprint is pinned to the signed-off
+    baseline (`test_the_models_view_is_the_baselines`), so no change reaches
+    the model without being measured first."""
+    client = AnthropicInterpreterClient()
+    return {
+        "system": build_system_blocks(vocabulary or load_governed_vocabulary()),
+        "user": build_user_prompt("<QUESTION>"),
+        "tool": build_tool_schema(), "tool_name": INTENT_TOOL_NAME,
+        "model": client.model, "max_tokens": client._max_tokens,
+        "temperature": client._temperature, "max_rounds": client.max_rounds,
+    }
+
+
+def model_view_fingerprint(vocabulary: Optional[GovernedVocabulary] = None) -> str:
+    """The SHA-256 of `model_view`, canonically serialised."""
+    import hashlib
+    blob = json.dumps(model_view(vocabulary), sort_keys=True,
+                      separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 # --------------------------------------------------------------------------- #
 # Clients
 # --------------------------------------------------------------------------- #

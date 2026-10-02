@@ -631,3 +631,8 @@ intents added beside the baseline's.
                 questions read 20 extracts, not 180 (warm here, after "pipeline
                 amount evolution by week", the one question that reads all 90:
                 140s)
+    2026-10-02  Baseline recorded: 42fc3768, the sign-off run above, model
+                view b5459277… (config/mi/model_view_baseline.json; design
+                §37). Every run log now prints the view it measured. The
+                pipeline-to-YAML move is not done: it adds no answer and
+                would be measured against this baseline first

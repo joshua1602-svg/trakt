@@ -2534,3 +2534,32 @@ holds 11 coarse regions.
                Every published figure is unchanged — tested field for field
                against the same owner over every extract
                (`tests/test_forecast_prepares_only_what_it_reads.py`).
+
+## 37. The baseline and the guard on the model's view (2026-10-02)
+
+Owner, 2026-10-02: "start with the guard and baseline, then phase 1" — after
+asking that the build that passed the sign-off run not be degraded.
+
+    BASELINE   42fc3768 (vocabulary 2.23.0), the sign-off run of 2026-10-01
+               21:02 UTC: must-answer 88/88, no wrong answer, nice-to-have
+               24/31, fine-to-decline 11 declined and 5 answered correctly,
+               held-out variants 78 identical of 81. Recorded with its
+               results in `config/mi/model_view_baseline.json` (it ships, so
+               the bank runner reads it on the server).
+    GUARD      `opus_interpreter.model_view()` is everything the model is
+               shown for a stand-alone question as production builds it —
+               the system blocks, the user message around the question, the
+               intent tool and the call's settings; its SHA-256 is pinned to
+               the baseline's (`test_the_models_view_is_the_baselines`) and
+               checked not to move between processes. The bank runner prints
+               it in every run log beside the baseline's.
+    THE RULE   A change that moves the view fails that test on purpose: it is
+               deployed, the sign-off set is re-run on it, and the baseline
+               moves only if the run matches or beats the one above. A change
+               that leaves the view alone — speed, answer wording,
+               restructuring — passes, and is held by the suites.
+
+The conversation work (§34) is built to this rule: a stand-alone question's
+view stays the baseline's byte for byte; only a reply to the agent's own
+question carries the earlier turn, in a framing of its own that is measured
+by the conversation bank before it is switched on.

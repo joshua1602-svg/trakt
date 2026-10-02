@@ -114,6 +114,17 @@ print(f"deployed commit: {commit or '(no build_info.json)'}")
 
 from mi_agent.interpretation_v2.vocabulary import VOCABULARY_VERSION
 print(f"vocabulary: {VOCABULARY_VERSION}")
+# WHICH MODEL VIEW THIS RUN MEASURES, beside the signed-off baseline's: a run
+# on a changed view is how that change is measured, so it is said, not refused.
+try:
+    from mi_agent.interpretation_v2.opus_interpreter import model_view_fingerprint
+    view = model_view_fingerprint()
+    base = json.loads(Path("config/mi/model_view_baseline.json")
+                      .read_text()).get("model_view_fingerprint")
+    print(f"model view: {view[:12]} "
+          f"({'the signed-off baseline' if view == base else 'CHANGED since the signed-off baseline ' + str(base)[:12]})")
+except Exception as exc:  # noqa: BLE001 - a preflight note, never a refusal
+    print(f"model view: not read ({type(exc).__name__})")
 def _v(text):
     return tuple(int(x) for x in str(text).split("."))
 if _v(VOCABULARY_VERSION) < _v(vocabulary):

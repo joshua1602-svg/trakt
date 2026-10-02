@@ -1,0 +1,40 @@
+{
+  "what_this_is": "The signed-off build every later change is measured against (owner, 2026-10-02: 'start with the guard and baseline'). A change that alters the model's view fails test_the_models_view_is_the_baselines until the sign-off set is re-run on it and matches or beats the results below; only then is this file moved to the new build.",
+  "commit": "42fc3768f1283b560c5ddb2b7322140fb4b73d86",
+  "deployed": "2026-10-01T20:54Z, deploy run 36924542901",
+  "vocabulary": "2.23.0",
+  "model_view_fingerprint": "b545927775e09aa8ae4515325a12702ccc9f97a9580fe6d73c3f7ed6714e0f15",
+  "run": {
+    "selection": "run_production_bank.sh <principal> signoff",
+    "started": "2026-10-01T21:02:55Z",
+    "files": "/home/qb_signoff_20261001T210255Z.{log,jsonl}",
+    "questions": 216
+  },
+  "results": {
+    "bank": {
+      "asked": 135,
+      "answered": 117
+    },
+    "must_answer": {
+      "questions": 88,
+      "answered": 88
+    },
+    "nice_to_have": {
+      "questions": 31,
+      "answered": 24
+    },
+    "fine_to_decline": {
+      "questions": 16,
+      "declined": 11,
+      "answered": 5
+    },
+    "wrong_answers": 0,
+    "variants": {
+      "asked": 81,
+      "same": 78,
+      "declined_as_bank": 1,
+      "different_reading": 2
+    },
+    "median_seconds": 9.1
+  }
+}
