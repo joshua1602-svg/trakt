@@ -83,6 +83,24 @@ class TestStateFrames:
         assert set(pipeline_rows["pipeline_case_identifier"]) == \
             {"P1", "P2", "P3", "P4", "P5"}
 
+    def test_kfis_and_lapsed_cases_are_not_funding_pipeline(self, sw_funded,
+                                                            pipeline_frame):
+        """Under the run-off forecast a KFI is top of funnel and a case past its
+        stage window has lapsed. Neither enters the expected state (weight 0)
+        nor the "all pipeline converts" stress — which otherwise assumed every
+        one of thousands of illustrations funds."""
+        pipe = pipeline_frame.copy()
+        pipe.loc[pipe.pipeline_case_identifier == "P5",
+                 "completion_probability_source"] = "not_forecast_kfi"
+        pipe.loc[pipe.pipeline_case_identifier == "P4",
+                 "completion_probability_source"] = "expired_application"
+        frame, meta = forward.build_state_frame(sw_funded, pipe,
+                                                forward.STATE_FULL)
+        cases = set(frame["pipeline_case_identifier"].dropna())
+        assert cases == {"P1", "P2", "P3", "PN"}
+        assert meta["excludedPipeline"]["kfi_not_forecast"] == 1
+        assert meta["excludedPipeline"]["lapsed_past_stage_window"] == 1
+
     def test_funded_rows_carry_probability_one(self, sw_funded, pipeline_frame):
         frame, _ = forward.build_state_frame(sw_funded, pipeline_frame,
                                              forward.STATE_EXPECTED)
@@ -126,6 +144,33 @@ class TestExpectedCalculations:
         pipe_w = 1_147_500 + 225_000
         expected = (funded_wsum + 7.0 * pipe_w) / (float(w_funded.sum()) + pipe_w)
         assert comp.value == pytest.approx(round(expected, 2), abs=0.01)
+
+    def test_each_source_states_its_rate_on_its_own_scale(self, lib,
+                                                          sw_funded,
+                                                          pipeline_frame):
+        """ERE's funded tape carries 0.0956 for 9.56%; the pipeline extract
+        carries 7.0 for 7%. Judged over the combined frame, one scale was
+        applied to both — the forecast-book Net WAC read 81.77% against a
+        funded 5.91%. Each source is now read on its own scale."""
+        pipe = pipeline_frame.assign(current_interest_rate=7.0)
+        as_percent, _ = forward.build_state_frame(sw_funded, pipe,
+                                                  forward.STATE_EXPECTED)
+        fractional = sw_funded.assign(
+            current_interest_rate=sw_funded.current_interest_rate / 100.0)
+        mixed, _ = forward.build_state_frame(fractional, pipe,
+                                             forward.STATE_EXPECTED)
+        params = {"deduction_percent": 3.75, "deduction_basis": "other_confirmed"}
+        for state_frame in (mixed,):
+            for metric_id, p in (("rate_gross_wac", {}), ("rate_net_wac", params)):
+                want = evaluate_metric(as_percent, lib, lib.get(metric_id), p)
+                got = evaluate_metric(state_frame, lib, lib.get(metric_id), p)
+                assert got.value == want.value
+        full_pct, _ = forward.build_state_frame(sw_funded, pipe,
+                                                forward.STATE_FULL)
+        full_mixed, _ = forward.build_state_frame(fractional, pipe,
+                                                  forward.STATE_FULL)
+        assert (evaluate_metric(full_mixed, lib, lib.get("rate_net_wac"), params).value
+                == evaluate_metric(full_pct, lib, lib.get("rate_net_wac"), params).value)
 
     def test_full_pipeline_uses_full_balances(self, lib, sw_funded,
                                               pipeline_frame):

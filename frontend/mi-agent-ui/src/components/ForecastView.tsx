@@ -1,4 +1,4 @@
-import type { ForecastSnapshot } from "@/domain";
+import type { DimensionBucket, ForecastSnapshot } from "@/domain";
 import { ForecastBridgeCard } from "@/components/ForecastBridgeCard";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
@@ -38,17 +38,28 @@ export function ForecastView({
   // (cap_breakdown's shared "Other" aggregation needs SOME numeric value),
   // never a real count, so it is never offered as a measure or shown as a
   // suffix — a displayed "0" would read as "no cases", not "not counted".
-  const byRegion: BarDatum[] = (breakdowns?.byRegionCapped ?? []).map((r) => ({
-    label: r.key,
-    value: r.pipelineAmount,
-  }));
+  //
+  // The bar is drawn as its PARTS where the payload carries them: the funded
+  // exposure that exists today, and the weighted pipeline expected to arrive.
+  // Those are facts of different certainty and a funder is buying one of them.
+  // Both come from the engine — nothing is derived here.
+  const stacked = (r: DimensionBucket): BarDatum => {
+    const funded = r.fundedAmount;
+    const expected = r.weightedExpectedFundedAmount ?? 0;
+    return {
+      label: r.key,
+      value: r.pipelineAmount,
+      parts: funded == null ? undefined : [
+        { label: "Current funded", value: funded, className: "bg-cyan-500" },
+        { label: "Expected additions", value: expected, className: "bg-mint-400/80" },
+      ],
+    };
+  };
+  const byRegion: BarDatum[] = (breakdowns?.byRegionCapped ?? []).map(stacked);
   // What the region breakdown cannot place (no governed region on the row),
   // as the backend composed it.
   const unplaced = breakdowns?.regionBasis?.unplacedForecastAmount ?? 0;
-  const byLtv: BarDatum[] = (breakdowns?.byLtvBucketCapped ?? []).map((r) => ({
-    label: r.key,
-    value: r.pipelineAmount,
-  }));
+  const byLtv: BarDatum[] = (breakdowns?.byLtvBucketCapped ?? []).map(stacked);
   // D21: a month whose weighted amount is withheld is left out of the chart,
   // never drawn as zero; the bridge card says why.
   const byMonth: BarDatum[] = (breakdowns?.byCompletionMonth ?? [])
@@ -70,6 +81,16 @@ export function ForecastView({
             <p className="mt-0.5 text-[11px] text-ink-400">
               Funded actual exposure + probability-weighted pipeline (derived).
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-ink-400">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-3 rounded-sm bg-cyan-500" />
+                Current funded
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-3 rounded-sm bg-mint-400/80" />
+                Expected additions
+              </span>
+            </div>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {byRegion.length > 0 && (

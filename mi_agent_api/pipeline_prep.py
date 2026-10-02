@@ -100,7 +100,9 @@ def open_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     return df[open_stage_mask(df)]
 
 # Pipeline status (reuses funded-status semantics): funded / pipeline / withdrawn.
-_OPEN_PIPELINE_STAGES = {"KFI", "APPLICATION", "OFFER"}
+# Derived from ACTIVE_STAGES rather than restated, so the live set has exactly
+# one definition. It used to be written out twice, which is how two of them
+# would eventually disagree.
 
 _DOB_ALIASES_DEFAULT = ["dob app 1", "dob app 2", "date of birth"]
 
@@ -491,8 +493,37 @@ def canonical_stage_order() -> Tuple[str, ...]:
                         key=lambda s: (_BUCKET_ORDER.get(_STAGE_BUCKET[s], 9), s)))
 
 
-# Stages that are open and forecast-relevant (vs COMPLETED / WITHDRAWN / UNKNOWN).
-ACTIVE_STAGES = ("KFI", "APPLICATION", "OFFER")
+#: Stages that are open and forecast-relevant. A case at one of these is LIVE
+#: PIPELINE STOCK: it has not funded and it has not gone away, so it is still
+#: capable of becoming a funded loan.
+#: The same set as :data:`OPEN_STAGES` — one definition, two names: main's
+#: open-pipeline work and the deck's live-stock work reached it independently.
+ACTIVE_STAGES = OPEN_STAGES
+
+#: Terminal stages, split by outcome. A terminal case is NOT stock — it has left
+#: the origination process — but it IS history, and every flow, conversion and
+#: reconciliation measure needs it. Nothing here is ever dropped from the frame.
+TERMINAL_SUCCESS_STAGES = ("COMPLETED",)
+TERMINAL_FAILURE_STAGES = ("WITHDRAWN",)
+TERMINAL_STAGES = TERMINAL_SUCCESS_STAGES + TERMINAL_FAILURE_STAGES
+
+
+def live_mask(df: "pd.DataFrame") -> "pd.Series":
+    """Row mask for LIVE pipeline stock, from the governed stage vocabulary.
+
+    THE INVARIANT THIS EXISTS TO HOLD: a case has ONE economic state at a point
+    in time. A completed case has funded — it is in the funded book — and
+    counting it again as live pipeline reports the same exposure twice on the
+    same page.
+
+    Where the tape carries no stage at all every row is treated as live, because
+    an absent stage column is a coverage gap and not evidence that a case has
+    terminated; ``validate_pipeline_dataset`` raises that separately.
+    """
+    if "pipeline_stage" not in getattr(df, "columns", ()):
+        return pd.Series(True, index=df.index)
+    stage = df["pipeline_stage"].astype(str).str.upper()
+    return stage.isin(ACTIVE_STAGES)
 
 
 def case_stage_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -541,7 +572,7 @@ def _normalise_stage(out: pd.DataFrame, derived: List[str]) -> None:
             return "funded"
         if stage == "WITHDRAWN":
             return "withdrawn"
-        if stage in _OPEN_PIPELINE_STAGES:
+        if stage in ACTIVE_STAGES:
             return "pipeline"
         return "unknown"
     out["pipeline_status"] = canon.map(_status)
@@ -1163,11 +1194,32 @@ def _build_report(out: pd.DataFrame, mapping: Dict[str, str], unmatched: List[st
                         out["pipeline_stage"].value_counts(dropna=False).items()}
     total_amount = (float(coerce_numeric(out[PIPELINE_AMOUNT_FIELD]).sum())
                     if PIPELINE_AMOUNT_FIELD in out.columns else 0.0)
-    expected_funded = (float(coerce_numeric(out["expected_funded_amount"]).sum())
-                       if "expected_funded_amount" in out.columns else 0.0)
     # D21: None where a weighted stage has no measured rate (see weighted_sum).
+    # A terminal stage carries no completion probability, so the weighted
+    # figure is the live one already; the unweighted expected funding is taken
+    # over the live rows below.
     weighted_expected = weighted_sum(out)
     gap = weighting_gap(out)
+
+    # -- THE LIVE / TERMINAL SPLIT, ALONGSIDE THE TOTALS ABOVE ----------------
+    # ``total_pipeline_amount`` stays the whole extract: the MI Query Agent's
+    # plan runtime reconciles it against per-stage sums over every stage, and
+    # the forecast reconciles gross -> excluded -> weighted from it. The open
+    # pipeline the snapshot reports is ``pipeline_contract``'s own population.
+    # The split is stated here so a reader of the report can see both.
+    live_rows = out[live_mask(out)]
+    live_amount = (float(coerce_numeric(live_rows[PIPELINE_AMOUNT_FIELD]).sum())
+                   if PIPELINE_AMOUNT_FIELD in live_rows.columns else 0.0)
+    live_n = int(len(live_rows))
+    # Expected funding is a FORWARD measure. The unweighted figure carries a
+    # value on every row, so summing the extract counted already-funded and
+    # withdrawn cases as expected future funding. (The weighted figure was
+    # already right: a terminal stage carries no completion probability.)
+    expected_funded = (float(coerce_numeric(live_rows["expected_funded_amount"]).sum())
+                       if "expected_funded_amount" in live_rows.columns else 0.0)
+    terminal_counts = {
+        stage: int(stage_counts.get(stage, 0))
+        for stage in TERMINAL_STAGES if stage_counts.get(stage)}
 
     return {
         "preparation_applied": True,
@@ -1183,7 +1235,19 @@ def _build_report(out: pd.DataFrame, mapping: Dict[str, str], unmatched: List[st
         "metrics_available": metrics_available,
         "missing_dimensions": missing,
         "stage_counts": stage_counts,
+        #: Every row in the extract, terminal cases included (see above).
         "total_pipeline_amount": round(total_amount, 2),
+        #: LIVE pipeline stock — the cases still capable of becoming funded
+        #: loans, terminal cases excluded.
+        "live_pipeline_amount": round(live_amount, 2),
+        #: The whole extract, named for what it is — the same figure as
+        #: ``total_pipeline_amount``.
+        "total_extract_amount": round(total_amount, 2),
+        "live_row_count": live_n,
+        "terminal_row_count": n - live_n,
+        "terminal_stage_counts": terminal_counts,
+        #: What "live" meant for this extract, stated rather than assumed.
+        "live_stages": list(ACTIVE_STAGES),
         "expected_funded_amount": round(expected_funded, 2),
         "weighted_expected_funded_amount": (round(weighted_expected, 2)
                                             if weighted_expected is not None else None),

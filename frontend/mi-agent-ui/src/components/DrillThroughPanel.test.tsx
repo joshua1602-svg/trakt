@@ -24,7 +24,9 @@ function regionChart(): ChartArtifact {
     ],
     valueFormat: "gbp",
     displayHints: {
-      balance: { format: "gbp", scale: null },
+      // Engine-owned additivity: this is a balance SUM, so a share of the
+      // total is meaningful. A weighted average in the same fixture is not.
+      balance: { format: "gbp", scale: null, additive: true },
       wa_ltv: { format: "pct", scale: "percent_fraction" },
     },
   };

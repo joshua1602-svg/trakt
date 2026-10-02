@@ -15,7 +15,8 @@ function regionChart(): ChartArtifact {
     xKey: "region",
     series: [{ key: "balance", label: "Balance", color: "#000" }],
     valueFormat: "gbp",
-    displayHints: { balance: { format: "gbp", scale: null } },
+    // Engine-owned additivity: a balance sum, so shares are meaningful here.
+    displayHints: { balance: { format: "gbp", scale: null, additive: true } },
     rows: [
       { region: "London", balance: 700 },
       { region: "South East", balance: 200 },

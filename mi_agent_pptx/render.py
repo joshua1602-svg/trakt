@@ -9,6 +9,9 @@ width×height of its slide panel and onto the theme panel background.
 
 from __future__ import annotations
 
+import contextvars
+from contextlib import contextmanager
+import math
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -38,6 +41,47 @@ _MONO_FP = fm.FontProperties(family=_MONO)
 EVO_PALETTE = THEME.categorical
 
 
+# --------------------------------------------------------------------------- #
+# Render record
+#
+# A bar list is drawn as a PNG, so the category labels it drew are not text in
+# the finished .pptx and cannot be read back out of the file. That made the one
+# thing most worth checking — did the deck draw the bands in the governed order?
+# — the one thing no test could see, which is exactly how the deck and the
+# dashboard came to disagree about it.
+#
+# Each renderer therefore records WHAT IT DREW, at the moment it draws it. This
+# is not the payload the deck intended to render: it is the sequence the drawing
+# function actually walked, captured inside that function. The record travels
+# into the deck's preflight sidecar, where a publication gate checks it and any
+# reader can audit it.
+# --------------------------------------------------------------------------- #
+
+_RENDER_RECORD: contextvars.ContextVar[Optional[List[Dict[str, Any]]]] = \
+    contextvars.ContextVar("pptx_render_record", default=None)
+
+
+@contextmanager
+def record_renders():
+    """Collect a record of every chart drawn inside the block."""
+    entries: List[Dict[str, Any]] = []
+    token = _RENDER_RECORD.set(entries)
+    try:
+        yield entries
+    finally:
+        _RENDER_RECORD.reset(token)
+
+
+def _record(kind: str, chart_id: Optional[str], **fields: Any) -> None:
+    """Append one drawn-chart entry, when a recorder is active."""
+    entries = _RENDER_RECORD.get()
+    if entries is None:
+        return
+    entry: Dict[str, Any] = {"kind": kind, "chart": chart_id}
+    entry.update(fields)
+    entries.append(entry)
+
+
 def _fig(w, h, theme, dpi=220):
     fig = plt.figure(figsize=(w, h), dpi=dpi)
     fig.patch.set_facecolor(theme.bg_panel)
@@ -50,6 +94,68 @@ def _save(fig, path, theme, dpi=220):
     return Path(path)
 
 
+# --------------------------------------------------------------------------- #
+# Plot geometry.
+#
+# A left margin expressed as a FRACTION of the figure scales with the figure,
+# and the thing it has to clear does not. The widest y tick — "£800.0MM" — is
+# about seven tenths of an inch whether it sits beside a 5.8in panel or a
+# 12.25in full-width chart, but 0.145 of the figure reserves 0.84in on the
+# first and 1.78in on the second. That is where the empty left-hand band on
+# Funded Stock and Funded Balance Movement came from: not a chart drawn too
+# small, a gutter sized for a figure three times narrower.
+#
+# So margins are computed from the INCHES the labels actually need and then
+# expressed as a fraction, which keeps a narrow panel exactly as it was and
+# hands the width back on a wide one.
+# --------------------------------------------------------------------------- #
+
+#: Average glyph width as a fraction of the font's point size, for the sans
+#: face the theme uses. Deliberately generous: under-reserving clips a tick,
+#: which is a defect, while over-reserving costs a little width.
+_GLYPH_EM = 0.62
+
+#: Clear air between the longest tick label and the plot's left edge.
+_TICK_GAP_IN = 0.14
+
+
+def _text_in(text: str, pt: float) -> float:
+    """Roughly how wide *text* draws at *pt*, in inches."""
+    return len(str(text or "")) * pt * _GLYPH_EM / 72.0
+
+
+def axis_left(w: float, tick_samples: Sequence[Any], *, pt: float = 9.0,
+              floor_in: float = 0.30, cap_frac: float = 0.34) -> float:
+    """The left margin, as a fraction of *w*, that these tick labels need.
+
+    ``floor_in`` keeps a small chart from crowding its axis; ``cap_frac`` stops
+    a pathological label from eating the plot. Both are in the units they
+    describe — inches for the floor, a fraction for the cap — because that is
+    what each one is actually protecting.
+    """
+    widest = max((_text_in(t, pt) for t in tick_samples if t not in (None, "")),
+                 default=0.0)
+    needed = max(floor_in, widest + _TICK_GAP_IN)
+    return min(cap_frac, needed / max(float(w), 1e-6))
+
+
+def _money_ticks(values: Sequence[Any], fmt) -> List[str]:
+    """Sample tick labels for a value range, formatted the way the axis will.
+
+    The axis formatter runs after the axes exist, so the widest label cannot be
+    measured before choosing the margin. The extremes of the data formatted the
+    same way are what the widest tick will look like.
+    """
+    nums = [float(v) for v in values if v is not None]
+    if not nums:
+        return []
+    lo, hi = min(nums), max(nums)
+    try:
+        return [str(fmt(lo)), str(fmt(hi)), str(fmt((lo + hi) / 2.0))]
+    except Exception:  # noqa: BLE001 - a sample must never break a chart
+        return []
+
+
 def _truncate(label: str, max_chars: int) -> str:
     return label if len(label) <= max_chars else label[:max_chars - 1].rstrip() + "…"
 
@@ -57,9 +163,21 @@ def _truncate(label: str, max_chars: int) -> str:
 def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
                  h: float, *, theme: PptxTheme = THEME, currency: bool = True,
                  label_key: str = "label", count_key: Optional[str] = "count",
-                 dpi: int = 220) -> Path:
-    """Dashboard BarList: label left, periwinkle bar ∝ max, mono value right."""
+                 dpi: int = 220, chart_id: Optional[str] = None,
+                 dimension: Optional[str] = None) -> Path:
+    """Dashboard BarList: label left, cyan-500 bar ∝ max in a navy-950 well,
+    mono value right.
+
+    Bars are drawn in the order given. The ORDER IS NOT DECIDED HERE — it is
+    decided once, upstream, by ``mi_agent_api.presentation`` against the governed
+    bucket ladder, and both this renderer and the React bar list consume it. The
+    sequence drawn is recorded (see :func:`record_renders`) so a publication gate
+    can check it against that ladder.
+    """
     rows = [r for r in rows if r is not None]
+    _record("barlist", chart_id, dimension=dimension,
+            categories=[str(r.get(label_key, "")) for r in rows],
+            values=[r.get(value_key) for r in rows], currency=currency)
     fig = _fig(w, h, theme, dpi)
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_facecolor(theme.bg_panel)
@@ -84,23 +202,122 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
     # styling choice.
     label_x, tx0, tx1 = 0.005, 0.385, 0.86
     tw = tx1 - tx0
-    max_chars = max(10, int((tx0 - label_x) * w * 72 / (10.5 * 0.56)))
+
+    # TYPE SIZE FOLLOWS THE ROW BAND. At a fixed 10.5pt, a panel with more rows
+    # than vertical room drew its labels on top of one another — which is what
+    # the forecast-by-region cut did at seven rows in an inch. The size is
+    # derived from the height each row actually gets, and floored at the
+    # smallest size that is still readable on a projected slide; below that the
+    # panel is genuinely too small for this many rows, and the caller (not the
+    # renderer) should be showing fewer.
+    row_in = band * h
+    font = max(7.5, min(10.5, row_in * 72.0 * 0.52))
+    max_chars = max(10, int((tx0 - label_x) * w * 72 / (font * 0.56)))
     for i, (lab, val) in enumerate(zip(labels, values)):
+        yc = 1.0 - pad_top - (i + 0.5) * band
+        y0 = yc - bar_h / 2
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (tx0, y0), tw, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
+            # The dashboard's bar list: a DARK well (navy-950) with the value
+            # filled in cyan-500 — the track recedes and only the value lights.
+            linewidth=0, facecolor=theme.bg_well, alpha=1.0,
+            mutation_aspect=h / w, zorder=1))
+        frac = max(val / vmax, 0.012)
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (tx0, y0), tw * frac, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
+            linewidth=0, facecolor=theme.cyan_500, alpha=1.0,
+            mutation_aspect=h / w, zorder=2))
+        ax.text(label_x, yc, _truncate(lab, max_chars), va="center", ha="left",
+                color=theme.ink_300, fontsize=font, zorder=3)
+        ax.text(0.995, yc, fmt(val), va="center", ha="right", color=theme.ink_100,
+                fontsize=font, fontproperties=_MONO_FP, zorder=3)
+    return _save(fig, path, theme, dpi)
+
+
+def draw_stacked_barlist(path, rows: Sequence[Dict[str, Any]],
+                         segments: Sequence[Dict[str, Any]], w: float, h: float,
+                         *, theme: PptxTheme = THEME, currency: bool = True,
+                         label_key: str = "label", total_key: str = "total",
+                         dpi: int = 220, chart_id: Optional[str] = None,
+                         dimension: Optional[str] = None) -> Path:
+    """A bar list whose bar is BUILT from its parts.
+
+    ``segments`` is ``[{key, label, color}]`` in stacking order; each row
+    carries a value under every segment key, and the row's ``total_key`` is
+    what the parts must sum to. The right-hand figure is that total.
+
+    A forecast bar drawn as one block shows the destination and hides the
+    journey: the reader cannot see how much of a category's forecast exposure
+    is already funded and how much is expected to arrive. Those are different
+    facts with different certainty, and a funder is buying one of them.
+
+    Nothing is summed here beyond drawing: the caller supplies the parts and
+    the total, both from the governed payload, and a row whose parts do not
+    reach its total is drawn short rather than rescaled — a chart must not
+    hide a reconciliation failure.
+    """
+    rows = [r for r in rows if r is not None]
+    _record("stacked_barlist", chart_id, dimension=dimension,
+            categories=[str(r.get(label_key, "")) for r in rows],
+            values=[r.get(total_key) for r in rows],
+            segments=[str(sg.get("key")) for sg in segments], currency=currency)
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax.set_facecolor(theme.bg_panel)
+    ax.set_xlim(0, 1)
+    ax.axis("off")
+    if not rows:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                color=theme.ink_500, fontsize=12)
+        return _save(fig, path, theme, dpi)
+
+    fmt: Callable = compact_currency if currency else compact_number
+    totals = [float(r.get(total_key) or 0.0) for r in rows]
+    labels = [str(r.get(label_key, "")) for r in rows]
+    n = len(rows)
+    vmax = max(max(totals), 1.0)
+    pad_top, pad_bot = 0.16, 0.05
+    band = (1.0 - pad_top - pad_bot) / max(n, 1)
+    bar_h = min(band * 0.62, 0.135)
+    label_x, tx0, tx1 = 0.005, 0.385, 0.86
+    tw = tx1 - tx0
+    row_in = band * h
+    font = max(7.5, min(10.5, row_in * 72.0 * 0.52))
+    max_chars = max(10, int((tx0 - label_x) * w * 72 / (font * 0.56)))
+
+    for i, (lab, total) in enumerate(zip(labels, totals)):
         yc = 1.0 - pad_top - (i + 0.5) * band
         y0 = yc - bar_h / 2
         ax.add_patch(mpatches.FancyBboxPatch(
             (tx0, y0), tw, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
             linewidth=0, facecolor=theme.bg_panel_alt, alpha=0.7,
             mutation_aspect=h / w, zorder=1))
-        frac = max(val / vmax, 0.012)
-        ax.add_patch(mpatches.FancyBboxPatch(
-            (tx0, y0), tw * frac, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
-            linewidth=0, facecolor=theme.peri, alpha=0.9,
-            mutation_aspect=h / w, zorder=2))
+        cursor = tx0
+        for sg in segments:
+            value = float(rows[i].get(sg["key"]) or 0.0)
+            if value <= 0:
+                continue
+            width = tw * max(value / vmax, 0.0)
+            ax.add_patch(mpatches.Rectangle(
+                (cursor, y0), width, bar_h, linewidth=0,
+                facecolor=sg.get("color") or theme.peri, alpha=0.92, zorder=2))
+            cursor += width
         ax.text(label_x, yc, _truncate(lab, max_chars), va="center", ha="left",
-                color=theme.ink_300, fontsize=10.5, zorder=3)
-        ax.text(0.995, yc, fmt(val), va="center", ha="right", color=theme.ink_100,
-                fontsize=10.5, fontproperties=_MONO_FP, zorder=3)
+                color=theme.ink_300, fontsize=font, zorder=3)
+        ax.text(0.995, yc, fmt(total), va="center", ha="right",
+                color=theme.ink_100, fontsize=font, fontproperties=_MONO_FP,
+                zorder=3)
+
+    # The key, above the bars: two colours mean nothing without it.
+    x = tx0
+    for sg in segments:
+        ax.add_patch(mpatches.Rectangle(
+            (x, 1.0 - pad_top + 0.035), 0.018, 0.045, linewidth=0,
+            facecolor=sg.get("color") or theme.peri, alpha=0.92, zorder=3))
+        ax.text(x + 0.026, 1.0 - pad_top + 0.058, str(sg.get("label", "")),
+                va="center", ha="left", color=theme.ink_400,
+                fontsize=max(7.5, font - 1.0), zorder=3)
+        x += 0.026 + len(str(sg.get("label", ""))) * 0.0105 + 0.03
     return _save(fig, path, theme, dpi)
 
 
@@ -142,9 +359,12 @@ def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[f
     axis), with an optional dashed 5-week-average marker — the dashboard's
     KFI/Completions weekly-flow panel."""
     fig = _fig(w, h, theme, dpi)
-    # Left margin fits a full compact-currency tick ('£800.0MM'); at 0.09 the
-    # leading £ was clipped off the axes.
-    ax = fig.add_axes([0.135, 0.16, 0.80, 0.78])
+    # Left margin fits a full compact-currency tick ('£800.0MM'), measured
+    # rather than guessed at a fraction of the figure.
+    _fmt = compact_currency if bar_currency else compact_number
+    left = axis_left(w, _money_ticks([v for v in list(bars) + list(line)
+                                      if v is not None], _fmt), pt=8.5)
+    ax = fig.add_axes([left, 0.16, 0.955 - left, 0.78])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
@@ -175,7 +395,7 @@ def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[f
     ax2.tick_params(colors=theme.ink_500, labelsize=8.5, length=0)
     ax2.yaxis.set_major_formatter(FuncFormatter(
         lambda v, p: compact_currency(v) if bar_currency else compact_number(v)))
-    idx = _tick_indices(x_labels, w * 0.80, fontsize=8)
+    idx = _tick_indices(x_labels, w * (0.955 - left), fontsize=8)
     ax.set_xticks([x[i] for i in idx])
     ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8, color=theme.ink_500)
     return _save(fig, path, theme, dpi)
@@ -222,10 +442,16 @@ def draw_bubble(path, points: Sequence[Dict[str, Any]], x_labels: Sequence[str],
 
 def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
                  matrix: Sequence[Sequence[float]], w: float, h: float, *,
-                 theme: PptxTheme = THEME, dpi: int = 220) -> Path:
+                 theme: PptxTheme = THEME, dpi: int = 220,
+                 chart_id: Optional[str] = None,
+                 x_dimension: Optional[str] = None,
+                 y_dimension: Optional[str] = None) -> Path:
     """Balance heatmap: rows=y_labels, cols=x_labels, cell shade ∝ balance, with
     the £ value annotated. Uses the periwinkle→mint brand ramp."""
     from matplotlib.colors import LinearSegmentedColormap
+    _record("heatmap", chart_id, categories=[str(x) for x in x_labels],
+            rows=[str(y) for y in y_labels],
+            dimension=x_dimension, row_dimension=y_dimension)
     fig = _fig(w, h, theme, dpi)
     # The row labels are real category names — "Yorkshire and The Humber" is 24
     # characters — and a truncated dimension label is a legibility defect on a
@@ -261,16 +487,140 @@ def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
     return _save(fig, path, theme, dpi)
 
 
+
+def zero_anchored_limits(values: Sequence[float]) -> Optional[Tuple[float, float]]:
+    """The value axis a line chart should use, or ``None`` to let it fit.
+
+    ZERO-ANCHORED, as every evolution chart on the dashboard is. Auto-scaling
+    fitted the axis to the data, so a weighted LTV drifting from 50.25% to
+    50.60% filled the panel as a dramatic swing; on a zero-based axis it reads
+    as the near-flat line it is. A series that can go negative — a forecast
+    error, a net movement — keeps an axis fitted to its own range (``None``).
+    """
+    vals = [float(v) for v in values if v is not None]
+    if not vals or min(vals) < 0:
+        return None
+    top = max(vals) * 1.12
+    return (0.0, top if top > 0 else 1.0)
+def _currency_tick_formatter(ax, series, stack):
+    """A money tick formatter that cannot label two gridlines the same.
+
+    Compact currency rounds to one decimal at millions, so its finest step is
+    0.1MM. A series living between 109.05m and 109.14m therefore labels every
+    gridline "£109.1MM" — four identical labels, which reads as a rendering
+    fault rather than as a flat series.
+
+    The test is the compact notation's own RESOLUTION against the axis range,
+    not an absolute range: where the range spans fewer than about five compact
+    steps, the axis carries more decimal places instead. Anything wider keeps
+    the compact form every other money label in the pack uses.
+    """
+    values = [float(v) for sr in series for v in (sr.get("values") or ())
+              if v is not None]
+    if not values:
+        return lambda v, p: compact_currency(v)
+    if stack:
+        columns = zip(*[[float(v or 0.0) for v in (sr.get("values") or ())]
+                        for sr in series])
+        totals = [sum(col) for col in columns] or [0.0]
+        low, high = 0.0, max(totals)
+    else:
+        low, high = min(values), max(values)
+    span, magnitude = high - low, max(abs(low), abs(high))
+    unit, suffix = ((1e9, "BN") if magnitude >= 1e9 else
+                    (1e6, "MM") if magnitude >= 1e6 else
+                    (1e3, "K") if magnitude >= 1e3 else (1.0, ""))
+    step = unit * (0.01 if suffix == "BN" else 0.1 if suffix == "MM" else 1.0)
+    if span <= 0 or span >= step * 5:
+        return lambda v, p: compact_currency(v)
+    # Enough decimals for five ticks to be distinct at this unit.
+    dp = 2
+    while dp < 6 and span / unit < 5 * (10 ** -dp):
+        dp += 1
+    from mi_agent_api import currency as _cur
+    return lambda v, p: f"{_cur.current_symbol()}{v / unit:,.{dp}f}{suffix}"
+
+
+#: Legend type may shrink to fit, but not below the point at which a funder
+#: cannot read the series name it labels.
+_LEGEND_PT = (8.5, 8.0, 7.5, 7.0)
+#: Swatch, its gap, and the gap to the next entry, per legend entry.
+_LEGEND_CHROME_IN = 0.34
+
+
+def _legend_fit(names: Sequence[str], avail_in: float):
+    """Return ``(fontsize, rows)`` for a one-line-per-row legend that fits.
+
+    Tries each permitted size on one row, then on two. Falls back to the
+    smallest size and two rows, which is the most a chart panel can carry
+    before the legend is competing with the data for the page.
+    """
+    if not names or avail_in <= 0:
+        return _LEGEND_PT[0], 1
+    for rows in (1, 2):
+        per_row = math.ceil(len(names) / rows)
+        for pt in _LEGEND_PT:
+            widest = max(_text_in(n, pt) + _LEGEND_CHROME_IN for n in names)
+            if widest * per_row <= avail_in:
+                return pt, rows
+    return _LEGEND_PT[-1], 2
+
+
 def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                currency: bool = True, percent: bool = False, area: bool = False,
-               dpi: int = 220) -> Path:
-    """Dashboard line/area chart. *series* = [{name, values, color?}]."""
+               dpi: int = 220, chart_id: Optional[str] = None,
+               stack: bool = False, zero_based: Optional[bool] = None,
+               reference: Optional[Dict[str, Any]] = None) -> Path:
+    """Dashboard line/area chart. *series* = [{name, values, color?}].
+
+    ``stack`` draws the series as a stacked area — the right grammar for a STOCK
+    split into parts that sum to a total, where a set of separate lines would
+    make the reader add them up by eye.
+
+    ``zero_based`` forces the value axis to include zero. Default (``None``)
+    decides it: a stock or a stacked series is anchored at zero, because a
+    magnitude read off a floating baseline exaggerates every movement; a rate
+    or a narrow-range series is not, because zero-anchoring it would flatten the
+    only variation it has.
+    """
+    _record("lines", chart_id, categories=[str(x) for x in x_labels],
+            series=[str(s.get("name", "")) for s in series],
+            currency=currency, percent=percent)
     fig = _fig(w, h, theme, dpi)
-    # Left margin fits a full compact-currency tick ('£120.0MM'); the axes top
-    # leaves a clear band for the legend, which is drawn ABOVE the plot rather
-    # than inside it — placed inside, it landed on the series it described.
-    ax = fig.add_axes([0.145, 0.16, 0.825, 0.70 if len(series) > 1 else 0.78])
+    # Left margin fits the widest tick this data will actually draw; the axes
+    # top leaves a clear band for the legend, which is drawn ABOVE the plot
+    # rather than inside it — placed inside, it landed on the series it
+    # described.
+    _vals = [v for sr in series for v in (sr.get("values") or ()) if v is not None]
+    if stack and _vals:
+        # A stacked chart's axis reaches the SUM of the series at a point, not
+        # the largest single value, so the tick it has to clear is wider.
+        _cols = zip(*[[float(v or 0.0) for v in (sr.get("values") or ())]
+                      for sr in series]) if len(series) > 1 else ()
+        _vals = _vals + [sum(col) for col in _cols]
+    if percent:
+        _samples = ["100.0%"]
+    elif currency:
+        _samples = _money_ticks(_vals, compact_currency)
+    else:
+        _samples = _money_ticks(_vals, compact_number)
+    left = axis_left(w, _samples, pt=9.0)
+    # THE LEGEND BAND IS INCHES, NOT A FRACTION — same reason the left margin
+    # is. A 0.70 axes height reserves 0.72in on a full-height chart and 0.48in
+    # on a quadrant panel, and the legend text needs the same room in both:
+    # on the four-panel pipeline quadrant it was clipped along its top edge.
+    # THE LEGEND HAS TO FIT THE FIGURE, not just the row it is asked for.
+    # ``ncol=len(series)`` alone ran a four-series legend off the right edge and
+    # the last name was cropped mid-word ("Scotland conce"). Measure what the
+    # names need, shrink the type to the readable floor, and only then take a
+    # second row — reserving the band for it, since the band is what stopped the
+    # wrapped row from printing over the chart.
+    legend_pt, legend_rows = _legend_fit(
+        [str(sr.get("name", "")) for sr in series], w * (1.0 - left) - 0.06)
+    legend_in = (0.30 * legend_rows) if len(series) > 1 else 0.0
+    top_frac = max(0.55, 1.0 - (legend_in + 0.05) / max(float(h), 0.1))
+    ax = fig.add_axes([left, 0.16, 0.965 - left, top_frac - 0.16])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
@@ -288,39 +638,95 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
         ax.axis("off")
         return _save(fig, path, theme, dpi)
 
-    for i, s in enumerate(series):
-        vals = [None if v is None else float(v) for v in s.get("values", [])]
-        color = s.get("color") or EVO_PALETTE[i % len(EVO_PALETTE)]
-        ax.plot(x, vals, color=color, linewidth=2.4, marker="o", markersize=3,
-                label=s.get("name", ""), zorder=3, solid_capstyle="round")
-        if area and len(series) == 1:
-            ax.fill_between(x, [v or 0 for v in vals], color=color, alpha=0.16, zorder=2)
+    if stack and len(series) > 1:
+        # Stacked area: parts of one total. Drawn bottom-up in the order given,
+        # so the caller's ordering (largest book first) is what the reader sees.
+        stacked = [[float(v or 0.0) for v in s.get("values", [])] for s in series]
+        colours = [s.get("color") or EVO_PALETTE[i % len(EVO_PALETTE)]
+                   for i, s in enumerate(series)]
+        ax.stackplot(x, *stacked, colors=colours, alpha=0.88,
+                     labels=[s.get("name", "") for s in series],
+                     edgecolor=theme.bg_panel, linewidth=0.6, zorder=2)
+    else:
+        for i, s in enumerate(series):
+            vals = [None if v is None else float(v) for v in s.get("values", [])]
+            color = s.get("color") or EVO_PALETTE[i % len(EVO_PALETTE)]
+            ax.plot(x, vals, color=color, linewidth=2.4, marker="o", markersize=3,
+                    label=s.get("name", ""), zorder=3, solid_capstyle="round")
+            if area and len(series) == 1:
+                ax.fill_between(x, [v or 0 for v in vals], color=color,
+                                alpha=0.16, zorder=2)
 
-    if currency:
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: compact_currency(v)))
-    elif percent:
-        # Decimals follow the RANGE, not a constant. A weighted LTV that moves
-        # between 45.8% and 47.2% produced five ticks all reading "46%" — an
-        # axis that labels four distinct gridlines identically is worse than no
-        # axis, because it reads as a rendering fault rather than a flat series.
+    # AXIS MATERIALITY. A stock chart on a floating baseline turns a fractional
+    # move into a cliff. Anchor a currency/stacked axis at zero unless the caller
+    # says otherwise; leave a rate axis alone, where zero-anchoring would flatten
+    # the only variation there is.
+    anchor = zero_based if zero_based is not None else (stack or (currency and not percent))
+    if anchor:
         shown = [float(v) for sr in series for v in (sr.get("values") or ())
                  if v is not None]
-        as_points = [v * 100 if abs(v) <= 1.5 else v for v in shown]
-        spread = (max(as_points) - min(as_points)) if as_points else 0.0
-        dp = 0 if spread >= 6 else (1 if spread >= 0.6 else 2)
+        if shown and min(shown) >= 0:
+            top = max(sum(vals) for vals in zip(*[[float(v or 0.0) for v in
+                      (sr.get("values") or ())] for sr in series])) if stack and len(series) > 1 \
+                  else max(shown)
+            ax.set_ylim(0, top * 1.08 if top else 1.0)
+
+    shown = [float(v) for sr in series for v in (sr.get("values") or ())
+             if v is not None]
+    bounds = zero_anchored_limits(shown)
+    if bounds is not None:
+        ax.set_ylim(*bounds)
+
+    if currency:
+        # DUPLICATE TICKS. Compact currency rounds to one decimal at millions,
+        # so a series that lives between 109.05m and 109.14m labels every
+        # gridline "£109.1MM" — four identical labels, which reads as a
+        # rendering fault rather than as a flat series. Where the ticks would
+        # collide the axis carries a scaled label and states its unit once.
+        ax.yaxis.set_major_formatter(FuncFormatter(
+            _currency_tick_formatter(ax, series, stack)))
+    elif percent:
+        # Decimals follow the AXIS range, not a constant. A weighted LTV that
+        # moves between 45.8% and 47.2% on a fitted axis produced five ticks
+        # all reading "46%" — an axis that labels distinct gridlines identically
+        # reads as a rendering fault. Once the axis is anchored at zero the span
+        # is the axis, not the data, so the ticks are whole steps again.
+        lo, hi = ax.get_ylim()
+        span = abs(hi - lo) * (100 if max(abs(lo), abs(hi)) <= 1.5 else 1)
+        dp = 1 if span >= 0.6 else 2
         ax.yaxis.set_major_formatter(FuncFormatter(
             lambda v, p: f"{v * 100:.{dp}f}%" if abs(v) <= 1.5 else f"{v:.{dp}f}%"))
-    idx = _tick_indices(x_labels, w * 0.825, fontsize=8.5)
+    idx = _tick_indices(x_labels, w * (0.965 - left), fontsize=8.5)
     ax.set_xticks([x[i] for i in idx])
     ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8.5,
                        color=theme.ink_500)
+    # A GOVERNED REFERENCE LEVEL — a limit, a threshold — drawn as a rule the
+    # series is read against. ``{"value": ..., "label": ...}``. The value comes
+    # from the caller's payload; nothing is derived here.
+    if reference and reference.get("value") is not None:
+        level = float(reference["value"])
+        # THE REFERENCE MUST BE IN VIEW. A limit line drawn off the top of the
+        # axis is the one thing the chart exists to show: four utilisation
+        # paths at 30-47% against a 100% limit read as four flat lines unless
+        # the limit is on the page with them.
+        lo, hi = ax.get_ylim()
+        ax.set_ylim(min(lo, level * 0.98), max(hi, level * 1.08))
+        ax.axhline(level, color=theme.rag.get("amber", "#e0a458"), linewidth=1.3,
+                   linestyle=(0, (5, 4)), zorder=3)
+        if reference.get("label"):
+            ax.text(0.995, level, f" {reference['label']}", transform=
+                    ax.get_yaxis_transform(), ha="right", va="bottom",
+                    fontsize=8, color=theme.rag.get("amber", "#e0a458"),
+                    zorder=4)
+
     if len(series) > 1:
-        # ONE row. At ncol=3 a fourth series wrapped onto a second row that the
-        # axes' headroom did not allow for, and the wrapped entry printed over
-        # the row above it.
+        # The row count and type size were measured above, against the width
+        # this figure actually has. A wrapped row is allowed for in the band, so
+        # it no longer prints over the chart it describes.
         leg = ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.02),
-                        fontsize=8.5 if len(series) <= 4 else 7.5, frameon=False,
-                        ncol=len(series), handlelength=1.4, columnspacing=1.4)
+                        fontsize=legend_pt, frameon=False,
+                        ncol=math.ceil(len(series) / legend_rows),
+                        handlelength=1.4, columnspacing=1.4)
         for t in leg.get_texts():
             t.set_color(theme.ink_300)
     return _save(fig, path, theme, dpi)
@@ -396,7 +802,7 @@ def _fmt_money(value: float, *, signed: bool = False) -> str:
 
 
 def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: float,
-                           *, theme: PptxTheme = THEME, dpi: int = 220) -> Path:
+                           *, theme: PptxTheme = THEME, dpi: int = 220, chart_id: Optional[str] = None) -> Path:
     """Concentration tests as horizontal utilisation bars against their limit.
 
     One row per test. The bar is utilisation of the contractual limit, so the
@@ -410,6 +816,9 @@ def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: f
       * a hollow caret  — EXPECTED forecast;
       * a hatched tick  — the ALL-PIPELINE-CONVERTS stress (never an expectation).
     """
+    _record("utilisation", chart_id,
+            categories=[str(x.get("label", "")) for x in tests],
+            statuses=[str(x.get("status", "")) for x in tests])
     fig = _fig(w, h, theme, dpi)
     ax = fig.add_axes([0.30, 0.10, 0.62, 0.84])
     ax.set_facecolor(theme.bg_panel)
@@ -430,7 +839,7 @@ def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: f
         rag = _STATUS_RAG.get(str(t.get("status", "")).lower(), "green")
         colour = theme.rag.get(rag, theme.neutral)
         # Track, then the filled current bar.
-        ax.barh(i, top, height=0.52, color=theme.bg_panel_alt, edgecolor="none")
+        ax.barh(i, top, height=0.52, color=theme.bg_well, edgecolor="none")
         ax.barh(i, min(util, top), height=0.52, color=colour, edgecolor="none")
         ax.text(min(util, top) + 0.012 * top, i, f"{util:.0f}%", ha="left",
                 va="center", color=theme.ink_100, fontsize=9,
@@ -463,9 +872,13 @@ def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: f
 
 def draw_table(path, columns: Sequence[str], rows: Sequence[Sequence[Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
-               status_col: Optional[int] = None, dpi: int = 220) -> Path:
+               status_col: Optional[int] = None, dpi: int = 220,
+               chart_id: Optional[str] = None) -> Path:
     """Compact dark table (risk category tables). *rows* are pre-formatted str
     cells; ``status_col`` colours a RAG status cell."""
+    _record("table", chart_id, columns=[str(c) for c in columns],
+            cells=[[str(c) for c in row] for row in rows],
+            status_col=status_col)
     fig = _fig(w, h, theme, dpi)
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_facecolor(theme.bg_panel)

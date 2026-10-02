@@ -31,7 +31,7 @@ import logging
 import os
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from trakt_core.portfolio import (  # noqa: F401  (capabilities_to_dict re-exported)
     CapabilityState,
@@ -307,3 +307,72 @@ def scope_metadata(df, scope: PortfolioScope, *,
     if capabilities is not None:
         block["capabilities"] = capabilities_to_dict(capabilities)
     return block
+
+
+# --------------------------------------------------------------------------- #
+# Composition arithmetic — one owner, every channel.
+#
+# A portfolio-type's SHARE of the book, and the OPENING balance implied by its
+# movement, were each derived independently in four places in the presentation
+# layer: the composition bar, its legend, the comparison table and the
+# executive summary. Four call sites, four chances to disagree, and a pack that
+# claims a single governed origin for all of them.
+#
+# Neither is a new economic measure — both are arithmetic over governed snapshot
+# values — but both are values a second channel would reasonably ask for, so
+# they belong to one owner rather than to whichever renderer needed them first.
+# --------------------------------------------------------------------------- #
+
+def balance_share(part: Optional[float], whole: Optional[float]) -> Optional[float]:
+    """``part`` as a fraction (0-1) of ``whole``, or ``None``.
+
+    Returns ``None`` rather than zero for an absent or zero whole: a share of
+    nothing is undefined, and rendering it as 0% asserts a measurement that was
+    never made.
+    """
+    try:
+        p, w = float(part), float(whole)
+    except (TypeError, ValueError):
+        return None
+    if not w:
+        return None
+    return p / w
+
+
+def opening_from_movement(closing: Optional[float],
+                          movement: Optional[float]) -> Optional[float]:
+    """The opening balance implied by a closing balance and its movement.
+
+    ``closing - movement``. Stated here rather than inline because a waterfall's
+    base and the movement it decomposes must come from the same definition — the
+    two attribution slides each derived this, and a divergence would have made
+    one waterfall silently fail to reach its own total.
+    """
+    try:
+        return float(closing) - float(movement)
+    except (TypeError, ValueError):
+        return None
+
+
+def type_composition(total_balance: Optional[float],
+                     slices: Sequence[Any]) -> Dict[str, Dict[str, Any]]:
+    """``portfolio_type -> {balance, share, movement, opening}`` for a scope.
+
+    ``slices`` is any sequence of objects exposing ``portfolio_type``,
+    ``balance`` and ``balance_movement`` — the governed type slices. Nothing is
+    recomputed from a frame: every input is already a governed snapshot value.
+    """
+    out: Dict[str, Dict[str, Any]] = {}
+    for sl in slices or ():
+        ptype = str(getattr(sl, "portfolio_type", "") or "")
+        if not ptype:
+            continue
+        balance = getattr(sl, "balance", None)
+        movement = getattr(sl, "balance_movement", None)
+        out[ptype] = {
+            "balance": balance,
+            "share": balance_share(balance, total_balance),
+            "movement": movement,
+            "opening": opening_from_movement(balance, movement),
+        }
+    return out

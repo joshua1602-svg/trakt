@@ -46,6 +46,12 @@ SOURCE_APPROVED = "approved_configuration"
 SOURCE_LEGACY = "legacy_extracted"
 
 
+
+def _sym() -> str:
+    """The governed reporting currency's symbol (pound only by default)."""
+    from mi_agent_api import currency as _currency
+    return _currency.current_symbol()
+
 def normalise_status(value: Any) -> str:
     return _STATUS_NORMAL.get(str(value or "").strip().lower(), STATUS_UNAVAILABLE)
 
@@ -59,26 +65,54 @@ def _num(value: Any) -> Optional[float]:
         return None
 
 
-def format_measure(value: Optional[float], unit: Optional[str]) -> str:
-    """A governed test value in its own unit — never re-scaled."""
+_PCT_UNITS = ("percent", "percentage", "pct", "%", "percentage_points", "pp")
+
+
+def format_measure(value: Optional[float], unit: Optional[str], *,
+                   dp: int = 1) -> str:
+    """A governed test value in its own unit — never re-scaled.
+
+    ``dp`` sets percentage precision. The covenant table uses 2dp, as the
+    dashboard's concentration table does: a test at 29.96% against a 30% limit
+    reads "30.0%" at one decimal, which is the one figure on the page that must
+    not round onto its limit.
+    """
     v = _num(value)
     if v is None:
         return "—"
     u = str(unit or "").strip().lower()
-    if u in ("percent", "percentage", "pct", "%", "percentage_points", "pp"):
-        return f"{v:.1f}%"
+    if u in _PCT_UNITS:
+        return f"{v:.{dp}f}%"
     if u in ("gbp", "currency", "amount"):
-        a = abs(v)
-        if a >= 1e9:
-            return f"£{v / 1e9:.2f}bn"
-        if a >= 1e6:
-            return f"£{v / 1e6:.1f}m"
-        if a >= 1e3:
-            return f"£{v / 1e3:.0f}k"
-        return f"£{v:,.0f}"
+        # "gbp" is a legacy UNIT TAG in the approved test library, not a claim
+        # about the reporting currency. The symbol comes from the governed
+        # currency in force, so a EUR book shows EUR headroom.
+        from mi_agent_api.insight_generators import money as _governed
+        return _governed(v)
     if u in ("count", "loans", "number"):
         return f"{v:,.0f}"
     return f"{v:,.1f}"
+
+
+def format_headroom(value: Optional[float], unit: Optional[str], *,
+                    dp: int = 1) -> str:
+    """Distance to the limit, in the unit that distance is actually measured in.
+
+    Headroom is a DIFFERENCE between two values, not a value. For a percentage
+    test that difference is percentage points, and printing it with a percent
+    sign puts two incompatible percentages on the same line: a reader who has
+    just been told London is 47% utilised then reads "16.0% of headroom" as a
+    share of something. It is 16.0 points of exposure share. Currency and count
+    tests have no such ambiguity — a difference of pounds is pounds — so they
+    keep their own formatting unchanged.
+    """
+    v = _num(value)
+    if v is None:
+        return "—"
+    u = str(unit or "").strip().lower()
+    if u in _PCT_UNITS:
+        return f"{v:.{dp}f}pp"
+    return format_measure(v, unit, dp=dp)
 
 
 def _state(row: Mapping[str, Any], key: str) -> Dict[str, Any]:
@@ -131,6 +165,97 @@ def adapt_tests(envelope: Optional[Mapping[str, Any]]) -> List[Dict[str, Any]]:
             "forecast_treatment": t.get("forecastTreatment"),
         })
     return rows
+
+
+def attach_history(rows: Sequence[Dict[str, Any]],
+                   history: Optional[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """Add the PRIOR governed value of each test, where one was evaluated.
+
+    A covenant table states where a test sits and where it is expected to go,
+    and leaves the reader to guess whether it has been moving toward the limit
+    or away from it. The prior point comes from ``compute_history``, which
+    evaluates TODAY's approved configuration against each historical frame — so
+    prior and current are comparable, and a change is a change in the book
+    rather than a change in the definition.
+
+    Rows are copied; nothing is recomputed. A test with fewer than two governed
+    frames simply carries no prior, and the presentation layer shows nothing
+    rather than inventing a direction from one point.
+    """
+    out = [dict(r) for r in rows]
+    if not (history or {}).get("available"):
+        return out
+    by_test: Dict[Any, Mapping[str, Any]] = {
+        sr.get("testId"): sr for sr in (history or {}).get("series") or ()
+        if isinstance(sr, Mapping)}
+    for row in out:
+        sr = by_test.get(row.get("test_id"))
+        points = [p for p in ((sr or {}).get("points") or ())
+                  if isinstance(p, Mapping) and _num(p.get("value")) is not None]
+        if len(points) < 2:
+            continue
+        prior = points[-2]
+        row["prior_value"] = _num(prior.get("value"))
+        row["prior_date"] = prior.get("reportingDate")
+        row["prior_status"] = normalise_status(prior.get("status"))
+        row["periods_observed"] = len(points)
+        # The WHOLE governed series, so a renderer can show the path to the
+        # limit rather than only its last step. Values are the engine's; no
+        # ratio is formed here.
+        row["history_points"] = [
+            {"date": p.get("reportingDate"),
+             "value": _num(p.get("value")),
+             "utilisation": _num(p.get("utilisation"))}
+            for p in points]
+        # The engine's classification travels with the row.
+        row["direction"] = sr.get("direction")
+    return out
+
+
+def attach_stress(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Add the governed stress effect to each row."""
+    from mi_agent_api.concentration_tests_api import stress_effect
+
+    out = []
+    for row in rows:
+        row = dict(row)
+        row["stress_effect"] = stress_effect(
+            row.get("value"), row.get("stress_value"), row.get("limit"),
+            row.get("operator", "max"))
+        out.append(row)
+    return out
+
+
+#: The engine's direction codes, in the words the page uses. The engine decides
+#: WHICH WAY a test moved — against its limit, so a floor test falling is
+#: deteriorating; this layer decides only what to call that.
+_TRAVEL_WORDING = {
+    "toward_limit": "toward the limit",
+    "away_from_limit": "away from the limit",
+    "broadly_unchanged": "broadly unchanged",
+}
+
+_STRESS_WORDING = {
+    "eases": ("converting the whole pipeline would dilute this test, "
+              "not stress it"),
+    "no_effect": "the stress does not move this test",
+}
+
+
+def travel(row: Mapping[str, Any]) -> Optional[str]:
+    """The governed direction of travel, in words, or ``None``.
+
+    Reads ``direction`` from the concentration history service. It is NOT
+    recomputed here: which way is worse is a property of the governed operator,
+    and a presentation layer that decided it from the number alone inverted
+    every minimum-type test.
+    """
+    return _TRAVEL_WORDING.get(str(row.get("direction") or ""))
+
+
+def stress_note(row: Mapping[str, Any]) -> Optional[str]:
+    """What the stress did, in words, where it did not behave like one."""
+    return _STRESS_WORDING.get(str(row.get("stress_effect") or ""))
 
 
 def rank_key(row: Mapping[str, Any]):
@@ -252,3 +377,23 @@ def source_disclosure(envelope: Optional[Mapping[str, Any]]) -> Optional[str]:
         return ("Extracted limit monitor — not an operator-approved "
                 "concentration configuration")
     return None
+
+
+#: The governed operator as the dashboard prints it before a limit.
+_OPERATOR_GLYPH = {"max": "≤", "min": "≥", "lte": "≤", "gte": "≥",
+                   "<=": "≤", ">=": "≥", "lt": "<", "gt": ">"}
+
+
+def format_limit(row: Mapping[str, Any], *, dp: int = 2) -> str:
+    """A limit WITH its operator — "≤ 30.00%", "≥ 5.00%".
+
+    Printed bare, a minimum-type test's limit reads exactly like a maximum's,
+    and the reader inverts the covenant. The operator is the governed one from
+    the approved configuration, never inferred from the value.
+    """
+    shown = format_measure(row.get("limit"), row.get("unit"), dp=dp)
+    if shown == "—":
+        return shown
+    glyph = _OPERATOR_GLYPH.get(str(row.get("operator") or "").lower())
+    return f"{glyph} {shown}" if glyph else shown
+

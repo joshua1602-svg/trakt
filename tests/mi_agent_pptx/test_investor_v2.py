@@ -277,7 +277,9 @@ def test_every_omission_carries_a_reason(mixed_run):
     assert omitted
     for o in omitted:
         assert o.reason and o.slide_id and o.title
-        assert o.category in ("condition", "no data")
+        # "superseded": a page whose question another page in the pack already
+        # answers (Risk Limits, where approved concentration tests exist).
+        assert o.category in ("condition", "no data", "superseded")
 
 
 def test_forecast_fact_is_false_without_a_pipeline_contribution(mixed_run):
@@ -320,7 +322,12 @@ def test_pipeline_present_includes_the_pipeline_sections(mixed_run, pipeline_roo
     kept, _omitted = select_slides(_slides(), data)
     ids = {s["id"] for s in kept}
     assert "pipeline" in ids
-    assert "funnel" in ids
+    # HOW THE PIPELINE PROGRESSES, by whichever page answers it for this book.
+    # Origination Funnel measures conversion from weekly FLOW; Pipeline Stage
+    # Movement reconciles the same question case by case and supersedes it
+    # where a stable case identifier exists. The durable property is that the
+    # question is answered, not which page answers it.
+    assert ids & {"funnel", "stage_transitions"}, ids
 
     # And the pipeline is narrated as an outlook, labelled direct-origination only.
     outlook = [i for i in data.insights["insights"]

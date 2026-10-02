@@ -29,6 +29,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+
+from . import presentation as _presentation
 from trakt_core import perf as _perf
 
 from . import serving_cache as _serving_cache
@@ -963,6 +965,76 @@ def _dimension_breakdown(df: pd.DataFrame, field: str,
     return rows
 
 
+#: Governed pipeline stratification dimensions. The prepared pipeline frame
+#: already carries these columns: ``pipeline_prep._materialise_buckets`` writes
+#: ltv_bucket / age_bucket / ticket_bucket / interest_rate_bucket through the
+#: SAME ``analytics_lib.buckets`` engine and the SAME config/mi/buckets.yaml the
+#: funded book is banded by (``config/mi/pipeline_field_contract.yaml`` declares
+#: them as ``reused``). Nothing here bands anything; it groups columns that the
+#: governed prep already produced, so a pipeline LTV band and a funded LTV band
+#: are the same band by construction.
+_PIPELINE_STRAT_DIMS: List[Tuple[str, str, Tuple[str, ...]]] = [
+    ("ltv", "By LTV band", ("ltv_bucket",)),
+    ("age", "By borrower age", ("age_bucket",)),
+    ("ticket", "By ticket size", ("ticket_bucket",)),
+    ("rate", "By rate band", ("interest_rate_bucket",)),
+    ("region", "By region", ("geographic_region_obligor", "collateral_geography",
+                             "geographic_region_collateral")),
+    ("broker", "By broker / channel", ("broker_channel", "origination_channel")),
+    ("product", "By product", ("product_type",)),
+    ("borrower_type", "By borrower type", ("borrower_type",)),
+]
+
+
+def _pipeline_stratifications(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Pipeline stratifications in the SAME shape the funded snapshot emits.
+
+    One shape means one renderer: the deck's stratification handler and React's
+    bar list draw a pipeline band exactly as they draw a funded one, with the
+    same bucket definitions, the same governed display order and the same
+    labels. Before this, the pipeline lens could only be stratified by broker,
+    region and stage, so the two lenses could not be read side by side.
+
+    The measure is ``current_outstanding_balance`` — the pipeline case amount,
+    the same column whose sum IS ``pipelineAmount`` — so a stratification always
+    reconciles to the headline. Nothing is computed here that ``stratify`` does
+    not already compute for the funded book.
+    """
+    balance_col = "current_outstanding_balance"
+    if df is None or balance_col not in getattr(df, "columns", []):
+        return []
+    from analytics_lib.stratify import stratify as _stratify
+
+    out: List[Dict[str, Any]] = []
+    for key, label, candidates in _PIPELINE_STRAT_DIMS:
+        column = next((c for c in candidates
+                       if c in df.columns and df[c].notna().any()), None)
+        if column is None:
+            continue
+        try:
+            table = _stratify(df, column, balance_col=balance_col)
+        except Exception:  # noqa: BLE001 - one dimension must not break the snapshot
+            continue
+        if table is None or table.empty:
+            continue
+        bars = [{"label": str(row[column]),
+                 "balance": round(float(row["balance_sum"]), 2),
+                 "count": int(row["loan_count"]),
+                 "sharePct": round(float(row["balance_share"]) * 100.0, 1)}
+                for _, row in table.iterrows()]
+        if not bars:
+            continue
+        out.append({
+            "key": key,
+            "label": label,
+            "bars": _presentation.order_bars(bars[:12], dimension=key),
+            "displayOrder": _presentation.DISPLAY_ORDER_GOVERNED,
+            "ordinal": _presentation.is_ordinal(key, [b["label"] for b in bars]),
+            "availability": "available",
+        })
+    return out
+
+
 def _stage_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     rows = _dimension_breakdown(df, "pipeline_stage", key_name="stage")
     rows.sort(key=lambda r: r["stage"])
@@ -1042,6 +1114,11 @@ def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
         "caseCount": sum(r["caseCount"] for r in tail),
         "pipelineAmount": other_amount,
         "weightedExpectedFundedAmount": other_weighted,
+        # Any additional additive component the caller carried (the forecast
+        # cuts carry ``fundedAmount`` beside the total) is aggregated the same
+        # way, so a capped row's parts still sum to its total.
+        **{key: round(sum(float(r.get(key) or 0.0) for r in tail), 2)
+           for key in ("fundedAmount",) if any(key in r for r in tail)},
         "isOther": True,
         "categoriesIncluded": len(tail),
         "sharePct": (round(other_amount / total_amount * 100, 1)
@@ -1232,6 +1309,9 @@ def compute_pipeline_snapshot(
     full_df, df = df, open_pipeline(df)
     weighted = totals["weighted"]
     as_of = src.get("pipeline_as_of_date") or report.get("pipeline_as_of_date")
+    # THE BREAKDOWNS DESCRIBE THE SAME POPULATION AS THE HEADLINE: ``df`` is
+    # already the open pipeline, and the stratifications read it too.
+    live_df = df
     # Long categorical breakdowns are capped to top 10 (+ Other) for the visual;
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
     broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
@@ -1281,6 +1361,12 @@ def compute_pipeline_snapshot(
         "weightingIncompleteReason": (
             _prep_weighting_gap_reason(_prep_weighting_gap(open_pipeline(full_df)))
             if _prep_weighting_gap(open_pipeline(full_df)) else None),
+        # The correction, stated so it is auditable from the payload alone.
+        "pipelineExtractRowCount": int(report.get("row_count", len(df))),
+        "pipelineTerminalRowCount": int(report.get("terminal_row_count", 0) or 0),
+        "pipelineExtractAmount": report.get("total_extract_amount"),
+        "pipelineTerminalStageCounts": report.get("terminal_stage_counts", {}),
+        "pipelineLiveStages": report.get("live_stages", []),
         # Prior weekly extract aggregates for week-on-week tile deltas (null when
         # no earlier weekly snapshot exists — the UI shows "No prior week").
         "priorWeek": prior_week,
@@ -1300,6 +1386,8 @@ def compute_pipeline_snapshot(
         "overdueExpectedCompletionWeightedAmount": completion_summary["overdueExpectedCompletionWeightedAmount"],
         "currentMonthExpectedCompletionCount": completion_summary["currentMonthExpectedCompletionCount"],
         "nextExpectedCompletionMonth": completion_summary["nextExpectedCompletionMonth"],
+        # Governed pipeline stratifications, same shape/order/labels as funded.
+        "stratifications": _pipeline_stratifications(live_df),
         "brokerBreakdown": cap_breakdown(broker_full, 10),
         "brokerBreakdownFull": broker_full,
         "regionBreakdown": cap_breakdown(region_full, 10),

@@ -170,6 +170,20 @@ def list_decks(client_id: str) -> Dict[str, Any]:
             "client_id": client_id}
 
 
+
+def _is_filesystem_storage(storage: Any) -> bool:
+    """True when ``storage`` is the filesystem backend, not a subclass of it.
+
+    The blob backend extends the filesystem class, so ``isinstance`` would say
+    yes for both. The question is whether the local path is the store itself.
+    """
+    try:
+        from apps.blob_trigger_app.storage import BlobStorage, Storage
+    except Exception:  # noqa: BLE001 - no storage package, no local mirror
+        return False
+    return isinstance(storage, Storage) and not isinstance(storage, BlobStorage)
+
+
 def resolve_deck_local(client_id: str, period: Optional[str] = None
                        ) -> Optional[Tuple[Path, str]]:
     """Resolve a deck to a LOCAL file to serve, plus a friendly download filename.
@@ -198,10 +212,16 @@ def resolve_deck_local(client_id: str, period: Optional[str] = None
     try:
         if not storage.exists(uri):
             return None
-        # Prefer a local mirror path (filesystem storage); else download to scratch.
-        local = storage._local_path(uri) if hasattr(storage, "_local_path") else None
-        if local is not None and Path(str(local)).exists():
-            return (Path(str(local)), download_name)
+        # Prefer a local mirror path — but ONLY for filesystem storage, where the
+        # local path IS the store. ``BlobStorage`` inherits ``_local_path`` from
+        # the filesystem base with ``local_root = cwd()``, so a ``hasattr`` guard
+        # let any stray ``processed-v2/decks/...`` tree in the App Service's
+        # working directory shadow the freshly published blob — permanently, and
+        # with nothing to say the bytes were not the ones just uploaded.
+        if _is_filesystem_storage(storage):
+            local = storage._local_path(uri)
+            if local is not None and Path(str(local)).exists():
+                return (Path(str(local)), download_name)
         dest = _scratch() / client_id / f"{friendly_period}_{DECK_NAME}"
         dest.parent.mkdir(parents=True, exist_ok=True)
         path = storage.download_file(uri, dest)
