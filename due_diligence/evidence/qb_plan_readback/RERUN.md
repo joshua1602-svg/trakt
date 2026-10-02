@@ -643,3 +643,6 @@ intents added beside the baseline's.
                 Ask-backs now always say what they need. Next: deploy, then
                 `run_production_bank.sh <principal> askback` (~18 questions;
                 the conversation is switched on for that run only)
+    2026-10-02  08:35 UTC 0c116861 deployed (run 36984606253, success): the
+                model-view guard and baseline (§37) and conversation phase 1
+                (§38), switched off for users. Next: `askback`
