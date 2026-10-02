@@ -15,7 +15,7 @@ info:
     outputs — never from model estimation.
   version: 3.0.0
 servers:
-  - url: https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net
+  - url: https://trakt-mi-api.azurewebsites.net
     description: Trakt MI API (set to your deployment URL before packaging)
 security:
   - entraBearer: []
