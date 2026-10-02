@@ -305,6 +305,18 @@ def _write_preflight(output, report, preflight, *, deck_meta=None, data=None) ->
         "slides": [{"id": r.get("id"), "title": r.get("title"),
                     "placeholder": bool(r.get("placeholder"))}
                    for r in (report.get("slides") or [])],
+        # The GOVERNED reporting currency this pack renders in, and the record of
+        # what each renderer actually drew. Both are here so the artefact can be
+        # audited after the fact: a bar list is a PNG, so the order it drew is
+        # not recoverable from the .pptx itself.
+        "currency_code": report.get("currency_code"),
+        "rendered": report.get("rendered") or [],
+        # The governed FACTS composition decided from — including one
+        # ``can_<metric>`` per published capability. The omission ledger says
+        # which pages are absent; this says what the book was measured to be
+        # when that was decided, which is the other half of auditing a
+        # conditional pack after the fact.
+        "facts": report.get("facts") or {},
     }
     try:
         preflight_path(output).write_text(json.dumps(payload, indent=2, default=str),
@@ -341,6 +353,9 @@ def run(argv: Optional[List[str]] = None) -> int:
         prior_run_dir=args.prior_run_dir,
         portfolio_context=portfolio_context,
         tenant_id=args.tenant_id,
+        # Funding / securitisation targets are a CONFIG decision, declared in the
+        # pack definition rather than hard-coded here or in the forecast module.
+        scale_targets=deck_meta.get("scale_targets") or [],
     )
     for note in data.notes:
         print(f"[mi_api] {note}")
@@ -359,14 +374,16 @@ def run(argv: Optional[List[str]] = None) -> int:
         logo_path=deck_meta.get("logo_path"),
     )
 
-    # RENDER under the book's currency too. The render phase formats money of
-    # its own — chart axes, table cells, waterfall labels — so the currency the
-    # data was built under has to be in force here as well, not just assumed to
-    # have survived.
+    # RENDER under the book's governed currency. ``build_dashboard_data`` closed
+    # its own scope when it returned, and the render phase formats money of its
+    # own (tile values, chart labels, axis ticks, waterfall annotations), so the
+    # currency has to be in force here too — otherwise the payload would say EUR
+    # and the drawn chart would say GBP.
     from mi_agent_api import currency as _currency
-    _currency.set_currency(getattr(data, "currency_code", None))
-    builder = DeckBuilder(data, ctx, theme=THEME)
-    report = builder.build(slides, output)
+
+    with _currency.use_currency(data.currency_code):
+        builder = DeckBuilder(data, ctx, theme=THEME)
+        report = builder.build(slides, output)
 
     placeholders = [r for r in report["slides"] if r.get("placeholder")]
     print(f"\nDeck: {report['output']}")
@@ -385,7 +402,8 @@ def run(argv: Optional[List[str]] = None) -> int:
     # -- publication gates ------------------------------------------------
     # The deck is ALWAYS written. A gate failure withholds publication; it does
     # not destroy the artefact an operator needs in order to diagnose it.
-    preflight = run_preflight(report, data)
+    with _currency.use_currency(data.currency_code):
+        preflight = run_preflight(report, data)
     print(f"\nPreflight: {preflight.summary()}")
     for r in preflight.results:
         if not r.passed:

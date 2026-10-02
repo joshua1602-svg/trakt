@@ -56,6 +56,11 @@ class Contributor:
     end: float
     delta: float
     is_other: bool = False
+    #: How many source categories this row stands for. One for a real category;
+    #: for the aggregated "Other" residual, the size of the tail it absorbed —
+    #: which is what makes it possible to state how many categories a movement
+    #: was actually spread across rather than how many the chart had room for.
+    count: int = 1
 
 
 @dataclass(frozen=True)
@@ -141,7 +146,8 @@ def _adapt(key: str, label: str, payload: Mapping[str, Any]) -> MovementBridge:
                     start=float(c.get("start") or 0.0),
                     end=float(c.get("end") or 0.0),
                     delta=float(c.get("delta") or 0.0),
-                    is_other=bool(c.get("isOther")))
+                    is_other=bool(c.get("isOther")),
+                    count=max(1, int(c.get("count") or 1)))
         for c in payload.get("contributions") or payload.get("contributors") or ())
     start = payload.get("start") or {}
     end = payload.get("end") or {}
@@ -223,26 +229,22 @@ def _money(v: Optional[float]) -> str:
 
     The deck deliberately runs two notations, one per medium:
 
-      * TILES and CHART LABELS use ``compact_currency`` (£833.5MM) — the
+      * TILES and CHART LABELS use ``compact_currency`` (833.5MM) — the
         dashboard's own ``formatGBP``, so an exported tile and the screen it
         mirrors are character-for-character identical;
-      * SENTENCES use £833.5m, matching ``mi_agent_api.insight_generators``,
+      * SENTENCES use 833.5m, matching ``mi_agent_api.insight_generators``,
         which also writes React's weekly brief.
+
+    Both take their SYMBOL from the governed reporting currency; neither
+    names one.
 
     These sentences are prose and feed the executive summary, so they follow the
     prose rule. Formatting them as chart labels made one summary card disagree
     with the five beside it.
     """
-    if v is None:
-        return "—"
-    a = abs(v)
-    if a >= 1e9:
-        return f"{_sym()}{v / 1e9:.2f}bn"
-    if a >= 1e6:
-        return f"{_sym()}{v / 1e6:.1f}m"
-    if a >= 1e3:
-        return f"{_sym()}{v / 1e3:.0f}k"
-    return f"{_sym()}{v:,.0f}"
+    from mi_agent_api.insight_generators import money as _governed
+
+    return _governed(v)
 
 
 def _signed(v: Optional[float]) -> str:
@@ -276,19 +278,56 @@ def takeaways(bridge: MovementBridge, limit: int = 2) -> List[str]:
     return lines[: limit * 2]
 
 
+def shape(bridge: MovementBridge):
+    """How this dimension's movement is SHAPED, per the governed materiality
+    rules — driven by one category, concentrated in a few, broadly distributed,
+    or immaterial. Returns ``None`` when the bridge has nothing to classify."""
+    if not bridge.available or not bridge.contributors:
+        return None
+    from mi_agent_api import materiality as MAT
+
+    rows = [{"label": c.category, "value": c.delta} for c in bridge.contributors
+            if not c.is_other]
+    # THE TAIL IS PART OF THE MOVEMENT. "Other" is a top-N presentation bucket,
+    # not a category, so it must not be ranked as one — but leaving it out of
+    # the denominator makes every share a share of the named categories only,
+    # and the executive summary then quotes a total the movement page
+    # contradicts. It is carried as residual: never a leader, always in the
+    # total.
+    residual = next((c for c in bridge.contributors if c.is_other), None)
+    return MAT.classify(rows, base=bridge.opening,
+                        residual_magnitude=abs(residual.delta) if residual else 0.0,
+                        residual_count=residual.count if residual else 0)
+
+
 def headline(bridge: MovementBridge) -> Optional[str]:
-    """One sentence naming the largest contributor in either direction."""
+    """One sentence about where the movement came from — or that it came from
+    everywhere.
+
+    This used to name the largest contributor unconditionally. On a book where
+    seven regions each grew between £3.7m and £4.4m that produced "South East
+    contributed the largest increase (+£4.4m)", which is arithmetically true and
+    analytically misleading: it invites a reader to act on a difference the data
+    does not support. The governed materiality rules
+    (:mod:`mi_agent_api.materiality`) now decide whether a leader may be named at
+    all, and where none may be, the distribution is itself the finding.
+    """
     if not bridge.available:
         return None
+    from mi_agent_api import materiality as MAT
+
+    outcome = shape(bridge)
+    if outcome is None:
+        return None
+    sentence = MAT.describe(outcome, dimension=bridge.label, money=_money)
+    if outcome.shape != MAT.SHAPE_DRIVEN:
+        return sentence
+
+    # A genuine driver: name it, and name the largest offsetting move where one
+    # exists, because "grew, but one region shrank" is a different story.
     ups, downs = bridge.movers(limit=1)
     if ups and downs:
         return (f"{ups[0].category} contributed the largest increase "
                 f"({_signed(ups[0].delta)}); {downs[0].category} the largest "
                 f"reduction ({_signed(downs[0].delta)}).")
-    if ups:
-        return (f"{ups[0].category} contributed the largest increase "
-                f"({_signed(ups[0].delta)}).")
-    if downs:
-        return (f"{downs[0].category} contributed the largest reduction "
-                f"({_signed(downs[0].delta)}).")
-    return None
+    return sentence

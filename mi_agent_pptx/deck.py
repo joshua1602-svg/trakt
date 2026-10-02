@@ -24,7 +24,6 @@ from .chart_resolver import render_bridge_waterfall
 from .mi_api import DashboardData
 from .placeholders import render_placeholder_png
 from .pptx_theme import PptxTheme, THEME
-from .strat_order import order_bars
 from . import render as R
 
 SLIDE_W = Inches(13.333)
@@ -85,6 +84,51 @@ def headline_kpis(kpis):
     return keep[:MAX_KPI_TILES]
 
 
+def strat_ledger_note(rejected, flat, *, drawn: int) -> str:
+    """The one line under the stratification panels: what is not on this page.
+
+    TWO DIFFERENT FACTS, kept in two clauses, because collapsing them is how a
+    ledger comes to say something untrue:
+
+      * a dimension the book CANNOT distribute on — one category, no coverage,
+        not supplied — is an absence, and the page says the book sits in a
+        single band;
+      * a dimension the book CAN distribute on that simply scored below the
+        panels drawn is a RANKING statement, and saying it "is not charted"
+        would claim the data says nothing when the data says plenty.
+
+    Keyed off the reason CODES the selector recorded, never off the prose, so a
+    copy edit to a reason cannot silently move a dimension between clauses.
+    """
+    from mi_agent_api import presentation as _sel
+
+    unusable = (_sel.REASON_ONE_CATEGORY, _sel.REASON_LOW_INFORMATION,
+                _sel.REASON_LOW_COVERAGE, _sel.REASON_NOT_SUPPLIED)
+
+    def _names(rows, cap):
+        return ", ".join(str(r.get("label") or r.get("key")) for r in rows[:cap])
+
+    note = ""
+    dropped = [r for r in (rejected or ()) if r.get("reasonCode") in unusable]
+    if dropped:
+        note = (f"{_names(dropped, 3)}: the whole book sits in a single band, "
+                f"so the distribution is not charted.")
+    elif flat:
+        note = (f"{_names(list(flat), 3)}: the whole book sits in a single "
+                f"band, so the distribution is not charted.")
+
+    # Before this, a book with no uniform dimension printed nothing at all:
+    # the reader saw four panels and no sign that seven cuts had been weighed.
+    ranked = [r for r in (rejected or ())
+              if r.get("reasonCode") == _sel.REASON_LOWER_RANKED]
+    if ranked:
+        more = f" and {len(ranked) - 4} other(s)" if len(ranked) > 4 else ""
+        note = ((note + " ") if note else "") + (
+            f"{_names(ranked, 4)}{more}: available, and ranked below the "
+            f"{drawn} drawn here.")
+    return note
+
+
 class DeckBuilder:
     def __init__(self, data: DashboardData, ctx: DeckContext,
                  theme: PptxTheme = THEME):
@@ -99,11 +143,16 @@ class DeckBuilder:
         self.work = Path(ctx.work_dir or (Path(ctx.run_dir) / "_pptx_charts"))
         self.work.mkdir(parents=True, exist_ok=True)
         self.appendix: List[str] = list(data.notes)
+        #: What each renderer actually drew (see render.record_renders).
+        self.rendered: List[Dict[str, Any]] = []
         self.records: List[Dict[str, Any]] = []
         #: Slides this portfolio did not justify, with reasons (rendered in the
         #: appendix so an omission is never silent).
         self.omissions: List[Any] = []
         self.facts: Dict[str, Any] = {}
+        #: Dimensions each stratification slide drew, by slide id. A deep-dive
+        #: page reads this to continue from the page above rather than repeat it.
+        self._strat_drawn: Dict[str, Any] = {}
 
     # ------------------------------------------------------------- pptx scaffold
     def _rgb(self, hx):
@@ -263,6 +312,27 @@ class DeckBuilder:
     #: one baseline is what makes them comparable.
     TILE_LABEL_BAND = 0.34
 
+    #: Approximate widths, in ems, of the characters a KPI value is made of.
+    #: A digit is not a full em and a full stop is not a digit; treating them
+    #: as equal is what made a currency figure look too wide for its tile.
+    _EM = {".": 0.30, ",": 0.30, " ": 0.30, "1": 0.55, "%": 0.95, "M": 0.90,
+           "W": 0.90, "+": 0.60, "-": 0.35, "—": 0.90, "−": 0.60, "/": 0.35}
+
+    @classmethod
+    def _text_width_in(cls, text: str, size_pt: float, *, bold: bool = True) -> float:
+        """Roughly how wide ``text`` draws at ``size_pt``, in inches."""
+        ems = 0.0
+        for ch in str(text or ""):
+            if ch in cls._EM:
+                ems += cls._EM[ch]
+            elif ch.isdigit() or ch in "£$€":
+                ems += 0.62
+            elif ch.isupper():
+                ems += 0.70
+            else:
+                ems += 0.55
+        return ems * (size_pt / 72.0) * (1.06 if bold else 1.0)
+
     def _tile(self, slide, l, t, w, h, tile: Dict[str, Any]):
         """The dashboard's StatTile, as a slide element.
 
@@ -318,6 +388,11 @@ class DeckBuilder:
 
         line_t = fig_t + Inches(0.48)
         hint = tile.get("hint")
+        # THE MEASURE'S BASIS, on the measure. Two tiles on one page with
+        # different weighting bases are only honest if each says which it used.
+        # It takes the hint's slot: a delta outranks both — a movement is news,
+        # a basis is a standing property.
+        basis = tile.get("basis")
         if delta:
             colour = {"positive": th.mint, "negative": th.rose}.get(intent, th.ink_300)
             arrow = {"positive": "▲ ", "negative": "▼ "}.get(intent, "")
@@ -325,26 +400,39 @@ class DeckBuilder:
                        [(f"{arrow}{delta}", {"size": 9.5, "bold": True, "color": colour,
                                              "font": th.font_figure}),
                         (f"   {hint}" if hint else "", {"size": 8.5, "color": th.ink_500})])
+        elif basis:
+            self._text(slide, l + pad, line_t, iw, Emu(int(t + h) - int(line_t)),
+                       str(basis), size=8, color=th.ink_500, italic=True,
+                       spacing=1.05)
         elif hint:
             self._text(slide, l + pad, line_t, iw, Emu(int(t + h) - int(line_t)),
                        str(hint), size=8.5, color=th.ink_500, spacing=1.05)
 
-    def _tile_grid(self, slide, tiles: List[Dict[str, Any]], *, top=1.62, cols=4):
+    def _tile_grid(self, slide, tiles: List[Dict[str, Any]], *, top=1.62, cols=4,
+                   row_height: Optional[float] = None) -> float:
         """KPI tiles in the dashboard's arrangement: four across, sized to what
         they carry. Five-across at a fixed 1.62in left half of every tile empty
-        and pushed long labels onto a second line."""
+        and pushed long labels onto a second line.
+
+        Returns the bottom edge of the block, in inches. ``row_height`` lets a
+        slide that must fit something beneath the tiles choose a compact row
+        rather than discovering afterwards that there is no room left."""
         rows = max(1, (len(tiles) + cols - 1) // cols)
         gx, gy = Inches(0.18), Inches(0.18)
         left0, top0 = Inches(self.CONTENT_L), Inches(top)
         span = int(Inches(self.CONTENT_R - self.CONTENT_L))
         tile_w = Emu(int((span - (cols - 1) * int(gx)) / cols))
-        carries_line = any(t.get("delta") or t.get("hint") for t in tiles)
-        tile_h = Inches(1.34 if carries_line else 1.04)
+        carries_line = any(t.get("delta") or t.get("hint") or t.get("basis")
+                           for t in tiles)
+        height_in = (row_height if row_height is not None
+                     else (1.34 if carries_line else 1.04))
+        tile_h = Inches(height_in)
         for i, tile in enumerate(tiles):
             r, c = divmod(i, cols)
             l = Emu(int(left0) + c * (int(tile_w) + int(gx)))
             t = Emu(int(top0) + r * (int(tile_h) + int(gy)))
             self._tile(slide, l, t, tile_w, tile_h, tile)
+        return top + rows * height_in + (rows - 1) * 0.18
 
     #: THE content band. Every tile row and every chart panel is laid out across
     #: these two edges, so a KPI strip and the charts beneath it cannot drift
@@ -353,6 +441,19 @@ class DeckBuilder:
     #: at 12.78in, a third of an inch of visible misalignment.
     CONTENT_L = 0.55
     CONTENT_R = 12.78
+
+    #: The governed health checks the watchlist runs, named on the page. A
+    #: reader cannot tell "nothing was flagged" from "nothing was checked"
+    #: unless the pack says which checks ran, so the same list is printed
+    #: whether or not any of them cleared its materiality threshold.
+    GOVERNED_CHECKS = (
+        "Concentration limits — current, expected and stress",
+        "Reporting-date consistency across constituent books",
+        "Portfolio-type balance movement",
+        "Composition shift by region, channel, LTV and ticket band",
+        "Weighted-average LTV movement",
+        "Reporting-dimension coverage",
+    )
     COLUMN_GAP = 0.28
 
     def _grid(self, n: int, *, gap: Optional[float] = None):
@@ -366,12 +467,85 @@ class DeckBuilder:
         return [(Inches(l), Inches(top), Inches(w), Inches(height))
                 for l, w in self._grid(min(max(n, 1), 3))]
 
+    #: Where the executive slide's risk strip sits, and the clearance the charts
+    #: above it must leave. Without the clearance the trend card's border landed
+    #: on the strip, and the one line a reader takes off the page read as part of
+    #: the chart.
+    #: Governed frames a utilisation history needs before it is a path rather
+    #: than a prior. Two points is the direction the table already states.
+    CONC_MIN_HISTORY = 3
+
+    RISK_STRIP_TOP = 6.58
+    RISK_STRIP_CLEARANCE = 0.26
+
+    #: Headline tiles on the executive page. One row, always full: a partial
+    #: second row leaves a hole beside it, and the tiles are in priority order
+    #: so filling the row keeps the measures that matter. Six is the widest a
+    #: compact currency value still reads at across the content width.
+    EXEC_MAX_TILES = 6
+
+    #: Vertical room one bar-list row needs to stay readable, in inches. Derived
+    #: from the renderer: the label and the mono value are ~9pt, and below this
+    #: they begin to collide with the rows above and beneath them.
+    ROW_PITCH_IN = 0.19
+
+    @staticmethod
+    def _fit_bars(rows, capacity: int, *, value_key: str = "balance"):
+        """``rows`` reduced to ``capacity`` bars WITHOUT losing any value.
+
+        NEVER DROP A ROW SILENTLY. Truncating the list left six bars under a
+        heading a reader adds up, £11.8m short of the total they close on, with
+        nothing on the page saying a row had been cut. The remainder is
+        aggregated instead, so the bars still account for the whole.
+        """
+        if capacity < 2 or len(rows) <= capacity:
+            return list(rows)
+        rest = rows[capacity - 1:]
+        return list(rows[:capacity - 1]) + [{
+            "label": f"Other ({len(rest)})",
+            value_key: sum(float(r.get(value_key) or 0.0) for r in rest)}]
+
+    def _barlist_capacity(self, height_in: float, *, minimum: int = 3) -> int:
+        """How many bars a panel of this height can carry legibly."""
+        usable = max(0.0, height_in - 0.42)          # card title + padding
+        return max(minimum, int(usable / self.ROW_PITCH_IN))
+
+    def _matrix_boxes(self, n, *, top: float = 1.62, height: float = 4.95,
+                      row_gap: float = 0.22):
+        """Boxes for a 2 x 2 matrix of panels (or one row, for one or two).
+
+        A four-panel matrix is the deck's standard stratification grammar: four
+        governed dimensions, one visual language, readable at a glance. Falls
+        back to a single row for fewer panels so the same handler draws both.
+        """
+        if n <= 2:
+            return self._chart_boxes(n, top=top, height=height)
+        cols = self._grid(2)
+        rows = 2 if n <= 4 else (n + 1) // 2
+        panel_h = (height - row_gap * (rows - 1)) / rows
+        boxes = []
+        for i in range(n):
+            r, c = divmod(i, 2)
+            left, width = cols[c]
+            boxes.append((Inches(left), Inches(top + r * (panel_h + row_gap)),
+                          Inches(width), Inches(panel_h)))
+        return boxes
+
+    #: A tile carrying a hint line needs this much height: the hint is drawn at
+    #: 1.02in from the tile top and stands 0.30in tall, so anything shorter puts
+    #: it outside its own panel and onto whatever the slide drew underneath.
+    #: Enforced here rather than left to each caller, because two slides shipped
+    #: with a short strip and a hint before anyone read the printed page.
+    HINTED_TILE_HEIGHT = 1.34
+
     def _strip(self, tiles, *, top: float = 1.58, height: float = 1.45):
         """A KPI row on the same grid the charts use.
 
         Returns parallel sequences so a caller can ``zip`` them with its tiles;
         the columns are the grid's, never a per-slide constant.
         """
+        if any((t or {}).get("hint") for t in tiles):
+            height = max(height, self.HINTED_TILE_HEIGHT)
         cols = self._grid(len(tiles))
         return ([Inches(l) for l, _w in cols],
                 [Inches(top)] * len(tiles),
@@ -379,13 +553,30 @@ class DeckBuilder:
                 [Inches(height)] * len(tiles),
                 list(tiles))
 
+    #: A dimension is worth a panel when its balance is not all in one bucket.
+    #: 99.5% rather than 100% because a handful of loans in a second band does
+    #: not make a distribution either.
+    SPREAD_FLOOR = 0.995
+
+    @classmethod
+    def _has_spread(cls, strat) -> bool:
+        """Does this stratification actually distribute across its buckets?"""
+        bars = [b for b in (strat or {}).get("bars") or ()
+                if isinstance(b, dict)]
+        values = [abs(float(b.get("balance") or 0.0)) for b in bars]
+        total = sum(values)
+        if len(values) < 2 or total <= 0:
+            return len(values) > 1
+        return (max(values) / total) < cls.SPREAD_FLOOR
+
     def _barlist_card(self, slide, box, title, rows, value_key, *, currency=True,
-                      cid="bl", label_key="label"):
+                      cid="bl", label_key="label", dimension=None):
         il, it, iw, ih = self._card(slide, *box, title)
         path = self.work / f"{cid}.png"
         if rows:
             R.draw_barlist(path, rows, value_key, iw, ih, theme=self.theme,
-                           currency=currency, label_key=label_key)
+                           currency=currency, label_key=label_key,
+                           chart_id=cid, dimension=dimension)
         else:
             render_placeholder_png(path, "", "No data for this run",
                                    theme=self.theme, width_in=iw, height_in=ih)
@@ -516,6 +707,314 @@ class DeckBuilder:
         self._footer(s)
         self._record("executive_summary", spec.get("title", "Executive Summary"),
                      "Funded KPIs (dashboard-aligned).")
+
+    # ------------------------------------------------- executive dashboard
+    def slide_executive(self, spec):
+        """Slide 1 — where is the portfolio today, what is coming, and is
+        anything approaching a limit?
+
+        The three lenses on one page. Every figure is lifted from a governed
+        payload that a later slide also renders, so the landing page can never
+        disagree with the pack behind it: the funded tiles ARE the funded
+        snapshot's KPI tiles, the pipeline tiles ARE the pipeline snapshot's, the
+        forecast tile IS the forecast bridge's, and the risk strip IS the
+        concentration evaluator's summary.
+
+        There is no React executive landing page to mirror — the dashboard opens
+        on the funded lens of a tabbed workspace. This composition is therefore
+        new, and it is assembled from ``DashboardData`` alone (no extra compute
+        call) precisely so it can be offered back to React as one payload later.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        s = self._slide()
+        funded = self.d.funded or {}
+        pipeline = self.d.pipeline or {}
+        bridge = (self.d.forecast or {}).get("forecastBridge") or {}
+        by_id = {k.get("id"): k for k in funded.get("kpis", [])}
+
+        rd = self.d.reporting_date
+        self._header(s, spec.get("title", "Executive Position"),
+                     ("Funded, pipeline and forecast as at " + _pretty_date(rd))
+                     if rd else "Funded, pipeline and forecast",
+                     accent=self.theme.peri)
+
+        def kpi_tile(kpi_id, label=None):
+            """A funded KPI tile, verbatim from the governed snapshot."""
+            k = by_id.get(kpi_id)
+            if not k:
+                return None
+            return {"label": label or k.get("label"), "value": k.get("value"),
+                    "delta": k.get("delta"), "deltaIntent": k.get("deltaIntent"),
+                    "hint": None if k.get("delta") else k.get("hint"),
+                    "available": k.get("available", True)}
+
+        # SIX MEASURES, IN PRIORITY ORDER, AND NOTHING TO FILL A GRID.
+        # The page used to carry every governed headline it could reach — seven
+        # tiles, laid out four and three, with a hole beside the second row, and
+        # three of them (pipeline balance, weighted expected, forecast funded)
+        # restating one fact the Executive Summary then restated again in words
+        # on the next page. What an opening page owes a reader is the position,
+        # what is coming, and whether anything needs attention.
+        tiles = [tile for tile in (
+            kpi_tile("balance", "Funded balance"),
+            kpi_tile("loans", "Loans funded"),
+            kpi_tile("wa_current_ltv", "WA current LTV"),
+        ) if tile]
+
+        # PIPELINE — what is coming. Week-on-week deltas come from the governed
+        # prior-week aggregates, never computed here.
+        if pipeline:
+            prior = pipeline.get("priorWeek") or {}
+            amount = pipeline.get("pipelineAmount")
+            cases = pipeline.get("pipelineRowCount")
+
+            def wow(current, previous):
+                if previous is None or current is None:
+                    return None, None
+                diff = float(current) - float(previous)
+                intent = ("positive" if diff > 0 else
+                          "negative" if diff < 0 else "neutral")
+                return compact_currency(diff) + " vs prior wk", intent
+
+            delta, intent = wow(amount, prior.get("pipelineAmount"))
+            # ONE pipeline tile, carrying the case count as its hint. Two tiles
+            # for one lens crowded out the forecast and the risk measure.
+            tiles.append({"label": "Pipeline balance",
+                          "value": compact_currency(amount),
+                          "delta": delta, "deltaIntent": intent,
+                          "hint": (None if delta else
+                                   f"{compact_number(cases)} live cases"
+                                   if cases else "current weekly extract")})
+
+        # FORECAST — where the current book plus its pipeline lands. The
+        # weighted-pipeline component is the forecast bridge's own subject and
+        # is stated there; here the reader needs the destination.
+        # A forecast that equals the funded balance is not a forecast — it is
+        # the funded balance again, in a tile that claims to look forward. That
+        # is what a book with no pipeline produced, and it is the same
+        # duplication this page was redesigned to remove.
+        forecast_balance = bridge.get("forecastFundedBalance")
+        weighted = bridge.get("weightedExpectedFundedAmount") or 0.0
+        if forecast_balance and weighted:
+            tiles.append({"label": "Forecast funded",
+                          "value": compact_currency(forecast_balance),
+                          "hint": "funded + weighted pipeline"})
+
+        # RISK, AS A MEASURE RATHER THAN ONLY A SENTENCE. The strip at the foot
+        # of the page names the closest test; a reader scanning tiles should be
+        # able to see there IS a limit position without reading a line of prose.
+        tiles.append(self._headroom_tile())
+
+        # Time to the nearest scale target the run-rate has not yet passed —
+        # last, so it is the tile that gives way when the page is full.
+        milestone = self._next_milestone()
+        if milestone:
+            tiles.append({"label": f"Time to {milestone['label']}",
+                          "value": milestone["value"],
+                          "hint": milestone.get("hint")})
+        tiles = [t for t in tiles if t]
+
+        if not tiles:
+            self._placeholder_body(s, "No governed measures resolved for this run.")
+            self._footer(s)
+            return self._record("executive", spec.get("title"), "", placeholder=True)
+
+        # ONE ROW, ALWAYS FULL. Seven tiles over four columns left a hole beside
+        # the second row — the visual gap that made this page read as a
+        # compressed web dashboard rather than an opening statement. The tiles
+        # are in priority order, so filling the row keeps the measures that
+        # matter and drops the ones that were there to fill a grid. Six is the
+        # widest a compact currency value still reads at.
+        shown = tiles[:self.EXEC_MAX_TILES]
+        tiles_bottom = self._tile_grid(s, shown, top=1.58, cols=len(shown),
+                                       row_height=1.44)
+        self._executive_trends(s, top=tiles_bottom + 0.30)
+
+        # Risk, last: the one line that says whether anything needs attention.
+        self._executive_risk_strip(s)
+        self._footer(s)
+        self._record("executive", spec.get("title"),
+                     "Funded, pipeline, forecast and risk on one page.")
+
+    def _headroom_tile(self):
+        """The closest approved limit, as a tile.
+
+        Straight from ``concentration.summarise`` — the same evaluator the risk
+        strip and the Concentration slide read, so the three cannot disagree.
+        ``None`` where no operator-approved configuration is in force: an empty
+        tile saying "no limits" would spend the page's scarcest space on an
+        absence the strip below already states.
+        """
+        from . import concentration as C
+
+        env = self.d.concentration or {}
+        rows = C.adapt_tests(env)
+        if not rows:
+            return None
+        summary = C.summarise(env, rows)
+        closest = summary.get("closest")
+        if not closest or closest.get("utilisation") is None:
+            return None
+        breaches, warnings = summary["breaches"], summary["warnings"]
+        intent = ("negative" if breaches else
+                  "neutral" if warnings else "positive")
+        return {
+            "label": "Closest limit",
+            "value": f"{closest['utilisation']:.0f}%",
+            "hint": f"{closest['label']} utilisation",
+            "deltaIntent": intent,
+        }
+
+    def _next_milestone(self):
+        """The nearest configured scale target the book has not yet reached.
+
+        Straight from the governed extrapolation ladder
+        (``forecast_extrapolation.build_extrapolation``) — the same milestones the
+        Time to Scale slide tabulates. No projection is performed here.
+        """
+        extrap = self.d.extrapolation or {}
+        for model_key in ("completionRunRateForecast", "kfiConversionForecast"):
+            model = extrap.get(model_key) or {}
+            if not model.get("available"):
+                continue
+            for row in model.get("milestones") or ():
+                base = row.get("base") or row.get("expected") or {}
+                period = base.get("period") if isinstance(base, dict) else None
+                if not period:
+                    for value in row.values():
+                        if isinstance(value, dict) and value.get("period"):
+                            period = value["period"]
+                            break
+                if period:
+                    return {"label": row.get("thresholdLabel", "target"),
+                            "value": str(period),
+                            "hint": "central run-rate scenario"}
+        return None
+
+    @staticmethod
+    def _period_labels(periods) -> List[str]:
+        """The category axis for an evolution series.
+
+        A WEEKLY series carries both ``week`` (the extract date) and ``period``
+        (its calendar month). Labelling four weekly extracts by month drew an
+        axis reading 2026-05, 2026-05, 2026-06, 2026-06 — four gridlines, two
+        labels, each printed twice, which reads as a rendering fault and hides
+        that the series has four observations. Where a distinct ``week`` exists
+        on every point it is the label; otherwise the monthly period is.
+        """
+        weeks = [str(p.get("week") or "") for p in periods]
+        if all(weeks) and len(set(weeks)) == len(weeks):
+            return weeks
+        return [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
+                for p in periods]
+
+    def _executive_trends(self, slide, *, top: float):
+        """Up to two compact trends: funded balance, and weighted pipeline.
+
+        Both are governed evolution series already resolved for later slides. A
+        series with fewer than two periods is simply omitted — a single point is
+        not a trend, and an empty chart frame on the landing page is worse than
+        one fewer chart.
+        """
+        # The band is whatever is left between the tiles and the risk strip, and
+        # all of it is used. A 2.30in cap left three quarters of an inch of dead
+        # panel under the chart on a page whose whole job is to look deliberate.
+        height = self.RISK_STRIP_TOP - self.RISK_STRIP_CLEARANCE - top
+        if height < 1.4:
+            return
+
+        # ONE TRAJECTORY, FULL WIDTH. Two half-width trends competed for the
+        # centre of the opening page and neither was legible enough to be the
+        # thing a reader takes from it. The portfolio's own trajectory is the
+        # visual that answers "where is this going"; the pipeline's own
+        # trajectory is the subject of the pipeline pages, and its destination
+        # is already on this page as the forecast tile.
+        funded_evo = (self.d.funded_evolution or {}).get("periods") or []
+        pipe_evo = (self.d.pipeline_evolution or {}).get("periods") or []
+        if len(funded_evo) >= 2:
+            cid, title, periods, metric = (
+                "exec_funded", "Funded balance by period", funded_evo,
+                "funded_balance")
+        elif len(pipe_evo) >= 2:
+            # A book with no funded history yet still has a story, and it is the
+            # origination one.
+            cid, title, periods, metric = (
+                "exec_pipeline", "Weighted expected pipeline by week", pipe_evo,
+                "weighted_expected_funded_amount")
+        else:
+            return
+
+        values = [(p.get("metrics") or {}).get(metric) for p in periods]
+        if sum(1 for v in values if v is not None) < 2:
+            return
+        box = (Inches(self.CONTENT_L), Inches(top),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(height))
+        il, it, iw, ih = self._card(slide, *box, title)
+        path = self.work / f"{cid}.png"
+        R.draw_lines(path, self._period_labels(periods),
+                     [{"name": title, "values": values}], iw, ih,
+                     theme=self.theme, currency=True, area=True, chart_id=cid)
+        self._place(slide, path, il, it, iw, ih)
+
+    def _executive_risk_strip(self, slide):
+        """One line on limits, from the governed concentration evaluator.
+
+        The counts and the closest-to-breaching test are ``concentration.summarise``
+        — the same figures the Concentration slide tabulates — so the landing page
+        and the risk page cannot disagree. "No approved configuration" is itself a
+        finding and is stated plainly rather than left blank.
+        """
+        from . import concentration as C
+
+        env = self.d.concentration or {}
+        rows = C.adapt_tests(env)
+        top = self.RISK_STRIP_TOP
+        width = Inches(self.CONTENT_R - self.CONTENT_L)
+        if not rows:
+            self._text(slide, Inches(self.CONTENT_L), Inches(top), width,
+                       Inches(0.30),
+                       "Concentration — no operator-approved limit configuration "
+                       "is in force for this portfolio.",
+                       size=10, color=self.theme.ink_400, italic=True)
+            return
+
+        summary = C.summarise(env, rows)
+        breaches, warnings = summary["breaches"], summary["warnings"]
+        within = max(summary["tests"] - breaches - warnings, 0)
+        parts = [f"{within} within limit"]
+        if warnings:
+            parts.append(f"{warnings} approaching")
+        if breaches:
+            parts.append(f"{breaches} in breach")
+        line = "Concentration — " + ", ".join(parts)
+
+        # The tile above already names the closest test and its utilisation.
+        # Repeating both here spends the page's one risk line restating a tile;
+        # what the tile cannot carry is the DISTANCE to the limit, so that is
+        # what this adds.
+        closest = summary.get("closest")
+        if closest and closest.get("utilisation") is not None:
+            headroom = closest.get("headroom")
+            if headroom is not None:
+                line += (f". {C.format_headroom(headroom, closest.get('unit'))} "
+                         f"of headroom on the closest, {closest['label']}")
+            else:
+                line += (f". Closest to its limit: {closest['label']} at "
+                         f"{closest['utilisation']:.0f}% utilisation")
+        if summary.get("expected_breaches"):
+            line += f". {summary['expected_breaches']} forecast to breach"
+
+        worst = (C.STATUS_BREACH if breaches else
+                 C.STATUS_WARNING if warnings else C.STATUS_PASS)
+        colour = {C.STATUS_BREACH: self.theme.rose,
+                  C.STATUS_WARNING: self.theme.amber}.get(worst, self.theme.mint)
+        self._panel(slide, Inches(self.CONTENT_L), Inches(top), width, Inches(0.40),
+                    fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+        self._text(slide, Inches(self.CONTENT_L + 0.18), Inches(top + 0.06),
+                   Emu(int(width) - int(Inches(0.36))), Inches(0.28),
+                   self._fit_label(line + ".", self.CONTENT_R - self.CONTENT_L - 0.4, 10),
+                   size=10, color=colour, bold=True)
 
     # ------------------------------------------------- investor narrative
     def slide_exec_insights(self, spec):
@@ -653,7 +1152,7 @@ class DeckBuilder:
                                 spec.get("title"), "Single portfolio.")
 
         # -- 2. the split, as one proportional bar ----------------------------
-        self._composition_bar(s, slices, total_bal, top=2.90)
+        self._composition_bar(s, slices, p, top=3.06)
 
         # -- 3. one card per portfolio type -----------------------------------
         # Cards, not columns: with more than two types a shared-row table forces
@@ -661,8 +1160,8 @@ class DeckBuilder:
         # their internal hierarchy.
         lead = [
             ("Balance", lambda sl: compact_currency(sl.balance)),
-            ("Share", lambda sl: (f"{(sl.balance or 0) / total_bal * 100:.1f}%"
-                                  if total_bal else "—")),
+            ("Share", lambda sl: (f"{p.share_of(sl) * 100:.1f}%"
+                                  if p.share_of(sl) is not None else "—")),
             ("Movement", lambda sl: self._signed_currency(sl.balance_movement)),
         ]
         rest = [
@@ -684,7 +1183,7 @@ class DeckBuilder:
         self._record(spec.get("id", "portfolio_composition"), spec.get("title"),
                      f"{len(slices)} portfolio type(s).")
 
-    def _composition_bar(self, s, slices, total, *, top: float):
+    def _composition_bar(self, s, slices, ctx, *, top: float):
         """The split as ONE proportional bar.
 
         A restrained institutional visual rather than a donut: segment length is
@@ -697,7 +1196,11 @@ class DeckBuilder:
                    self.theme.rag.get("amber", self.theme.ink_300)]
         x = left
         for i, sl in enumerate(slices):
-            share = ((sl.balance or 0.0) / total) if total else (1.0 / len(slices))
+            # From the governed composition service. An equal split is the
+            # fallback ONLY when there is no total to divide by.
+            share = ctx.share_of(sl)
+            if share is None:
+                share = 1.0 / len(slices)
             seg = max(width * share, 0.06)     # a sliver must still be visible
             bar = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x),
                                      Inches(top), Inches(seg), Inches(0.30))
@@ -717,7 +1220,8 @@ class DeckBuilder:
         # label. Listing every type again under a bar that already names them
         # spends a line of the slide saying the same thing twice.
         unlabelled = [(i, sl) for i, sl in enumerate(slices)
-                      if width * (((sl.balance or 0.0) / total) if total else 1.0) < 1.5]
+                      if width * (ctx.share_of(sl) if ctx.share_of(sl) is not None
+                                  else 1.0) < 1.5]
         lx = left
         for i, sl in unlabelled:
             dot = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(lx), Inches(top + 0.40),
@@ -726,7 +1230,9 @@ class DeckBuilder:
             dot.fill.fore_color.rgb = self._rgb(colours[i % len(colours)])
             dot.line.fill.background()
             dot.shadow.inherit = False
-            label = f"{sl.label} — {(((sl.balance or 0) / total * 100) if total else 0):.1f}%"
+            slice_share = ctx.share_of(sl)
+            label = (f"{sl.label} — {slice_share * 100:.1f}%" if slice_share is not None
+                     else str(sl.label))
             self._text(s, Inches(lx + 0.18), Inches(top + 0.34), Inches(3.2),
                        Inches(0.24), label, size=9, color=self.theme.ink_400)
             lx += 3.4
@@ -804,7 +1310,11 @@ class DeckBuilder:
                   if sl.balance_movement is not None]
         path = self.work / "cmp_attrib.png"
         if movers:
-            opening = (p.total_balance or 0) - sum(v for _s, v in movers)
+            # ``total - Σ movements`` is the opening the waterfall must reach.
+            # Both attribution slides derived it; one definition now serves both.
+            from mi_agent_api.portfolio_context import opening_from_movement
+            opening = opening_from_movement(p.total_balance,
+                                            sum(v for _s, v in movers)) or 0.0
             steps = [("Opening", float(opening), "base")]
             for sl, v in movers:
                 steps.append((sl.label.replace(" portfolio", "").replace(
@@ -874,7 +1384,11 @@ class DeckBuilder:
                   if sl.balance_movement is not None]
         path = self.work / "mv_type.png"
         if movers:
-            opening = (p.total_balance or 0) - sum(v for _s, v in movers)
+            # ``total - Σ movements`` is the opening the waterfall must reach.
+            # Both attribution slides derived it; one definition now serves both.
+            from mi_agent_api.portfolio_context import opening_from_movement
+            opening = opening_from_movement(p.total_balance,
+                                            sum(v for _s, v in movers)) or 0.0
             steps = [("Opening", float(opening), "base")]
             for sl, v in movers:
                 steps.append((sl.label.replace(" portfolio", "")
@@ -957,52 +1471,492 @@ class DeckBuilder:
         from . import movement as MV
 
         s = self._slide()
-        strats = self.d.funded.get("stratifications", [])
-        keys = spec.get("keys")
-        if keys:
-            strats = [st for st in strats if st.get("key") in keys]
-        strats = strats[:2]
+        # LENS. ``funded`` (default) reads the funded snapshot; ``pipeline``
+        # reads the governed pipeline stratifications, which carry the SAME
+        # bands from the SAME bucket registry. One handler, one visual grammar,
+        # so a pipeline LTV band and a funded LTV band are read the same way.
+        lens = spec.get("lens", "funded")
+        source = self.d.pipeline if lens == "pipeline" else self.d.funded
+        strats = (source or {}).get("stratifications", []) or []
+        # ``keys`` IS A PREFERENCE, NOT A FILTER. It names the cuts a reader asks
+        # for first; where one of them has nothing to distribute on this book —
+        # pipeline broker/channel at 100% Direct is the standing example — the
+        # slot goes to the next most informative dimension the book DOES
+        # support, rather than to a panel with one full-width bar in it.
+        #
+        # The judgement is the shared one in ``mi_agent_api.presentation``, so a
+        # dimension React declines to chart and a dimension the pack declines to
+        # draw are the same dimension.
+        from mi_agent_api import presentation as _sel
 
-        bridges = self.d.movement or {}
+        strats = [st for st in strats if st.get("bars")]
+        # A DEEP-DIVE PAGE CONTINUES; IT DOES NOT REPEAT. ``continues`` names an
+        # earlier stratification slide, and the dimensions that slide drew are
+        # withheld from this one so the second cut is the NEXT most informative
+        # set rather than the same four under a different title.
+        #
+        # This page used to be different purely because it preferred a different
+        # order. Once preference stopped deciding the outcome, both pages ranked
+        # the same candidates the same way and drew the same four panels — the
+        # deep dive has to be told what has already been spent.
+        taken = self._strat_drawn.get(spec.get("continues") or "", ())
+        if taken:
+            strats = [st for st in strats if st.get("key") not in taken]
+        chosen = _sel.select_dimensions(strats, want=4, value_key="balance",
+                                        preferred=tuple(spec.get("keys") or ()))
+        rejected = chosen["rejected"]
+        # On a book where EVERY dimension is concentrated, that is the finding —
+        # and an empty page is not an improvement on a flat one.
+        strats = chosen["selected"] or strats[:4]
+        flat = [st for st in strats if not self._has_spread(st)]
+
+        # Movement attribution is a FUNDED concept: it compares two funded
+        # reporting periods. A pipeline stratification has no such bridge.
+        bridges = (self.d.movement or {}) if lens == "funded" else {}
         moved = [bridges[st.get("key")] for st in strats
                  if bridges.get(st.get("key")) is not None
                  and bridges[st.get("key")].available]
         window = self._movement_window(moved[0]) if moved else "Balance by dimension"
-        self._header(s, spec.get("title", "Funded Stratifications"),
-                     ("Composition and period movement" if moved
-                      else "Balance by dimension"), accent=self.theme.peri)
+        default_strap = ("Pipeline balance by dimension" if lens == "pipeline"
+                         else "Balance by dimension")
 
-        has_takeaways = bool(moved)
+        # A 2 x 2 matrix leaves no room for a takeaway strip; two panels do.
+        has_takeaways = bool(moved) and len(strats) <= 2
+        # THE STRAPLINE DESCRIBES THE PAGE, NOT THE DATA BEHIND IT. A four-panel
+        # matrix suppresses the movement strip for room, and a subtitle that
+        # still promised "period movement" would send a reader hunting the page
+        # for a view that is not on it. Movement is available either way — it is
+        # decomposed on Funded Balance Movement — so the honest strapline here
+        # is the one that names what these panels actually show.
+        self._header(s, spec.get("title", "Stratifications"),
+                     ("Composition and period movement" if has_takeaways
+                      else default_strap), accent=self.theme.peri)
         chart_h = 3.62 if has_takeaways else 4.95
         ph = True
         if len(strats) == 1:
-            boxes = [(Inches(0.55), Inches(1.62), Inches(12.25), Inches(chart_h))]
+            boxes = [(Inches(self.CONTENT_L), Inches(1.62),
+                      Inches(self.CONTENT_R - self.CONTENT_L), Inches(chart_h))]
         else:
-            boxes = [(Inches(0.55), Inches(1.62), Inches(6.02), Inches(chart_h)),
-                     (Inches(6.78), Inches(1.62), Inches(6.02), Inches(chart_h))]
+            boxes = self._matrix_boxes(len(strats), height=chart_h)
 
         for st, box in zip(strats, boxes):
             key = st.get("key")
-            # The DASHBOARD'S order (strat_order ports stratOrder.ts): ordinal
-            # bands by their bound, everything else alphabetically. The engine
-            # ranks by balance, which drew LTV as 20-30, 40-50 … 30-40.
-            rows = order_bars(st.get("bars", []))
+            # The governed display order (``mi_agent_api.presentation``, which
+            # the dashboard's bar lists also consume): ordinal bands by their
+            # bound. The engine ranks by balance, which drew LTV as 20-30,
+            # 40-50 … 30-40.
+            from mi_agent_api import presentation as _sel
+            rows = _sel.order_bars(st.get("bars", []), dimension=key)
             ok = self._barlist_card(s, box, st.get("label", key or ""), rows,
-                                    "balance", cid=f"strat_{key}")
+                                    "balance", cid=f"strat_{lens}_{key}",
+                                    dimension=key)
             ph = ph and not ok
 
         # A single marginal-change panel beneath, for the dimension that moved
         # most — one clear change view rather than a grid of small ones.
         lines: List[str] = []
-        if moved:
+        # NEVER SILENT. A reader must be able to tell a dimension dropped for
+        # being uniform from one the tape does not carry.
+        note = strat_ledger_note(rejected, flat, drawn=len(strats))
+        if has_takeaways:
+            if note:
+                lines.append(note)
             for b in moved:
                 lines.extend(MV.takeaways(b, limit=1))
             self._takeaway_strip(s, lines[:3], top=5.42)
+        elif note:
+            self._text(s, Inches(self.CONTENT_L), Inches(6.62),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.28),
+                       note, size=9, color=self.theme.ink_500, italic=True)
         if not strats:
-            self._placeholder_body(s, "No funded stratifications for this run.")
+            self._placeholder_body(
+                s, f"No {lens} stratifications for this run.")
         self._footer(s)
+        self._strat_drawn[str(spec.get("id") or "strat")] = tuple(
+            st.get("key") for st in strats)
         self._record(spec.get("id", "strat"), spec.get("title"),
                      window if moved else "", placeholder=ph)
+
+    # ------------------------------------------- economic funded movement
+    def slide_balance_movement(self, spec):
+        """Why did funded balance change? — the ECONOMIC bridge.
+
+        Opening, plus the loans that arrived, less the loans that left, plus what
+        the loans present throughout did. Every figure is
+        ``evolution.funded_balance_movement``, which composes the governed
+        reconciled bridge with the governed evidence-based exit split; the deck
+        computes none of it and draws only what reconciled.
+
+        The continuing-loan leg is deliberately NOT labelled interest. It is the
+        movement on loans present at both dates, and separating accretion from
+        repayment needs per-loan period movement the canonical model does not
+        carry — so the slide says what it measured.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        s = self._slide()
+        bm = self.d.balance_movement or {}
+        if not bm.get("available"):
+            self._header(s, spec.get("title", "Funded Balance Movement"),
+                         "Opening to closing", accent=self.theme.peri)
+            self._placeholder_body(s, str(bm.get("reason") or
+                                          "No reconciled movement for this period."))
+            self._footer(s)
+            return self._record("balance_movement", spec.get("title"), "",
+                                placeholder=True)
+
+        opening = float(bm["openingBalance"])
+        closing = float(bm["closingBalance"])
+        net = float(bm["netChange"])
+        window = f"{bm.get('openingPeriod')} to {bm.get('closingPeriod')}"
+
+        # FINDING-LED SUBTITLE, from the reconciled figures alone.
+        direction = "increase" if net >= 0 else "reduction"
+        strap = (f"{compact_currency(abs(net))} {direction} over {window} — "
+                 f"{self._movement_finding(bm)}")
+        self._header(s, spec.get("title", "Funded Balance Movement"),
+                     self._fit_label(strap, self.CONTENT_R - self.CONTENT_L, 11),
+                     accent=self.theme.peri)
+
+        # The waterfall. Exits are shown split where the evidence classified
+        # them, as one bar per reason, so the reader sees WHY loans left.
+        steps = [("Opening", opening, "base"),
+                 ("+ New funding", float(bm["newLoanBalance"]), "add")]
+        components = bm.get("exitComponents") or []
+        if components and bm.get("exitsReconcile"):
+            for comp in components:
+                steps.append((f"− {comp['label']}", -float(comp["balance"]), "sub"))
+        else:
+            steps.append(("− Exits", -float(bm["exitedLoanBalance"]), "sub"))
+        movement = float(bm["continuingMovement"])
+        steps.append((("+ " if movement >= 0 else "− ") + "Continuing book",
+                      movement, "add" if movement >= 0 else "sub"))
+        steps.append(("Closing", closing, "total"))
+
+        # The tile strip below carries a HINT line, which needs 1.34in of tile —
+        # at 1.10 the hint rendered outside its own panel and landed on the
+        # disclosure. The chart gives up the difference rather than the caption.
+        box = (Inches(self.CONTENT_L), Inches(1.72),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(3.34))
+        il, it, iw, ih = self._card(s, *box, f"Funded balance movement, {window}")
+        path = self.work / "econ_bridge.png"
+        render_bridge_waterfall(path, steps, iw, ih, theme=self.theme,
+                                chart_id="balance_movement")
+        self._place(s, path, il, it, iw, ih)
+
+        # The counts beneath, and the disclosure the identity depends on.
+        tiles = [
+            {"label": "Loans added", "value": compact_number(bm.get("newLoanCount")),
+             "hint": compact_currency(bm["newLoanBalance"])},
+            {"label": "Loans exited", "value": compact_number(bm.get("exitedLoanCount")),
+             "hint": compact_currency(bm["exitedLoanBalance"])},
+            {"label": "Loans throughout",
+             "value": compact_number(bm.get("continuingLoanCount")),
+             "hint": compact_currency(movement) + " movement"},
+            {"label": "Net change", "value": compact_currency(net),
+             "deltaIntent": "positive" if net >= 0 else "negative"},
+        ]
+        for l, t2, w, h, tile in zip(*self._strip(tiles, top=5.18, height=1.34)):
+            self._tile(s, l, t2, w, h, tile)
+
+        self._text(s, Inches(self.CONTENT_L), Inches(6.58),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.44),
+                   self._movement_disclosure(bm), size=8.5,
+                   color=self.theme.ink_500, italic=True, spacing=1.04)
+        self._footer(s)
+        self._record("balance_movement", spec.get("title"), strap)
+
+    #: A bridge leg must hold this much of the gross movement before the page
+    #: names it. Deliberately STRICTER than ``materiality.DOMINANCE_SHARE``,
+    #: which governs contributions competing within one dimension: the three
+    #: legs here are structural — every bridge has all of them — so a leg that
+    #: merely leads is not a driver, and only one that carries most of the
+    #: movement is worth naming as the reason the balance changed.
+    LEG_DOMINANCE_SHARE = 0.45
+
+    def _movement_finding(self, bm) -> str:
+        """The one clause that says where the movement came from.
+
+        Chosen from the reconciled legs by magnitude, so it cannot claim a driver
+        the bridge does not show.
+        """
+        legs = [("new funding", abs(float(bm.get("newLoanBalance") or 0.0))),
+                ("exits", abs(float(bm.get("exitedLoanBalance") or 0.0))),
+                ("movement on the continuing book",
+                 abs(float(bm.get("continuingMovement") or 0.0)))]
+        total = sum(v for _, v in legs)
+        if not total:
+            return "no loan-level movement in the period"
+        label, value = max(legs, key=lambda x: x[1])
+        share = value / total
+        if share < self.LEG_DOMINANCE_SHARE:
+            return "movement spread across new funding, exits and the continuing book"
+        return f"driven primarily by {label}"
+
+    @staticmethod
+    def _movement_disclosure(bm) -> str:
+        """What the identity rests on, stated on the page rather than assumed."""
+        parts = [f"Reconciled on {bm.get('identifierField') or 'loan identity'}; "
+                 f"residual within tolerance."]
+        if bm.get("exitsClassified") and bm.get("exitsReconcile"):
+            evidence = ", ".join(bm.get("exitEvidenceFields") or ()) or "governed exit evidence"
+            parts.append(f"Exit reasons from {evidence}.")
+        elif bm.get("exitsClassified") is False:
+            parts.append("Exit reasons not evidenced on this tape; exits shown in total.")
+        parts.append("Continuing-book movement is the change on loans present at "
+                     "both dates; it is not split into interest, repayment or "
+                     "further advance.")
+        return " ".join(parts)
+
+    # ------------------------------------------------ stock by constituent book
+    def slide_funded_stock(self, spec):
+        """Where does funded exposure sit, and how has that moved?
+
+        A stacked area over ``funded_evolution.breakdowns['portfolio']`` — the
+        governed period x book series that has always been computed and never
+        drawn. The stack reconciles to the period total by construction: the
+        breakdown routes every blank to an explicit Unknown / Missing bucket
+        precisely so it does.
+
+        With ONE book the stack conveys nothing a single line does not, so the
+        slide falls back to the total series rather than drawing a one-colour
+        stack of itself.
+        """
+        s = self._slide()
+        evo = self.d.funded_evolution or {}
+        periods = evo.get("periods") or []
+        books = self._book_series(evo)
+
+        if len(periods) < 2:
+            self._header(s, spec.get("title", "Funded Stock"), "Funded balance over time")
+            self._placeholder_body(s, "Funded stock over time needs at least two "
+                                      "reporting periods.")
+            self._footer(s)
+            return self._record("funded_stock", spec.get("title"), "", placeholder=True)
+
+        x = self._period_labels(periods)
+        totals = [(p.get("metrics") or {}).get("funded_balance") for p in periods]
+        multi = len(books) > 1
+        # FINDING-LED SUBTITLE, from the series itself. The title is stable; the
+        # subtitle says what the series shows, so a reader who reads only the
+        # headings still gets the direction of the book.
+        strap = self._stock_strap(totals, x, books, multi)
+        self._header(s, spec.get("title", "Funded Stock"), strap, accent=self.theme.peri)
+
+        box = (Inches(self.CONTENT_L), Inches(1.72),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(4.10))
+        il, it, iw, ih = self._card(
+            s, *box, "Funded balance by constituent book" if multi
+            else "Funded balance by reporting period")
+        path = self.work / "funded_stock.png"
+        if multi:
+            series = [{"name": name, "values": vals} for name, vals in books]
+            R.draw_lines(path, x, series, iw, ih, theme=self.theme, currency=True,
+                         stack=True, chart_id="funded_stock")
+        else:
+            R.draw_lines(path, x, [{"name": "Funded balance", "values": totals}],
+                         iw, ih, theme=self.theme, currency=True, area=True,
+                         chart_id="funded_stock")
+        self._place(s, path, il, it, iw, ih)
+
+        self._stock_takeaway(s, books, totals, x, multi)
+        self._footer(s)
+        self._record("funded_stock", spec.get("title"), strap)
+
+    def _stock_strap(self, totals, x, books, multi) -> str:
+        """What the stock series shows, in one clause."""
+        from .metric_resolver import compact_currency
+
+        opening = next((v for v in totals if v is not None), None)
+        closing = next((v for v in reversed(totals) if v is not None), None)
+        prefix = f"{len(books)} constituent books · " if multi else ""
+        if opening is None or closing is None or not opening:
+            return prefix + "Funded balance over time"
+        pct = (closing - opening) / abs(opening) * 100.0
+        direction = "up" if pct >= 0 else "down"
+        return (f"{prefix}{compact_currency(closing)} at {x[-1]}, "
+                f"{direction} {abs(pct):.1f}% since {x[0]}")
+
+    def _book_series(self, evo):
+        """``[(book, [value per period])]`` from the governed breakdown, ordered
+        largest-closing-first so the stack reads top-down by size.
+
+        Every period is filled — a book absent from a period contributes zero
+        there rather than breaking the stack — so the series sum equals the
+        period total exactly.
+        """
+        rows = ((evo.get("breakdowns") or {}).get("portfolio")) or []
+        periods = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
+                   for p in (evo.get("periods") or [])]
+        if not rows or not periods:
+            return []
+        index = {p: i for i, p in enumerate(periods)}
+        by_book = {}
+        for row in rows:
+            per, key = str(row.get("period")), str(row.get("key"))
+            if per not in index:
+                continue
+            by_book.setdefault(key, [0.0] * len(periods))[index[per]] = float(
+                row.get("value") or 0.0)
+        return sorted(by_book.items(), key=lambda kv: kv[1][-1], reverse=True)
+
+    def _stock_takeaway(self, slide, books, totals, x, multi):
+        """One line: what the stack says. Materiality decides whether a book may
+        be named as the one that moved."""
+        from mi_agent_api import materiality as MAT
+        from .metric_resolver import compact_currency
+
+        lines, largest = [], ""
+        opening = next((v for v in totals if v is not None), None)
+        closing = next((v for v in reversed(totals) if v is not None), None)
+        if opening is not None and closing is not None:
+            delta = closing - opening
+            lines.append(
+                f"Funded balance moved from {compact_currency(opening)} at {x[0]} "
+                f"to {compact_currency(closing)} at {x[-1]} "
+                f"({'+' if delta >= 0 else '−'}{compact_currency(abs(delta))}).")
+        if multi and len(totals) >= 2:
+            moves = [{"label": name, "value": (vals[-1] - vals[0])}
+                     for name, vals in books]
+            outcome = MAT.classify(moves, base=opening)
+            sentence = MAT.describe(outcome, dimension="constituent book",
+                                    money=compact_currency)
+            if sentence:
+                lines.append(sentence)
+            share = closing and books and books[0][1][-1] / closing
+            if share:
+                largest = (f"{books[0][0]} is the largest book at "
+                           f"{share * 100:.0f}% of closing balance.")
+        # ONE STORY, NOT TWO. Where the movement page is also in the deck, this
+        # page names the number they share and hands the reader on to it. Stated
+        # only when the two engines actually agree — a pointer to a page that
+        # closes on a different figure would be worse than no pointer.
+        bm = self.d.balance_movement or {}
+        if bm.get("available") and closing is not None:
+            bridge_close = float(bm.get("closingBalance") or 0.0)
+            if abs(bridge_close - float(closing)) <= max(0.01, abs(bridge_close) * 1e-9):
+                lines.append(
+                    f"The same {compact_currency(bridge_close)} closing balance is "
+                    f"decomposed loan by loan on Funded Balance Movement.")
+        # The hand-off to the movement page outranks the largest-book line: the
+        # strip holds three, and connecting the two pages is the point.
+        if largest and len(lines) < 3:
+            lines.append(largest)
+        self._takeaway_strip(slide, lines[:3], top=5.96)
+
+    # -------------------------------------------------- per-book forward view
+    def slide_portfolio_projections(self, spec):
+        """Which constituent book is expected to drive the portfolio?
+
+        ``forecast_bridge.portfolio_projections`` — current balance, expected
+        originations under each book's governed forecast treatment, and a
+        retention factor applied ONLY where the client supplied an approved
+        run-off curve. Trakt models no run-off of its own; where none was
+        supplied the balance is held flat and this slide says so, because a
+        projection that quietly assumes a book never redeems is worse than one
+        that admits it does not know.
+        """
+        from .metric_resolver import compact_currency
+
+        s = self._slide()
+        pp = self.d.portfolio_projections or {}
+        books = pp.get("portfolios") or []
+        if len(books) < 1:
+            self._header(s, spec.get("title", "Forward View by Book"), "")
+            self._placeholder_body(s, "No constituent-book projection for this scope.")
+            self._footer(s)
+            return self._record("portfolio_projections", spec.get("title"), "",
+                                placeholder=True)
+
+        horizon = pp.get("horizonMonths")
+        strap = (f"Current and projected balance by book, {horizon}-month horizon"
+                 if horizon else "Current and projected balance by book")
+        self._header(s, spec.get("title", "Forward View by Book"), strap,
+                     accent=self.theme.mint)
+
+        ordered = sorted(books, key=lambda b: float(b.get("projectedBalance") or 0.0),
+                         reverse=True)
+        rows = [[str(b.get("label") or b.get("portfolioId")),
+                 compact_currency(b.get("currentBalance")),
+                 compact_currency(b.get("expectedNewOriginations")),
+                 ("—" if b.get("balanceRetentionFactor") is None
+                  else f"{float(b['balanceRetentionFactor']) * 100:.1f}%"),
+                 compact_currency(b.get("projectedBalance"))]
+                for b in ordered]
+        # THE TOTAL MUST BE THE SUM OF THE ROWS ABOVE IT. Where the governed
+        # pipeline cannot be attributed to an individual book, the engine holds
+        # the whole weighted amount OUTSIDE the per-book rows and adds it to the
+        # total — correctly, and with its own disclosure. Omitting that row put a
+        # £111.8MM total over rows summing to £104.8MM, which is the first thing
+        # a funder checks and the last thing a pack can afford to get wrong.
+        unattributed = float(pp.get("unattributedExpectedOriginations") or 0.0)
+        if unattributed:
+            rows.append(["Expected originations — not attributed to a book", "",
+                         compact_currency(unattributed), "",
+                         compact_currency(unattributed)])
+        rows.append(["Total", compact_currency(pp.get("totalCurrentBalance")), "",
+                     "", compact_currency(pp.get("totalProjectedBalance"))])
+
+        box = (Inches(self.CONTENT_L), Inches(1.72),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(2.95))
+        il, it, iw, ih = self._card(s, *box, "Projection by constituent book")
+        path = self.work / "book_projection.png"
+        # "Run-off retained" rather than "Retention": this is the share of the
+        # existing balance the CLIENT's approved run-off curve keeps over the
+        # horizon, not a survival rate Trakt observed.
+        R.draw_table(path, ["Book", "Current", "Expected additions",
+                            "Run-off retained", "Projected"], rows, iw, ih,
+                     theme=self.theme, chart_id="book_projection")
+        self._place(s, path, il, it, iw, ih)
+
+        # Current vs projected, side by side, so the shape is visible not read.
+        chart = (Inches(self.CONTENT_L), Inches(4.90),
+                 Inches(self.CONTENT_R - self.CONTENT_L), Inches(1.62))
+        cl, ct, cw, ch = self._card(s, *chart, "Projected balance by book")
+        p2 = self.work / "book_projection_bars.png"
+        self._barlist_rows(p2, ordered, cw, ch)
+        self._place(s, p2, cl, ct, cw, ch)
+
+        self._text(s, Inches(self.CONTENT_L), Inches(6.62),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.30),
+                   self._projection_disclosure(pp), size=9,
+                   color=self.theme.ink_500, italic=True)
+        self._footer(s)
+        self._record("portfolio_projections", spec.get("title"), strap)
+
+    def _barlist_rows(self, path, books, w, h):
+        rows = [{"label": str(b.get("label") or b.get("portfolioId")),
+                 "balance": float(b.get("projectedBalance") or 0.0)}
+                for b in books]
+        R.draw_barlist(path, rows, "balance", w, h, theme=self.theme,
+                       chart_id="book_projection_bars", dimension="portfolio")
+
+    @staticmethod
+    def _projection_disclosure(pp) -> str:
+        """The run-off disclosure, verbatim in substance from the governed
+        payload — never dropped, because it is the caveat that makes the
+        projection honest."""
+        not_modelled = pp.get("runoffNotModelled") or []
+        modelled = pp.get("runoffModelled") or []
+        parts = []
+        if pp.get("unattributedExpectedOriginations"):
+            # The engine's own words on why the pipeline is not split by book.
+            attribution = next(
+                (d for d in (pp.get("disclosures") or ())
+                 if "not attributed to an individual portfolio" in str(d)), None)
+            parts.append(str(attribution) if attribution else
+                         "Expected originations are not attributed to an "
+                         "individual book and are shown for the originating "
+                         "group.")
+        if modelled:
+            parts.append(f"Run-off applied from the client's approved curve for "
+                         f"{', '.join(str(x) for x in modelled)}.")
+        if not_modelled:
+            parts.append(f"No approved run-off curve for "
+                         f"{', '.join(str(x) for x in not_modelled)}; those "
+                         f"balances are held flat, not projected to decay.")
+        parts.append("Trakt generates no mortality, decay or run-off assumption.")
+        return " ".join(parts)
 
     def slide_geo(self, spec):
         s = self._slide()
@@ -1040,7 +1994,8 @@ class DeckBuilder:
         self._footer(s)
         self._record("geography", spec.get("title"), "", placeholder=not areas)
 
-    def _evolution_lines(self, s, spec, evo, chart_specs, accent=None):
+    def _evolution_lines(self, s, spec, evo, chart_specs, accent=None,
+                         height=None):
         """Render N line-chart cards from an evolution payload's periods[].
 
         A time series needs ≥2 reporting periods; the dashboard flags a single cut
@@ -1048,9 +2003,15 @@ class DeckBuilder:
         lone point — so do the same (a one-dot 'trend' reads as broken)."""
         periods = evo.get("periods", [])
         single = bool(evo.get("singlePeriod")) or len(periods) < 2
-        x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
-             for p in periods]
-        boxes = self._chart_boxes(len(chart_specs))
+        x = self._period_labels(periods)
+        # Only measures the governed series actually carries. A tape without an
+        # interest rate should lose that panel, not gain an empty one.
+        chart_specs = [cs for cs in chart_specs
+                       if any((p.get("metrics") or {}).get(ser["key"]) is not None
+                              for p in periods for ser in cs["series"])] or chart_specs[:1]
+        boxes = (self._matrix_boxes(len(chart_specs)) if len(chart_specs) > 2
+                 else self._chart_boxes(len(chart_specs), **(
+                     {"height": height} if height else {})))
         for cs, box in zip(chart_specs, boxes):
             il, it, iw, ih = self._card(s, *box, cs["title"])
             series = [{"name": ser.get("name", ""),
@@ -1058,26 +2019,67 @@ class DeckBuilder:
                        "color": ser.get("color")}
                       for ser in cs["series"]]
             path = self.work / f"{cs['id']}.png"
-            if not single:
-                R.draw_lines(path, x, series, iw, ih, theme=self.theme,
-                             currency=cs.get("currency", True),
-                             percent=cs.get("percent", False),
-                             area=cs.get("area", False))
-            else:
+            if single:
                 render_placeholder_png(path, "", "Insufficient reporting history "
                                        "(needs ≥2 periods)", theme=self.theme,
                                        width_in=iw, height_in=ih)
+                self._place(s, path, il, it, iw, ih)
+                continue
+            # A MEASURE THAT DID NOT MOVE IS NOT A TREND. A weighted rate that
+            # travelled four thousandths of a point drew a dramatic-looking
+            # zigzag against three axis labels all reading "6.62%" — the chart
+            # magnified noise into a story and then could not label it. Saying
+            # it held is the honest version, and takes the same space.
+            travel = self._travel([v for ser in series for v in ser["values"]])
+            if travel is not None and travel < self.FLAT_SERIES_TRAVEL:
+                self._text(s, il, it + Inches(0.10),
+                           Inches(float(iw)), Inches(0.9),
+                           f"{cs['series'][0].get('name', 'This measure')} held "
+                           f"steady across the period, moving less than "
+                           f"{self.FLAT_SERIES_TRAVEL * 100:.1f}% of its own "
+                           f"level. A trend chart of it would magnify noise.",
+                           size=10.5, color=self.theme.ink_400, spacing=1.15)
+                continue
+            R.draw_lines(path, x, series, iw, ih, theme=self.theme,
+                         currency=cs.get("currency", True),
+                         percent=cs.get("percent", False),
+                         area=cs.get("area", False), chart_id=cs["id"])
             self._place(s, path, il, it, iw, ih)
         return single
+
+    #: Below this movement, against the measure's own level, a series is flat
+    #: and a trend chart of it magnifies noise. The same test the cohort hero
+    #: curve uses, so "did this move" means one thing across the pack.
+    FLAT_SERIES_TRAVEL = 0.005
+
+    @staticmethod
+    def _travel(values):
+        """How far a series moves across the period, against its own level."""
+        real = [float(v) for v in values if v is not None]
+        if len(real) < 2:
+            return None
+        level = max(abs(sum(real) / len(real)), 1e-9)
+        return (max(real) - min(real)) / level
 
     def slide_funded_evolution(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Funded Evolution"), "Funded book over time")
+        # The four measures the dashboard's funded Evolution tab plots. The deck
+        # used to show two of them, so the same tab and the same slide described
+        # the book differently.
         ph = self._evolution_lines(s, spec, self.d.funded_evolution, [
             {"id": "evo_bal", "title": "Funded balance by month",
-             "series": [{"name": "Funded balance", "key": "funded_balance"}], "currency": True},
+             "series": [{"name": "Funded balance", "key": "funded_balance"}],
+             "currency": True},
+            {"id": "evo_count", "title": "Funded loan count by month",
+             "series": [{"name": "Loan count", "key": "loan_count"}],
+             "currency": False},
             {"id": "evo_ltv", "title": "WA current LTV by month",
-             "series": [{"name": "WA LTV", "key": "wa_ltv"}], "currency": False, "percent": True},
+             "series": [{"name": "WA LTV", "key": "wa_ltv"}],
+             "currency": False, "percent": True},
+            {"id": "evo_rate", "title": "WA interest rate by month",
+             "series": [{"name": "WA rate", "key": "wa_interest_rate"}],
+             "currency": False, "percent": True},
         ])
         self._footer(s)
         self._record("funded_evolution", spec.get("title"), "", placeholder=ph)
@@ -1129,8 +2131,9 @@ class DeckBuilder:
         il, it, iw, ih = self._card(s, *boxes[0], "Funded balance by vintage")
         p1 = self.work / "cohort_balance.png"
         # Vintages read in time order, as the dashboard's formation table does.
-        R.draw_barlist(p1, order_bars([{"label": r.vintage, "balance": r.balance}
-                                       for r in rows]),
+        from mi_agent_api import presentation as _sel
+        R.draw_barlist(p1, _sel.order_bars([{"label": r.vintage, "balance": r.balance}
+                                            for r in rows], dimension="vintage"),
                        "balance", iw, ih, theme=self.theme)
         self._place(s, p1, il, it, iw, ih)
 
@@ -1187,9 +2190,9 @@ class DeckBuilder:
         row_h = min(0.34, band / max(len(shown), 1))
         head_y = (it / EMU_IN) + 0.16
         for label, dx, cw, align, _fn in cols:
-            self._text(s, Inches(x0 + dx), Inches(head_y), Inches(cw), Inches(0.24),
-                       label, size=8.5, color=self.theme.ink_400, bold=True,
-                       align=align)
+            self._text(s, Inches(x0 + dx), Inches(head_y + pad), Inches(cw),
+                       Inches(0.24), label, size=8.5, color=self.theme.ink_400,
+                       bold=True, align=align)
         size = 9.5 if len(shown) <= 8 else 8.5
         for i, r in enumerate(shown):
             y = Inches(head_y + 0.30 + i * row_h)
@@ -1233,22 +2236,45 @@ class DeckBuilder:
             return self._record("cohort_progression", spec.get("title"), "",
                                 placeholder=True)
 
-        # -- balance curves, indexed to formation ----------------------------
+        # -- the measure that actually seasons, indexed to formation ---------
+        # Funded balance used to be the hero unconditionally, which on a stable
+        # book drew four nearly flat lines — true, and an answer to no question
+        # a reader has. The curve goes to the governed measure that is available
+        # for these cohorts AND moves as they age.
         boxes = self._chart_boxes(2, top=1.62, height=3.62)
-        il, it, iw, ih = self._card(s, *boxes[0],
-                                    "Funded balance by reporting periods since formation")
-        p1 = self.work / "cohort_prog_balance.png"
+        hero = CO.hero_metric(live)
         longest = max(len(x.live) for x in live)
-        R.draw_lines(p1, [str(i) for i in range(longest)],
-                     [{"name": x.vintage,
-                       "values": [x.value("funded_balance", i) if i < len(x.live)
-                                  else None for i in range(longest)]}
-                      for x in live],
-                     iw, ih, theme=self.theme, currency=True)
-        self._place(s, p1, il, it, iw, ih)
+        if hero:
+            metric, title, fmt = hero
+            il, it, iw, ih = self._card(s, *boxes[0], title)
+            p1 = self.work / "cohort_prog_hero.png"
+            R.draw_lines(
+                p1, [str(i) for i in range(longest)],
+                [{"name": x.vintage,
+                  "values": [(CO._series_values(x, metric)[i]
+                              if i < len(x.live) else None)
+                             for i in range(longest)]}
+                 for x in live],
+                iw, ih, theme=self.theme, currency=(fmt == "gbp"),
+                percent=(fmt == "pct"), chart_id="cohort_prog_hero")
+            self._place(s, p1, il, it, iw, ih)
+        else:
+            # Nothing moved. That IS the finding, and it is worth more than a
+            # flat chart of it.
+            il, it, iw, ih = self._card(
+                s, *boxes[0], "Seasoning across the governed cohort measures")
+            self._text(s, il, it + Inches(0.22), Inches(iw), Inches(1.0),
+                       "No governed cohort measure has moved materially since "
+                       "these vintages formed. The pools are stable on balance, "
+                       "loan count, weighted LTV and rate alike; the table "
+                       "beside this states each vintage at formation and today.",
+                       size=11, color=self.theme.ink_400, spacing=1.15)
 
-        # -- retention, the question the curves are asked to answer -----------
-        il, it, iw, ih = self._card(s, *boxes[1], "Retention since formation")
+        # -- how each pool has changed since formation ------------------------
+        # Titled for what the table measures rather than for "retention": the
+        # balance column is a net-of-everything ratio, and on a roll-up book it
+        # exceeds 100% while loans are leaving. Only the loan column is survival.
+        il, it, iw, ih = self._card(s, *boxes[1], "Change since formation")
         self._cohort_change_table(s, live, il, it, iw, ih)
 
         overflow = payload.get("overflow") or []
@@ -1257,9 +2283,14 @@ class DeckBuilder:
         # check and cannot read a negation, and it is the more valuable of the
         # two properties — so the sentence is written without the word.
         note = ("Cohorts are the governed static pool: a vintage fixed at "
-                "formation and tracked across reporting periods. Retention is "
-                "the latest period as a percentage of formation; exits are "
-                "loans in the pool at formation that are no longer in it.")
+                "formation and tracked across reporting periods. Loan survival "
+                "is surviving loans as a percentage of the loans at formation; "
+                "exits are loans in the pool at formation that are no longer in "
+                "it. Balance vs formation is the latest balance as a percentage "
+                "of the balance at formation — a net figure that is not "
+                "decomposed here, and which can exceed 100%. Periods is the "
+                "number of reporting periods the cohort has been observed for "
+                "since it formed.")
         if declined:
             note += (f" {len(declined)} cohort"
                      f"{'s were' if len(declined) != 1 else ' was'} not plotted "
@@ -1276,13 +2307,22 @@ class DeckBuilder:
     def _cohort_change_table(self, s, live, il, it, iw, ih):
         from .metric_resolver import compact_currency, compact_number
 
-        spec_cols = [("Cohort", 0.74, PP_ALIGN.LEFT),
-                     ("At formation", 1.10, PP_ALIGN.RIGHT),
-                     ("Latest", 1.00, PP_ALIGN.RIGHT),
-                     ("Retention", 0.90, PP_ALIGN.RIGHT),
-                     ("Loans", 0.66, PP_ALIGN.RIGHT),
-                     ("Exits", 0.62, PP_ALIGN.RIGHT),
-                     ("Seasoning", 0.90, PP_ALIGN.RIGHT)]
+        # COLUMN NAMES ARE THE MEASURE, NOT A HOUSE WORD. "Retention" is
+        # reserved for the count-based survival ratio; the balance ratio is
+        # named for what it is, because calling a >100% balance figure
+        # "retention" invites a reader to conclude the pool grew.
+        # Headers must fit their column on ONE line. "Loan survival" and
+        # "Seasoning" each wrapped, and the wrap clipped mid-word — the meaning
+        # of every one of these columns is carried by the note beneath the card,
+        # so the headers are short and the note does the explaining.
+        spec_cols = [("Cohort", 0.68, PP_ALIGN.LEFT),
+                     ("At formation", 1.00, PP_ALIGN.RIGHT),
+                     ("Latest", 0.86, PP_ALIGN.RIGHT),
+                     ("Balance vs formation", 1.30, PP_ALIGN.RIGHT),
+                     ("Loans", 0.64, PP_ALIGN.RIGHT),
+                     ("Survival", 0.78, PP_ALIGN.RIGHT),
+                     ("Exits", 0.56, PP_ALIGN.RIGHT),
+                     ("Periods", 0.66, PP_ALIGN.RIGHT)]
         scale = (iw - 0.28) / sum(c[1] for c in spec_cols)
         cols, dx = [], 0.0
         for label, weight, align in spec_cols:
@@ -1296,9 +2336,14 @@ class DeckBuilder:
                        align=align)
         band = ih - 0.52                      # ih is already INCHES from _card
         row_h = min(0.44, band / max(len(live), 1))
+        # Centred in the band. Four rows pinned to the top of a 3.6in card leave
+        # an inch and a half of empty panel, which reads as a rendering fault
+        # rather than as a short list.
+        pad = max(0.0, (band - len(live) * row_h) / 2)
         for i, x in enumerate(live):
-            y = Inches(head_y + 0.32 + i * row_h)
-            bal_ret = x.retention("funded_balance")
+            y = Inches(head_y + 0.32 + pad + i * row_h)
+            bal_ret = x.balance_vs_formation
+            survival = x.loan_survival
             exits = x.exits
             values = [
                 (x.vintage, self.theme.ink_100),
@@ -1308,10 +2353,11 @@ class DeckBuilder:
                  self.theme.ink_100),
                 (f"{x.surviving_count:,}/{x.formation_count:,}"
                  if x.formation_count is not None else "—", self.theme.ink_300),
+                (f"{survival:.0f}%" if survival is not None else "—",
+                 self.theme.ink_100),
                 (f"{exits:,}" if exits is not None else "—",
                  self.theme.rag.get("amber") if exits else self.theme.ink_300),
-                (f"{len(x.live) - 1} period"
-                 f"{'s' if len(x.live) - 1 != 1 else ''}", self.theme.ink_300),
+                (str(len(x.live) - 1), self.theme.ink_300),
             ]
             for (value, colour), (_label, dx, cw, align) in zip(values, cols):
                 self._text(s, Inches(x0 + dx), y, Inches(cw), Inches(0.28),
@@ -1360,17 +2406,102 @@ class DeckBuilder:
         self._barlist_card(s, box1, "Pipeline amount by stage",
                            self._stage_rows(p.get("stageBreakdown", [])), "pipelineAmount",
                            cid="pipe_stage")
-        # broker/region breakdown rows are keyed `key` (not `label`) and cap_breakdown
-        # appends an aggregated "Other" row last — sort by amount so the BarList reads
-        # largest-first, and bind the label to `key`.
-        broker = list(p.get("brokerBreakdown", []) or p.get("regionBreakdown", []))
-        broker.sort(key=lambda r: r.get("pipelineAmount", 0), reverse=True)
-        broker_title = ("Pipeline amount by broker / channel"
-                        if p.get("brokerBreakdown") else "Pipeline amount by region")
-        self._barlist_card(s, box2, broker_title, broker, "pipelineAmount",
-                           cid="pipe_broker", label_key="key")
+        # THE SECOND CHART EARNS ITS PLACE. It was broker/channel, falling back
+        # to region — and on a direct-only book that drew one bar labelled
+        # "Direct", which is the pipeline total already in the tile above it,
+        # redrawn as a chart. The strongest dimension this pipeline actually
+        # distributes across takes the panel instead, judged by the shared rule.
+        second = self._pipeline_second_cut(p)
+        if second:
+            self._barlist_card(s, box2, second["title"], second["rows"],
+                               second["value_key"], cid="pipe_second",
+                               label_key=second["label_key"],
+                               dimension=second.get("dimension"))
+        else:
+            # Nothing distributes. Rather than a meaningless chart, the panel
+            # carries the pipeline facts a second chart would have competed
+            # with — the expected-completion profile the tiles only summarise.
+            self._pipeline_secondary_facts(s, box2, p)
         self._footer(s)
         self._record("pipeline", spec.get("title"), "", placeholder=False)
+
+    def _pipeline_second_cut(self, pipeline):
+        """The strongest informative pipeline dimension, or ``None``.
+
+        Reads the governed pipeline stratifications — the SAME payload the
+        Pipeline Stratifications page draws — so the two cannot disagree about
+        which cuts this pipeline supports, and applies the shared
+        informativeness rule to pick the one worth a panel here.
+        """
+        from mi_agent_api import presentation as _sel
+
+        strats = [st for st in (pipeline.get("stratifications") or ())
+                  if isinstance(st, dict) and st.get("bars")]
+        if strats:
+            chosen = _sel.select_dimensions(
+                strats, want=1, value_key="balance",
+                preferred=("product", "region", "ltv", "ticket", "age", "rate"))
+            if chosen["selected"]:
+                st = chosen["selected"][0]
+                return {"title": f"Pipeline amount {str(st.get('label', '')).lower()}",
+                        "rows": st["bars"], "value_key": "balance",
+                        "label_key": "label", "dimension": st.get("key")}
+
+        # No governed stratifications on this payload (an older pipeline
+        # source): fall back to the flat breakdowns, still judged on shape.
+        for key, title in (("brokerBreakdown", "Pipeline amount by broker / channel"),
+                           ("regionBreakdown", "Pipeline amount by region")):
+            rows = list(pipeline.get(key) or ())
+            if not rows:
+                continue
+            rows.sort(key=lambda r: r.get("pipelineAmount", 0), reverse=True)
+            if _sel.is_informative(rows, value_key="pipelineAmount"):
+                return {"title": title, "rows": rows,
+                        "value_key": "pipelineAmount", "label_key": "key"}
+        return None
+
+    def _pipeline_secondary_facts(self, slide, box, pipeline):
+        """Governed pipeline facts, where no dimension earns a chart.
+
+        Every figure is lifted from the pipeline snapshot the tiles above read;
+        nothing is computed here.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        il, it, iw, ih = self._card(slide, *box, "Expected completion profile")
+        rows = []
+        nxt = pipeline.get("nextExpectedCompletionMonth")
+        if nxt:
+            rows.append(("Next expected completion month", str(nxt)))
+        cur = pipeline.get("currentMonthExpectedCompletionCount")
+        if cur is not None:
+            rows.append(("Cases expected to complete this month",
+                         compact_number(cur)))
+        overdue = pipeline.get("overdueExpectedCompletionCount")
+        if overdue is not None:
+            rows.append(("Cases past their expected completion date",
+                         compact_number(overdue)))
+        overdue_amt = pipeline.get("overdueExpectedCompletionWeightedAmount")
+        if overdue_amt:
+            rows.append(("Weighted amount past expected completion",
+                         compact_currency(overdue_amt)))
+        stages = pipeline.get("pipelineLiveStages") or ()
+        if stages:
+            rows.append(("Live stages", ", ".join(
+                str(x).title() for x in stages)))
+        if not rows:
+            self._text(slide, il, it + Inches(0.2), iw, Inches(0.3),
+                       "No further governed pipeline detail for this book.",
+                       size=10, color=self.theme.ink_500, italic=True)
+            return
+        y = float(it) / EMU_IN + 0.24
+        for label, value in rows[:6]:
+            self._text(slide, il, Inches(y), Inches(iw * 0.66),
+                       Inches(0.3), label, size=10, color=self.theme.ink_400)
+            self._text(slide, il, Inches(y), Inches(iw),
+                       Inches(0.3), str(value), size=10.5,
+                       color=self.theme.ink_100, align=PP_ALIGN.RIGHT, bold=True)
+            y += 0.42
 
     def _stage_rows(self, rows, value_key="pipelineAmount"):
         order = {"KFI": 0, "APPLICATION": 1, "OFFER": 2, "COMPLETED": 3, "WITHDRAWN": 4}
@@ -1388,29 +2519,59 @@ class DeckBuilder:
                     "COMPLETED": THEME.categorical[2], "WITHDRAWN": THEME.categorical[7]}
 
     def slide_pipeline_evolution(self, spec):
+        """Pipeline Evolution — *how is origination changing?*
+
+        A 2 x 2 of the governed weekly series, on the same grammar as the funded
+        evolution page: the stock, the population that carries it, what the
+        stock is expected to convert to, and how it is distributed across
+        stages. Two panels only ever showed half of that — a reader could see
+        the balance move without seeing whether it was more cases or bigger
+        ones, which is the first question an origination story raises.
+
+        Every value is a governed weekly metric; nothing is derived here beyond
+        drawing.
+        """
         s = self._slide()
         self._header(s, spec.get("title", "Pipeline Evolution"),
-                     "Pipeline stock over time", accent=self.theme.peri)
+                     "Pipeline stock, population and conversion over time",
+                     accent=self.theme.peri)
         evo = self.d.pipeline_evolution or {}
         periods = evo.get("periods", [])
         single = bool(evo.get("singlePeriod")) or len(periods) < 2
-        boxes = self._chart_boxes(2)
         x = [str(p.get("week") or p.get("period")) for p in periods]
 
-        il, it, iw, ih = self._card(s, *boxes[0], "Pipeline amount by week")
-        p1 = self.work / "pevo_amt.png"
-        if not single:
-            R.draw_lines(p1, x, [{"name": "Pipeline amount",
-                                  "values": [(p.get("metrics") or {}).get("pipeline_amount")
-                                             for p in periods]}],
-                         iw, ih, theme=self.theme, currency=True, area=True)
-        else:
-            render_placeholder_png(p1, "", "Insufficient reporting history (needs ≥2 weeks)",
-                                   theme=self.theme, width_in=iw, height_in=ih)
-        self._place(s, p1, il, it, iw, ih)
+        def metric(key):
+            return [(p.get("metrics") or {}).get(key) for p in periods]
+
+        # The three governed weekly series, plus the stage composition below.
+        quadrant = [
+            ("pevo_amt", "Pipeline amount by week", metric("pipeline_amount"),
+             True, False),
+            ("pevo_cases", "Pipeline cases by week",
+             metric("pipeline_case_count"), False, False),
+            ("pevo_weighted", "Weighted expected funding by week",
+             metric("weighted_expected_funded_amount"), True, False),
+        ]
+        quadrant = [q for q in quadrant
+                    if sum(1 for v in q[2] if v is not None) >= 2] or quadrant[:1]
+        boxes = self._matrix_boxes(4, top=1.62, height=4.96)
+
+        for (cid, title, values, currency, percent), box in zip(quadrant, boxes):
+            il, it, iw, ih = self._card(s, *box, title)
+            path = self.work / f"{cid}.png"
+            if not single:
+                R.draw_lines(path, x, [{"name": title, "values": values}],
+                             iw, ih, theme=self.theme, currency=currency,
+                             percent=percent, area=True, chart_id=cid)
+            else:
+                render_placeholder_png(
+                    path, "", "Insufficient reporting history (needs ≥2 weeks)",
+                    theme=self.theme, width_in=iw, height_in=ih)
+            self._place(s, path, il, it, iw, ih)
 
         # Pipeline by stage over time — EXCLUDING the KFI line (dashboard view).
-        il, it, iw, ih = self._card(s, *boxes[1], "Pipeline by stage over time")
+        il, it, iw, ih = self._card(s, *boxes[len(quadrant)],
+                                    "Pipeline by stage over time")
         p2 = self.work / "pevo_stage.png"
         by_stage = evo.get("byStage", [])
         if not single and by_stage:
@@ -1645,30 +2806,38 @@ class DeckBuilder:
         self._header(s, spec.get("title", "Multi-Dimensional Risk Analytics"),
                      "Funded balance across paired dimensions", accent=self.theme.peri)
         md = self.d.multidim or {}
-        # Only panels that actually resolved are drawn, and the layout adapts to
-        # how many there are. Rendering an empty card labelled "not available"
-        # tells an investor nothing; the composition guard omits the slide when
-        # none resolve.
-        panels = [(key, title) for key, title in
-                  (("ltv_age", "Balance by LTV × Borrower Age"),
-                   ("ltv_borrower_type", "Balance by LTV × Borrower Type"),
-                   ("ltv_region", "Balance by LTV × Region"))
-                  if (md.get(key) or {}).get("matrix")]
+        # WHAT THIS BOOK SUPPORTS, not a fixed three. The pairs are chosen by
+        # the engine's governed selection — both dimensions present, both axes
+        # real, the matrix dense enough to read, and no crossing repeating a
+        # story a crossing above already told. Only panels that resolved are
+        # drawn; the composition guard omits the slide when none do.
+        wanted = spec.get("pairs")
+        panels = [(key, str(entry.get("label", key)).replace(" x ", " × "))
+                  for key, entry in md.items()
+                  if not key.startswith("_")
+                  and isinstance(entry, dict) and entry.get("matrix")
+                  and (not wanted or key in wanted)]
+        panels = panels[:4]
         if not panels:
             self._placeholder_body(s, "No paired funded dimensions resolved.")
             self._footer(s)
             return self._record("multidim", spec.get("title"), "", placeholder=True)
 
-        # Region carries the longest labels, so it takes the full width when it
-        # would otherwise share a row with another matrix.
+        # A crossing with long row labels (region, product) takes the full width
+        # when it would otherwise share a row and be squeezed to unreadable.
+        _wide_dims = ("region", "product", "status")
         if len(panels) == 3:
-            wide = [p for p in panels if p[0] == "ltv_region"]
-            narrow = [p for p in panels if p[0] != "ltv_region"]
+            wide = [p for p in panels
+                    if any(d in p[0] for d in _wide_dims)][:1]
+            narrow = [p for p in panels if p not in wide]
             boxes = [(Inches(l), Inches(1.62), Inches(w), Inches(2.42))
                      for l, w in self._grid(2)]
             boxes += [(Inches(self.CONTENT_L), Inches(4.20),
                        Inches(self.CONTENT_R - self.CONTENT_L), Inches(2.38))]
-            ordered = narrow + wide
+            ordered = (narrow + wide) if wide else panels
+        elif len(panels) == 4:
+            ordered = panels
+            boxes = self._matrix_boxes(4, top=1.62, height=4.96)
         else:
             boxes = self._chart_boxes(len(panels))
             ordered = panels
@@ -1678,7 +2847,9 @@ class DeckBuilder:
             hm = md[key]
             path = self.work / f"md_{key}.png"
             R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"],
-                           iw, ih, theme=self.theme)
+                           iw, ih, theme=self.theme, chart_id=f"multidim_{key}",
+                           x_dimension=hm.get("xDimension"),
+                           y_dimension=hm.get("yDimension"))
             self._place(s, path, il, it, iw, ih)
         self._footer(s)
         self._record("multidim", spec.get("title"),
@@ -1695,20 +2866,114 @@ class DeckBuilder:
         rows = [{"label": pretty.get(st, st),
                  "v": (summary.get(st) or {}).get("latestFlowValue", 0)}
                 for st in stages]
-        box = (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95))
         title = "Latest weekly origination flow by stage"
         # Weekly flow needs ≥2 pipeline extracts. With a single extract, fall back to
         # the CURRENT pipeline funnel — case counts by stage — so the slide still
         # carries real data (matching the dashboard's single-period funnel).
+        # Weekly FLOW is a balance; the single-extract fallback is a CASE COUNT.
+        # They are different measures and must not be formatted the same way —
+        # the fallback used to render amounts unlabelled, so a reader could not
+        # tell which they were looking at.
+        as_currency = True
         if not any(r["v"] for r in rows):
             stage_rows = self._stage_rows(self.d.pipeline.get("stageBreakdown", []),
                                           value_key="caseCount")
             rows = [{"label": r["label"], "v": r.get("caseCount", 0)} for r in stage_rows]
             title = "Current pipeline cases by stage"
+            as_currency = False
+        # The flow chart takes the upper band; the governed conversion rates sit
+        # beneath it. The deck used to drop the conversion block entirely, which
+        # is the single most-asked question of a growing book — and it is
+        # already computed, with its lag and its sufficiency flag, by
+        # ``evolution.pipeline_funnel_evolution``. Nothing is derived here.
+        conv_rows = self._conversion_rows(summary)
+        box = (Inches(self.CONTENT_L), Inches(1.62),
+               Inches(self.CONTENT_R - self.CONTENT_L),
+               Inches(3.30 if conv_rows else 4.95))
         ok = self._barlist_card(s, box, title, [r for r in rows if r.get("v")], "v",
-                                currency=False, cid="funnel")
+                                currency=as_currency, cid="funnel")
+        if conv_rows:
+            self._conversion_strip(s, conv_rows,
+                                   self.d.funnel.get("conversionLagWeeks"))
         self._footer(s)
         self._record("funnel", spec.get("title"), "", placeholder=not ok)
+
+    def _conversion_rows(self, summary):
+        """Governed forward conversion per stage, read straight off the funnel.
+
+        ``weeklyRateValue`` is the evaluator's own forward conversion — average
+        weekly flow into the stage over the lagged KFI stock. It is never
+        recomputed here, and a stage the evaluator marks INSUFFICIENT is carried
+        with that mark rather than silently presented as a rate to plan from.
+        """
+        rows = []
+        for stage, block in (summary or {}).items():
+            conv = (block or {}).get("conversion")
+            if not conv or conv.get("weeklyRateValue") is None:
+                continue
+            rows.append({
+                "label": (block.get("label") or stage),
+                "rate": float(conv["weeklyRateValue"]),
+                "sufficient": bool(conv.get("sufficient")),
+                "weeks": conv.get("weeksInWindow"),
+                "min_weeks": conv.get("minWeeks"),
+                # WHAT THE CALCULATION ACTUALLY DID, per stage. The slide used
+                # to word the basis line from a deck-level lag field and every
+                # tile from the fixed phrase "of lagged KFI stock" — so a deck
+                # whose rates were computed UNLAGGED said "(unlagged)" once and
+                # "of lagged KFI stock" four times on the same page.
+                "lag_applied": bool(conv.get("lagApplied")),
+                "lag_weeks": conv.get("lagWeeks"),
+            })
+        return rows
+
+    def _conversion_strip(self, slide, rows, lag_weeks):
+        """Conversion rates as a labelled strip beneath the funnel.
+
+        The basis is read from what the EVALUATOR did, per stage, not from a
+        deck-level field — so the sentence at the top of the strip and the note
+        under each rate can never describe two different calculations.
+        """
+        top = 5.10
+        width = self.CONTENT_R - self.CONTENT_L
+        lags = {(r.get("lag_weeks") if r.get("lag_applied") else None)
+                for r in rows}
+        basis = ("Forward conversion — average weekly flow into each stage over "
+                 "the KFI stock")
+        if lags == {None}:
+            basis += ", unlagged: no KFI-to-completion lag was estimable."
+        elif len(lags) == 1:
+            basis += f", lagged {lags.pop()} week(s)."
+        else:
+            # Mixed is a real state — a stage with too little history gets no
+            # lag — and stating one number for the page would misdescribe it.
+            basis += "; the lag applied is stated per stage below."
+        self._text(slide, Inches(self.CONTENT_L), Inches(top), Inches(width),
+                   Inches(0.26), basis, size=9.5, color=self.theme.ink_400,
+                   italic=True)
+        cells = self._grid(min(len(rows), 4))
+        for (left, w), row in zip(cells, rows[:4]):
+            self._panel(slide, Inches(left), Inches(top + 0.32), Inches(w),
+                        Inches(1.05), fill=self.theme.bg_panel_alt,
+                        line=self.theme.line_soft)
+            self._text(slide, Inches(left + 0.16), Inches(top + 0.42),
+                       Inches(w - 0.32), Inches(0.26),
+                       str(row["label"]).upper(), size=8.5,
+                       color=self.theme.ink_400, bold=True)
+            self._text(slide, Inches(left + 0.16), Inches(top + 0.66),
+                       Inches(w - 0.32), Inches(0.34),
+                       f"{row['rate']:.1f}%/wk", size=17, bold=True,
+                       color=self.theme.ink_100 if row["sufficient"]
+                       else self.theme.ink_500)
+            if not row["sufficient"]:
+                note = f"provisional — {row['weeks']} of {row['min_weeks']}+ weeks"
+            elif row.get("lag_applied"):
+                note = f"of KFI stock {row.get('lag_weeks')}wk earlier"
+            else:
+                note = "of current KFI stock (unlagged)"
+            self._text(slide, Inches(left + 0.16), Inches(top + 1.00),
+                       Inches(w - 0.32), Inches(0.24), note, size=8.5,
+                       color=self.theme.ink_500)
 
     def slide_forecast_bridge(self, spec):
         s = self._slide()
@@ -1744,14 +3009,99 @@ class DeckBuilder:
             steps.append(("+ Weighted Pipeline",
                           float(fb.get("weightedExpectedFundedAmount") or 0), "add"))
         steps.append(("Forecast Funded", float(fb.get("forecastFundedBalance") or 0), "total"))
-        box = (Inches(0.55), Inches(1.92), Inches(12.25), Inches(4.64))
+        # The bridge, then WHERE the forecast lands. ``forecast_breakdowns`` was
+        # already being resolved for this deck and thrown away, while the
+        # dashboard's Forecast view rendered both cuts — so the pack answered
+        # "how much" and the screen also answered "where".
+        by_region = self._forecast_breakdown_rows(brk, "byRegionCapped", "byRegion")
+        by_ltv = self._forecast_breakdown_rows(brk, "byLtvBucketCapped", "byLtvBucket")
+        cuts = [(k, lbl, rows, dim) for k, lbl, rows, dim in (
+            ("fc_region", "Forecast balance by region", by_region, "region"),
+            ("fc_ltv", "Forecast balance by LTV band", by_ltv, "ltv"),
+        ) if rows]
+
+        # The cuts beneath need room for every band a governed stratification
+        # carries; the bridge gives up a quarter-inch rather than the cuts
+        # dropping a region off the bottom of the panel.
+        bridge_h = 2.46 if cuts else 4.64
+        box = (Inches(self.CONTENT_L), Inches(1.92),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(bridge_h))
         il, it, iw, ih = self._card(s, *box,
                                     "Funded + weighted pipeline (by expected completion month) → Forecast")
         path = self.work / "bridge.png"
         render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
         self._place(s, path, il, it, iw, ih)
+
+        if cuts:
+            boxes = self._chart_boxes(len(cuts), top=1.92 + bridge_h + 0.20,
+                                      height=6.55 - (1.92 + bridge_h + 0.20))
+            for (cid, label, rows, dim), cbox in zip(cuts, boxes):
+                # A bar list needs roughly a fifth of an inch per row to stay
+                # legible. Show the bands the panel can actually carry rather
+                # than compressing seven rows into an inch, which produced
+                # overlapping labels.
+                capacity = self._barlist_capacity(float(cbox[3]) / EMU_IN)
+                drawn = self._fit_bars(rows, capacity)
+                # Stack the bar into its parts wherever the payload carries
+                # them, so the reader sees where exposure sits TODAY and where
+                # the pipeline is expected to add it.
+                if all("funded" in r for r in drawn):
+                    il, it, iw, ih = self._card(s, *cbox, label)
+                    path = self.work / f"{cid}.png"
+                    R.draw_stacked_barlist(
+                        path, drawn, self._forecast_segments, iw, ih,
+                        theme=self.theme, total_key="balance",
+                        dimension=dim, chart_id=cid)
+                    self._place(s, path, il, it, iw, ih)
+                else:
+                    self._barlist_card(s, cbox, label, drawn, "balance",
+                                       cid=cid, dimension=dim)
         self._footer(s)
         self._record("forecast_bridge", spec.get("title"), "", placeholder=False)
+
+    @staticmethod
+    def _forecast_breakdown_rows(breakdowns, capped_key, full_key):
+        """Forecast-by-dimension rows in the deck's bar-list shape.
+
+        ``workspace.forecast_breakdowns`` is the SAME payload the dashboard's
+        Forecast view renders. The capped form (top 10 + Other) is preferred so
+        a long region list stays legible, exactly as it does on screen.
+
+        Each row carries the forecast AND its two parts — the funded exposure
+        that exists today, and the weighted pipeline expected to arrive. A bar
+        drawn as one block shows the destination and hides the journey, and
+        those two parts are facts of different certainty. Both come from the
+        payload; nothing is derived here.
+        """
+        rows = (breakdowns or {}).get(capped_key) or (breakdowns or {}).get(full_key) or []
+        out = []
+        for row in rows:
+            value = row.get("forecastAmount")
+            if value is None:
+                value = row.get("pipelineAmount")
+            if value is None:
+                continue
+            funded = row.get("fundedAmount")
+            expected = row.get("weightedPipelineAmount")
+            if expected is None:
+                expected = row.get("weightedExpectedFundedAmount")
+            entry = {"label": str(row.get("key", "")), "balance": float(value)}
+            if funded is not None or expected is not None:
+                entry["funded"] = float(funded or 0.0)
+                entry["expected"] = float(expected or 0.0)
+            out.append(entry)
+        return out
+
+    #: The two parts of a forecast bar. Funded exposure is an actual; the
+    #: weighted pipeline is an expectation, and the colours say which is which
+    #: — the deck's mint is reserved for forward-looking measures everywhere
+    #: else in the pack.
+    @property
+    def _forecast_segments(self):
+        return ({"key": "funded", "label": "Current funded",
+                 "color": self.theme.peri},
+                {"key": "expected", "label": "Expected additions",
+                 "color": self.theme.mint})
 
     def slide_forecast_projection(self, spec):
         s = self._slide()
@@ -1771,6 +3121,7 @@ class DeckBuilder:
                      else (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95)))
         il, it, iw, ih = self._card(s, *chart_box, "Projected funded balance")
         path = self.work / "projection.png"
+        band_note = ""
         if proj:
             x = [str(p.get("month")) for p in proj]
             # Downside/base/upside carries polarity (bad/neutral/good), not bare
@@ -1781,6 +3132,12 @@ class DeckBuilder:
                 {"name": "Base", "values": [p.get("base") for p in proj], "color": self.theme.peri},
                 {"name": "Upside", "values": [p.get("upside") for p in proj], "color": self.theme.mint},
             ]
+            # INDISTINGUISHABLE SCENARIOS. Three lines that sit on top of each
+            # other read as a rendering fault, and invite a reader to look for a
+            # difference between scenarios that this book's run-rate history does
+            # not produce. Where the band is immaterial the chart carries the
+            # base case alone and the band is stated in words instead.
+            series, band_note = self._scenario_series(proj, series)
             R.draw_lines(path, x, series, iw, ih, theme=self.theme, currency=True)
         else:
             render_placeholder_png(path, "", "Insufficient run-rate history for a "
@@ -1801,22 +3158,107 @@ class DeckBuilder:
             tpath = self.work / "milestones.png"
             R.draw_table(tpath, cols, trows, iw, ih, theme=self.theme)
             self._place(s, tpath, il, it, iw, ih)
+        if band_note:
+            self._text(s, Inches(0.57), Inches(6.62), Inches(12.2), Inches(0.28),
+                       band_note, size=9, color=self.theme.ink_500, italic=True)
         self._footer(s)
-        self._record("forecast_projection", spec.get("title"), "", placeholder=not proj)
+        self._record("forecast_projection", spec.get("title"), band_note,
+                     placeholder=not proj)
+
+    #: A scenario band narrower than this share of the base terminal balance is
+    #: not a band a reader can act on, and three lines drawn through it overlap.
+    SCENARIO_BAND_FLOOR = 0.03
+
+    def _scenario_series(self, proj, series):
+        """The scenario lines worth drawing, and the band stated in words.
+
+        Returns the series unchanged where downside and upside genuinely
+        separate from base by the horizon. Where they do not, returns the base
+        case alone plus a sentence carrying the range — which is the same
+        information, legibly, and does not imply a spread the run-rate history
+        did not produce.
+        """
+        from .metric_resolver import compact_currency
+
+        terminal = proj[-1] if proj else {}
+        base = terminal.get("base")
+        low, high = terminal.get("downside"), terminal.get("upside")
+        if base in (None, 0) or low is None or high is None:
+            return series, ""
+        try:
+            spread = (float(high) - float(low)) / abs(float(base))
+        except (TypeError, ValueError, ZeroDivisionError):
+            return series, ""
+        if spread >= self.SCENARIO_BAND_FLOOR:
+            return series, ""
+        base_only = [s for s in series if s.get("name") == "Base"]
+        return (base_only or series), (
+            f"Downside and upside sit within {spread * 100:.1f}% of the base "
+            f"case at the horizon ({compact_currency(low)} to "
+            f"{compact_currency(high)}), so the scenarios are not separately "
+            f"plotted. The milestone table below carries all three.")
 
     def slide_forecast_evolution(self, spec):
+        """Was the prior forecast right? — the credibility page.
+
+        The two charts are secondary here. What a funder wants from this page is
+        a number: how far off has this forecaster been, and does it lean. Both
+        are arithmetic over figures the governed evolution service has already
+        reconciled — ``prior_forecast`` at period N IS the forecast period N-1
+        published — so nothing is modelled and nothing is projected.
+        """
+        from . import forecast_accuracy as FA
+
         s = self._slide()
-        self._header(s, spec.get("title", "Forecast Evolution"),
-                     "Forecast funded balance across reporting runs", accent=self.theme.mint)
-        ph = self._evolution_lines(s, spec, self.d.forecast_evolution, [
+        accuracy = FA.measure(self.d.forecast_evolution)
+        # FINDING-LED SUBTITLE. The title is stable; the subtitle states the
+        # track record where one exists, and says nothing where one does not.
+        strap = "Forecast funded balance across reporting runs"
+        if accuracy.available:
+            lean = accuracy.lean
+            strap = (f"Typically {accuracy.error_pct:.1f}% from the outturn "
+                     f"across {accuracy.observations} periods"
+                     + (f", {lean}stated on average" if lean else
+                        ", with no consistent lean"))
+        self._header(s, spec.get("title", "Forecast Evolution"), strap,
+                     accent=self.theme.mint)
+
+        # THE VARIANCE CHART LEADS. The forecast's own travel is the supporting
+        # view; whether it held is the question the page is titled with.
+        charts = [
+            {"id": "fvar", "title": "Actual funded vs the prior run's forecast",
+             "series": [
+                 {"name": "Prior-run forecast", "key": "prior_forecast",
+                  "color": THEME.categorical[1]},
+                 {"name": "Actual funded", "key": "funded_balance",
+                  "color": THEME.categorical[0]}],
+             "currency": True},
             {"id": "fevo", "title": "Forecast funded balance by run",
              "series": [
-                 {"name": "Funded actual", "key": "funded_balance", "color": THEME.categorical[0]},
-                 {"name": "Weighted pipeline", "key": "weighted_expected_pipeline", "color": THEME.categorical[1]},
-                 {"name": "Forecast", "key": "forecast_funded_balance", "color": THEME.categorical[2]}],
-             "currency": True}])
+                 {"name": "Funded actual", "key": "funded_balance",
+                  "color": THEME.categorical[0]},
+                 {"name": "Weighted pipeline", "key": "weighted_expected_pipeline",
+                  "color": THEME.categorical[2]},
+                 {"name": "Forecast", "key": "forecast_funded_balance",
+                  "color": THEME.categorical[1]}],
+             "currency": True}]
+        ph = self._evolution_lines(s, spec, self.d.forecast_evolution, charts,
+                                   height=3.72)
+        # The sentence the reader keeps — or, where there is no track record
+        # yet, why there is not. Silence would read as an accurate forecast.
+        self._text(s, Inches(self.CONTENT_L), Inches(5.60),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.46),
+                   FA.describe(accuracy), size=10, color=self.theme.ink_300,
+                   italic=True, spacing=1.06)
+        self._text(s, Inches(self.CONTENT_L), Inches(6.16),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.44),
+                   "Error is the actual funded balance against the forecast the "
+                   "PRIOR run published, as a percentage of that forecast. Bias "
+                   "is the mean signed error; a negative bias means the forecast "
+                   "was high. No forecast is restated after the fact.",
+                   size=8.5, color=self.theme.ink_500, spacing=1.06)
         self._footer(s)
-        self._record("forecast_evolution", spec.get("title"), "", placeholder=ph)
+        self._record("forecast_evolution", spec.get("title"), strap, placeholder=ph)
 
     def slide_risk(self, spec):
         s = self._slide()
@@ -1894,10 +3336,33 @@ class DeckBuilder:
         left_w = 7.7 if watch else 6.02
         obs_l = 8.5 if watch else 6.78
         obs_w = (self.CONTENT_R - 8.5) if watch else 6.02
+        # ... and to what there ISN'T. The reverse case was not handled: watch
+        # items beside an observations panel whose only content was the words
+        # "None recorded." left a reader looking at four inches of empty box on
+        # the page that is supposed to say what needs attention. With nothing to
+        # observe there is no second column, and the watch stack takes the page.
+        show_obs = bool(observations) or not watch
+        if watch and not show_obs:
+            left_w = self.CONTENT_R - self.CONTENT_L
         if watch:
             items = watch[:5]
-            pitch = band / len(items)
+            # The pitch is capped so a short list stays a short list. Spreading
+            # one item over the whole band drew a card at the top of four inches
+            # of nothing; the group is sized to the items and centred in the
+            # band instead. At four and five items the cap does not bind and the
+            # layout is unchanged.
+            pitch = min(band / len(items), 1.42)
             row_h = min(1.30, pitch - 0.10)
+            used = (len(items) - 1) * pitch + row_h
+            # WHAT ELSE WAS TESTED. A page headed "requiring attention" that
+            # shows one item tells a reader what was flagged and nothing about
+            # how much was checked to flag it. Where the stack leaves room, the
+            # governed checks are named underneath — the same list the all-clear
+            # branch prints, because it is the same set of checks either way.
+            # Where it does not, the stack is centred rather than left hanging
+            # at the top of the band.
+            checks_room = (band - used) >= 2.50
+            top = BAND_TOP if checks_room else BAND_TOP + max(0.0, (band - used) / 2)
             for i, item in enumerate(items):
                 t = Inches(top + i * pitch)
                 accent = colour.get(item.severity, self.theme.ink_400)
@@ -1938,18 +3403,33 @@ class DeckBuilder:
                        Inches(0.28), "CHECKS PERFORMED", size=8.5,
                        color=self.theme.ink_400, bold=True)
             # Naming the checks is what separates "all clear" from "nothing ran".
-            for i, line in enumerate((
-                    "Concentration limits — current, expected and stress",
-                    "Reporting-date consistency across constituent books",
-                    "Portfolio-type balance movement",
-                    "Composition shift by region, channel, LTV and ticket band",
-                    "Weighted-average LTV movement",
-                    "Reporting-dimension coverage")):
+            for i, line in enumerate(self.GOVERNED_CHECKS):
                 self._text(s, Inches(0.95), Inches(3.48 + i * 0.34),
                            Inches(left_w - 0.7), Inches(0.3), f"·  {line}",
                            size=9.5, color=self.theme.ink_400)
 
+        if watch and checks_room:
+            cy = BAND_TOP + used + 0.34
+            self._text(s, Inches(0.85), Inches(cy), Inches(left_w - 0.6),
+                       Inches(0.28), "CHECKS PERFORMED", size=8.5,
+                       color=self.theme.ink_400, bold=True)
+            self._text(s, Inches(0.85), Inches(cy + 0.28), Inches(left_w - 0.6),
+                       Inches(0.28),
+                       "Every governed check below ran for this period. Those "
+                       "that cleared their materiality threshold are listed "
+                       "above; the rest did not.",
+                       size=9, color=self.theme.ink_500, italic=True)
+            for i, line in enumerate(self.GOVERNED_CHECKS):
+                self._text(s, Inches(0.95), Inches(cy + 0.64 + i * 0.30),
+                           Inches(left_w - 0.7), Inches(0.28), f"·  {line}",
+                           size=9.5, color=self.theme.ink_400)
+
         # Observations column.
+        if not show_obs:
+            self._footer(s)
+            self._record(spec.get("id", "watchlist"), spec.get("title"),
+                         f"{len(watch)} watch item(s).")
+            return
         self._panel(s, Inches(obs_l), Inches(BAND_TOP), Inches(obs_w), Inches(band),
                     fill=self.theme.bg_panel, line=self.theme.line)
         self._text(s, Inches(obs_l + 0.22), Inches(1.78), Inches(obs_w - 0.4),
@@ -2155,9 +3635,15 @@ class DeckBuilder:
             return self._record(spec.get("id", "concentration"), spec.get("title"),
                                 "", placeholder=True)
 
+        # DIRECTION OF TRAVEL. The prior governed value comes from the history
+        # service, which re-evaluates today's approved configuration against
+        # each historical frame — so "moved toward the limit" is a statement
+        # about the book, not about a changed definition.
+        rows = C.attach_stress(C.attach_history(rows, self.d.concentration_history))
         summary = C.summarise(env, rows)
         top = C.select_tests(rows)
         forward = C.forward_states_available(env)
+        historic = any(r.get("prior_value") is not None for r in top)
 
         # -- summary strip --------------------------------------------------
         tiles = [
@@ -2189,10 +3675,42 @@ class DeckBuilder:
                  "expectedUtilisation": r["expected_utilisation"] if forward else None,
                  "stressUtilisation": r["stress_utilisation"] if forward else None}
                 for r in top]
-        il, it, iw, ih = self._card(s, Inches(0.55), Inches(2.66), Inches(6.5),
-                                    Inches(3.62), "Utilisation of limit")
+        # THE PATH TO THE LIMIT, WHERE THERE IS ONE. The bars answer "am I
+        # inside my limits"; a reader on a covenant page also asks "and which
+        # way is it going". The engine has evaluated every historical frame
+        # against today's approved configuration all along — the deck was
+        # already fetching that series and spending it on a single direction
+        # word. Where three or more governed frames exist, the panel plots the
+        # path; below that it keeps the bars, because two points are a prior,
+        # not a trend.
+        #
+        # Utilisation, not the raw value, so a ceiling test and a FLOOR test
+        # share one scale and 100% means "at the limit" for both. The figures
+        # are the evaluator's own.
+        history = [r for r in top
+                   if len(r.get("history_points") or ()) >= self.CONC_MIN_HISTORY
+                   and all(p.get("utilisation") is not None
+                           for p in r["history_points"])]
+        il, it, iw, ih = self._card(
+            s, Inches(0.55), Inches(2.66), Inches(6.5), Inches(3.62),
+            "Utilisation of limit over time" if history else "Utilisation of limit")
         path = self.work / "conc_util.png"
-        R.draw_utilisation_tests(path, bars, iw, ih, theme=self.theme)
+        if history:
+            dates = [str(p.get("date") or "") for p in history[0]["history_points"]]
+            # The legend sizes its own type; truncating here produced
+            # "Scotland conce".
+            lines = [{"name": str(r["label"]),
+                      "values": [(p["utilisation"] * 100.0
+                                  if p["utilisation"] is not None and
+                                  p["utilisation"] <= 1.5 else p["utilisation"])
+                                 for p in r["history_points"]]}
+                     for r in history]
+            R.draw_lines(path, dates, lines, iw, ih, theme=self.theme,
+                         currency=False, zero_based=True,
+                         reference={"value": 100.0, "label": "limit"},
+                         chart_id="conc_util_history")
+        else:
+            R.draw_utilisation_tests(path, bars, iw, ih, theme=self.theme)
         self._place(s, path, il, it, iw, ih)
 
         # -- the numbers behind the bars -------------------------------------
@@ -2207,12 +3725,31 @@ class DeckBuilder:
         # ends inside the panel. Deriving the width from whether dx was zero
         # pushed the fifth column 0.2in off the slide once the Expected column
         # appeared, which only happens when forward states exist.
-        if forward:
-            cols = [("Test", 0.0, 1.80, PP_ALIGN.LEFT),
-                    ("Current", 1.86, 0.74, PP_ALIGN.RIGHT),
-                    ("Limit", 2.64, 0.86, PP_ALIGN.RIGHT),
-                    ("Headroom", 3.54, 0.80, PP_ALIGN.RIGHT),
-                    ("Expected", 4.38, 0.74, PP_ALIGN.RIGHT)]
+        # The table reads left to right as the sequence a covenant actually
+        # moves through: where it was, where it is, where it is expected to go,
+        # and the limit it is measured against.
+        # Six columns would squeeze the test name below the width at which a
+        # governed limit name is still legible, so where prior AND expected are
+        # both present the HEADROOM column gives way: it is limit less current,
+        # both of which are on the row, and the detail line states it in words.
+        if forward and historic:
+            cols = [("Test", 0.0, 1.98, PP_ALIGN.LEFT),
+                    ("Prior", 2.04, 0.68, PP_ALIGN.RIGHT),
+                    ("Current", 2.78, 0.70, PP_ALIGN.RIGHT),
+                    ("Expected", 3.54, 0.78, PP_ALIGN.RIGHT),
+                    ("Limit", 4.38, 0.72, PP_ALIGN.RIGHT)]
+        elif forward:
+            cols = [("Test", 0.0, 2.00, PP_ALIGN.LEFT),
+                    ("Current", 2.06, 0.70, PP_ALIGN.RIGHT),
+                    ("Expected", 2.82, 0.72, PP_ALIGN.RIGHT),
+                    ("Limit", 3.60, 0.66, PP_ALIGN.RIGHT),
+                    ("Headroom", 4.32, 0.76, PP_ALIGN.RIGHT)]
+        elif historic:
+            cols = [("Test", 0.0, 1.96, PP_ALIGN.LEFT),
+                    ("Prior", 2.02, 0.78, PP_ALIGN.RIGHT),
+                    ("Current", 2.86, 0.78, PP_ALIGN.RIGHT),
+                    ("Limit", 3.70, 0.72, PP_ALIGN.RIGHT),
+                    ("Headroom", 4.48, 0.84, PP_ALIGN.RIGHT)]
         else:
             cols = [("Test", 0.0, 2.00, PP_ALIGN.LEFT),
                     ("Current", 2.10, 0.86, PP_ALIGN.RIGHT),
@@ -2244,19 +3781,24 @@ class DeckBuilder:
             status_colour = self.theme.rag.get(
                 {"breach": "red", "warning": "amber"}.get(r["status"], "green"),
                 self.theme.ink_300)
-            # The dashboard's covenant columns: 2dp values (a test at 29.96%
+            # The dashboard's covenant formatting: 2dp values (a test at 29.96%
             # must not round onto its 30% limit), the limit WITH its governed
             # operator (a bare minimum reads as a maximum), headroom in its unit.
-            values = [
-                (self._fit_label(r["label"], cols[0][2]), self.theme.ink_100),
-                (C.format_measure(r["value"], r["unit"], dp=2), status_colour),
-                (C.format_limit(r), self.theme.ink_300),
-                (C.format_headroom(r), self.theme.ink_300),
-            ]
+            values = [(self._fit_label(r["label"], cols[0][2]), self.theme.ink_100)]
+            if historic:
+                values.append((C.format_measure(r["prior_value"], r["unit"], dp=2)
+                               if r.get("prior_value") is not None else "—",
+                               self.theme.ink_500))
+            values.append((C.format_measure(r["value"], r["unit"], dp=2), status_colour))
             if forward:
                 values.append((C.format_measure(r["expected_value"], r["unit"], dp=2)
                                if r["expected_value"] is not None else "—",
                                self.theme.ink_200))
+            values.append((C.format_limit(r), self.theme.ink_300))
+            if not (forward and historic):
+                values.append((C.format_headroom(r["headroom"], r["unit"], dp=2)
+                               if r["headroom"] is not None else "—",
+                               self.theme.ink_300))
             for i, ((value, colour), (_label, dx, cw, align)) in enumerate(
                     zip(values, cols)):
                 self._text(s, Inches(7.5 + dx), y, Inches(cw), Inches(0.3),
@@ -2267,13 +3809,25 @@ class DeckBuilder:
             # A test that passes today but is forecast to cross says BOTH, and
             # says which is which — "PASS · breaches 2026-07" reads as a
             # contradiction rather than as a forward-looking warning.
-            note = ""
+            notes = []
+            moved = C.travel(r)
+            if moved:
+                notes.append(f"{moved} since {r.get('prior_date') or 'the prior period'}")
+            # HEADROOM MUST APPEAR SOMEWHERE. Its column gives way when prior and
+            # expected are both present, and the detail line below only renders
+            # when the rows are tall enough — so on a four-test page it would
+            # otherwise vanish entirely from the one slide about headroom.
+            if forward and historic and r["headroom"] is not None and not detail:
+                notes.append(
+                    f"{C.format_headroom(abs(r['headroom']), r['unit'], dp=2)} "
+                    + ("of headroom" if r["headroom"] >= 0 else "beyond the limit"))
             if r.get("expected_breach") and r.get("breach_horizon"):
-                note = f"now · forecast breach {r['breach_horizon']}"
+                notes.append(f"now · forecast breach {r['breach_horizon']}")
             elif r.get("expected_breach"):
-                note = "now · forecast breach"
+                notes.append("now · forecast breach")
             elif r.get("stress_breach"):
-                note = "now · breaches under stress only"
+                notes.append("now · breaches under stress only")
+            note = " · ".join(notes)
             # The status is a BADGE, as on the dashboard: a bordered pill in the
             # status colour, so pass / warning / breach is read at a glance
             # rather than found in a line of small type.
@@ -2301,12 +3855,16 @@ class DeckBuilder:
                         + (f" ({r['expected_utilisation']:.0f}% of limit)"
                            if r["expected_utilisation"] is not None else ""))
                 if forward and r["stress_value"] is not None:
-                    bits.append(
+                    # A stress that eases the test, or moves it not at all, is
+                    # explained rather than printed bare — an "under stress"
+                    # figure BELOW the current one reads as a fault.
+                    explained = C.stress_note(r)
+                    bits.append(explained or (
                         "under the all-pipeline-converts stress "
-                        f"{C.format_measure(r['stress_value'], r['unit'])}")
-                if not bits and r["headroom"] is not None:
+                        f"{C.format_measure(r['stress_value'], r['unit'])}"))
+                if (not bits or (forward and historic)) and r["headroom"] is not None:
                     bits.append(
-                        f"{C.format_measure(abs(r['headroom']), r['unit'])} "
+                        f"{C.format_headroom(abs(r['headroom']), r['unit'])} "
                         + ("of headroom remaining" if r["headroom"] >= 0
                            else "beyond the limit"))
                 if bits:
@@ -2469,12 +4027,23 @@ class DeckBuilder:
             left.append("   Constituent books are reported as at different dates;")
             left.append("   the total combines them.")
 
+        # THE CLAIM MATCHES THE EVIDENCE. The pack used to assert that every
+        # figure was "identical to the management dashboard". That is true of the
+        # tiles, stratifications, cross-tabs, cohort series, concentration tests
+        # and the balance bridge — and was NOT true while economic values were
+        # still derived independently downstream of the engine. The composition
+        # shares, forecast accuracy and limit direction have since moved to
+        # shared owners; a handful of derivations remain, so the claim states
+        # what is provable today rather than what will be provable when they do.
         right = ["BASIS OF PREPARATION",
-                 "   Figures are produced by the governed MI calculations and are",
-                 "   identical to the management dashboard for the same portfolio",
-                 "   and reporting date.",
+                 "   Figures are generated deterministically from governed MI",
+                 "   outputs using shared reporting definitions, so this pack and",
+                 "   the management dashboard read the same measures for the same",
+                 "   portfolio and reporting date.",
                  "   Commentary is generated deterministically from those figures.",
-                 "   No language model is used in its production."]
+                 "   No language model is used in its production.",
+                 "   Averages are stated with their weighting basis. Measures on",
+                 "   different bases are not intended to divide into one another."]
         conc = self.d.concentration or {}
         if conc.get("tests"):
             from . import concentration as C
@@ -2483,29 +4052,146 @@ class DeckBuilder:
                 right.append(f"   Concentration limits: {disclosure.lower()}.")
         right.append("")
         right.append("COVERAGE")
-        cuts = d.get("fundedCutsFound") or 0
+        # Prefer the diagnostic; fall back to the periods the funded history
+        # actually resolved. The diagnostic is not populated on every path, and
+        # a coverage block that states the pipeline extract count and nothing
+        # about the funded book is the wrong half of the answer.
+        cuts = d.get("fundedCutsFound") or len(
+            (getattr(self.d, "funded_evolution", {}) or {}).get("periods") or ())
         if cuts:
             right.append(f"   {cuts} funded reporting period(s) available.")
+        else:
+            right.append("   One funded reporting period available.")
         snaps = d.get("pipelineSnapshotsFound") or 0
         right.append(f"   {snaps} weekly pipeline extract(s) available."
                      if snaps else "   No weekly pipeline extracts available.")
 
+        right.extend(self._capability_lines())
+
+        # THE OMISSIONS GO ON THE LEFT. They are a statement about SCOPE, which
+        # is what the left column is, and the right column already carries the
+        # basis, the coverage and every measure this book cannot report — it ran
+        # off the bottom of the slide and over the footer, so the sections a
+        # reader most needs to see listed were the ones printed past the edge of
+        # the page. The left column was two-thirds empty throughout.
         if self.omissions:
-            right.append("")
-            right.append("SECTIONS NOT INCLUDED")
-            for o in self.omissions[:6]:
-                right.append(f"   {o.title}: {o.reason}.")
-            if len(self.omissions) > 6:
-                right.append(f"   and {len(self.omissions) - 6} further section(s).")
+            left.append("")
+            left.append("SECTIONS NOT INCLUDED")
+            # GROUPED BY REASON. Three consecutive lines repeating "the pipeline
+            # is small relative to the funded book" spend three of the six lines
+            # this block has room for on one fact, and push other sections behind
+            # "and N further" where the reader cannot see them at all.
+            grouped: List[tuple] = []
+            for o in self.omissions:
+                for i, (reason, titles) in enumerate(grouped):
+                    if reason == o.reason:
+                        grouped[i][1].append(o.title)
+                        break
+                else:
+                    grouped.append((o.reason, [o.title]))
+            shown, hidden = grouped[:6], grouped[6:]
+            for reason, titles in shown:
+                left.append(f"   {', '.join(titles)}: {reason}.")
+            if hidden:
+                count = sum(len(t) for _r, t in hidden)
+                left.append(f"   and {count} further section(s).")
 
         self._column_text(s, left, Inches(0.6), Inches(6.0))
         self._column_text(s, right, Inches(6.95), Inches(5.85))
         self._footer(s)
         self._record(spec.get("id", "appendix"), spec.get("title"), "")
 
+    #: Why a measure is absent, in the language a funder reads. The registry
+    #: distinguishes these deliberately: "we lack a field" is a data request to
+    #: the client, "this book has no such thing" is a property of the asset,
+    #: and "that needs a model we do not run" is a boundary Trakt has drawn.
+    #: Collapsing them into "not available" is what makes a pack look evasive.
+    _CAPABILITY_WORDING = {
+        "NOT_APPLICABLE": "not applicable to this portfolio",
+        "UNAVAILABLE": "required data not supplied",
+        "ASSUMPTION_REQUIRED": "would require an assumption Trakt does not make",
+        "MODEL_REQUIRED": "would require behavioural modelling Trakt does not perform",
+        "METHODOLOGY_NOT_APPROVED": "methodology not yet approved",
+    }
+    #: Grouped in the order a reader can act on: what they can fix, what is
+    #: inherent, what Trakt has chosen not to do.
+    _CAPABILITY_ORDER = ("UNAVAILABLE", "NOT_APPLICABLE", "ASSUMPTION_REQUIRED",
+                         "MODEL_REQUIRED", "METHODOLOGY_NOT_APPROVED")
+
+    def _capability_lines(self):
+        """"Measures not reported for this book", and the reason for each.
+
+        Read from the published capability registry's own resolution against
+        this portfolio's canonical shape — the same catalogue the API and the
+        agent tools answer from. Nothing here branches on what the book IS: a
+        capability declares the economic conditions it needs, and this page
+        reports which of them this tape did not meet.
+        """
+        from trakt_core import capability as cap
+
+        resolved = self.d.capabilities or {}
+        if not resolved:
+            return []
+        registry = cap.load_registry()
+        grouped = {}
+        for metric, availability in resolved.items():
+            status = getattr(availability, "status", cap.AVAILABLE)
+            if status == cap.AVAILABLE:
+                continue
+            entry = registry.get(metric)
+            grouped.setdefault(status, []).append(
+                str(getattr(entry, "name", None) or metric))
+        if not grouped:
+            return []
+
+        lines = ["", "MEASURES NOT REPORTED FOR THIS BOOK"]
+        budget = 4
+        for status in self._CAPABILITY_ORDER:
+            names = sorted(grouped.get(status) or ())
+            if not names or budget <= 0:
+                continue
+            shown = ", ".join(names[:3])
+            if len(names) > 3:
+                shown += f" and {len(names) - 3} other measure(s)"
+            wording = self._CAPABILITY_WORDING.get(status, "not available")
+            lines.append(f"   {shown} — {wording}.")
+            budget -= 1
+        return lines
+
+    #: The methodology column's box, in inches. Text does not shrink to fit a
+    #: PowerPoint textbox: it simply draws past the bottom, over the footer and
+    #: off the slide, and python-pptx reports nothing. The height is a real
+    #: limit and has to be treated as one.
+    _COLUMN_TOP, _COLUMN_HEIGHT = 1.6, 5.3
+
+    @staticmethod
+    def _column_extent(lines, width_in: float, size: float) -> float:
+        """Roughly how tall this column will render, in inches.
+
+        Wrapping is estimated rather than measured — the renderer is the only
+        thing that knows for certain — so it is deliberately pessimistic: a
+        column judged slightly too tall loses half a point of type, while one
+        judged too short runs off the page.
+        """
+        per_line = max(10.0, width_in * 125.0 / size)   # chars that fit on a line
+        total = 0.0
+        for line in lines:
+            heading = bool(line) and line == line.upper() and not line.startswith(" ")
+            pt = (size - 1) if heading else size
+            wraps = max(1, -(-len(line) // int(per_line)))
+            total += wraps * (pt * 1.25) / 72.0 + (5 if heading else 2) / 72.0
+        return total
+
     def _column_text(self, slide, lines, left, width):
         """A column of the methodology page; section headings pick up the accent."""
-        box = slide.shapes.add_textbox(left, Inches(1.6), width, Inches(5.3))
+        width_in = int(width) / EMU_IN
+        size = 10.0
+        for candidate in (10.0, 9.5, 9.0, 8.5, 8.0):
+            size = candidate
+            if self._column_extent(lines, width_in, candidate) <= self._COLUMN_HEIGHT:
+                break
+        box = slide.shapes.add_textbox(left, Inches(self._COLUMN_TOP), width,
+                                       Inches(self._COLUMN_HEIGHT))
         tf = box.text_frame
         tf.word_wrap = True
         for i, line in enumerate(lines):
@@ -2513,7 +4199,7 @@ class DeckBuilder:
             run = para.add_run()
             run.text = line
             heading = bool(line) and line == line.upper() and not line.startswith(" ")
-            run.font.size = Pt(9 if heading else 10)
+            run.font.size = Pt(size - 1 if heading else size)
             run.font.bold = heading
             run.font.name = self.theme.font_sans
             run.font.color.rgb = self._rgb(
@@ -2543,10 +4229,14 @@ class DeckBuilder:
     # ------------------------------------------------------------------- build
     _DISPATCH = {
         "cover": "slide_cover", "kpi_summary": "slide_kpi_summary",
+        "executive": "slide_executive",
         "exec_insights": "slide_exec_insights",
         "portfolio_composition": "slide_portfolio_composition",
         "portfolio_comparison": "slide_portfolio_comparison",
         "movement_drivers": "slide_movement_drivers",
+        "balance_movement": "slide_balance_movement",
+        "funded_stock": "slide_funded_stock",
+        "portfolio_projections": "slide_portfolio_projections",
         "watchlist": "slide_watchlist",
         "strat_barlists": "slide_strat", "multidim": "slide_multidim", "geo": "slide_geo",
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",
@@ -2578,15 +4268,22 @@ class DeckBuilder:
         self.omissions = list(omissions)
         self.facts = dict(facts)
 
-        for spec in selected:
-            handler = getattr(self, self._DISPATCH.get(spec.get("type"), ""), None)
-            if handler is None:
-                continue
-            handler(spec)
+        # Record what each renderer actually draws. A bar list becomes a PNG, so
+        # its category order is not recoverable from the finished file; the
+        # record is how a publication gate — and a parity test — can see it.
+        with R.record_renders() as drawn:
+            for spec in selected:
+                handler = getattr(self, self._DISPATCH.get(spec.get("type"), ""), None)
+                if handler is None:
+                    continue
+                handler(spec)
+            self.rendered = list(drawn)
         out = Path(output)
         out.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(str(out))
         return {"output": str(out), "slides": self.records,
+                "rendered": self.rendered,
+                "currency_code": getattr(self.d, "currency_code", None),
                 "coverage_notes": self.appendix,
                 "omitted_slides": [o.to_dict() for o in self.omissions],
                 "facts": self.facts,

@@ -25,11 +25,13 @@ import os
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+
+from . import presentation as _presentation
 
 from . import currency as currency_mod
 from .funded_prep import prepare_funded_mi_dataset
@@ -264,9 +266,47 @@ def _fmt_decimal(value: Optional[float]) -> str:
     return "—" if value is None else f"{value:.1f}"
 
 
+# --------------------------------------------------------------------------- #
+# MEASURE BASIS — stated, because these measures legitimately do not tie.
+#
+# A reader who divides "average loan balance" by "weighted average property
+# value" expects to land on "weighted average current LTV". They do not, and on
+# a real book the gap is large — 15.2 percentage points on the QA fixture. There
+# are two independent reasons, and BOTH are correct behaviour:
+#
+#   1. WEIGHTING. Average loan balance is unweighted, one vote per loan.
+#      Property value is balance-weighted, one vote per pound. Averages over
+#      different populations do not divide into one another.
+#
+#   2. AVERAGE OF RATIOS vs RATIO OF AVERAGES. The LTV tile is the mean of each
+#      loan's own LTV — the typical POUND's gearing. Dividing the two money
+#      tiles gives the ratio of the aggregates — the BOOK's gearing. They are
+#      different economic statements and differ by Jensen's inequality on any
+#      book with dispersion.
+#
+# The fix is therefore NOT to redefine weighted average LTV so the tiles tie.
+# It is to say what each measure is, on the measure, so no reasonable reader
+# infers an algebraic relationship that was never claimed.
+# --------------------------------------------------------------------------- #
+
+#: Weighting bases, in the words a funder reads.
+BASIS_UNWEIGHTED = "per loan, unweighted"
+BASIS_BALANCE_WEIGHTED = "balance-weighted"
+BASIS_RATIO_OF_AGGREGATES = "ratio of aggregates"
+BASIS_COUNT_SHARE = "share of loans, unweighted"
+
+
 def _kpi(kpi_id: str, label: str, value: str, *, fmt: str, raw: Optional[float],
          available: bool = True, delta: Optional[str] = None,
-         delta_intent: Optional[str] = None, hint: Optional[str] = None) -> Dict[str, Any]:
+         delta_intent: Optional[str] = None, hint: Optional[str] = None,
+         basis: Optional[str] = None, numerator: Optional[str] = None,
+         denominator: Optional[str] = None) -> Dict[str, Any]:
+    """One governed KPI tile.
+
+    ``basis`` / ``numerator`` / ``denominator`` state HOW the measure was formed.
+    They are part of the measure, not decoration: two tiles on one page with
+    different weighting bases are only honest if each says which it used.
+    """
     return {
         "id": kpi_id,
         "label": label,
@@ -277,6 +317,9 @@ def _kpi(kpi_id: str, label: str, value: str, *, fmt: str, raw: Optional[float],
         "delta": delta,
         "deltaIntent": delta_intent,
         "hint": hint,
+        "basis": basis,
+        "numerator": numerator,
+        "denominator": denominator,
     }
 
 
@@ -364,12 +407,27 @@ _STRAT_DIMS = [
     ("vintage", "By origination vintage"),
     ("status", "By account status"),
     ("equity", "By protected equity"),
+    # These three used to be computed inside the investor PPTX
+    # (``mi_agent_pptx.mi_api._extra_stratifications``), which picked its own
+    # source columns and — for ticket size — carried its own bin edges that
+    # contradicted config/mi/buckets.yaml. They are governed dimensions in
+    # config/mi/stratification_catalogue.yaml (broker_channel,
+    # borrower_structure, balance_band); they were simply never declared here.
+    # Declaring them gives the deck and the dashboard the same six bands from
+    # the same engine, and removes the only second economic definition that was
+    # living in a renderer.
+    ("broker", "By broker / channel"),
+    ("borrower_type", "By borrower type"),
+    ("ticket", "By ticket size"),
 ]
 _EQUITY_BINS = [0, 5, 10, 20, 30, 50, 101]
 _EQUITY_LABELS = ["<5%", "5–10%", "10–20%", "20–30%", "30–50%", "50%+"]
 #: The canonical rate-band column materialised by ``funded_prep`` from
 #: ``config/mi/buckets.yaml``. This is the sole economic definition.
 _INTEREST_RATE_BUCKET = "interest_rate_bucket"
+#: The canonical ticket-size band column materialised by ``funded_prep``
+#: from ``config/mi/buckets.yaml`` ``balance_band``. Sole definition.
+_TICKET_BUCKET = "ticket_bucket"
 
 #: Backwards-compatible fallback bands, used ONLY when a frame carries no
 #: canonical bucket column (i.e. it never went through funded_prep).
@@ -432,6 +490,39 @@ def _strat_series(df: pd.DataFrame, key: str, scope=None):
         if "protected_equity_flag" in df.columns and df["protected_equity_flag"].notna().any():
             return df["protected_equity_flag"].astype("string")
         return None
+    if key == "broker":
+        # ``funded_prep`` aliases the channel family onto ``origination_channel``
+        # (its ``group`` dimension), so that is the canonical column; the rest
+        # are accepted for a tape that never went through the prep.
+        for col in ("origination_channel", "broker_channel", "broker_name", "broker"):
+            if col in df.columns and df[col].notna().any():
+                return df[col].astype("string")
+        return None
+    if key == "borrower_type":
+        # Derived by ``funded_prep``. The second-borrower date of birth is the
+        # explicit fallback for a tape that carries the fact but not the
+        # derivation: a joint life has one, a single life does not.
+        if "borrower_type" in df.columns and df["borrower_type"].notna().any():
+            return df["borrower_type"].astype("string")
+        for col in ("borrower_2_DOB", "borrower_2_dob", "second_borrower_dob",
+                    "borrower_2_date_of_birth"):
+            if col in df.columns:
+                joint = df[col].notna() & (df[col].astype(str).str.strip() != "")
+                return joint.map({True: "Joint", False: "Single"}).astype("string")
+        return None
+    if key == "ticket":
+        # The canonical ``ticket_bucket`` (config/mi/buckets.yaml ``balance_band``,
+        # materialised by funded_prep) is the SOLE definition of a ticket-size
+        # band. The deck used to band this itself on edges that disagreed with
+        # the registry — 250k and 400k boundaries the registry does not have.
+        # There is no fallback banding here on purpose: a frame that never went
+        # through the prep reports the dimension as unavailable rather than
+        # inventing a second ladder.
+        if _TICKET_BUCKET in df.columns:
+            banded = df[_TICKET_BUCKET].astype("string")
+            if banded.notna().any():
+                return banded
+        return None
     if key == "rate":
         # P0-3: the canonical ``interest_rate_bucket`` (config/mi/buckets.yaml,
         # materialised by funded_prep) is the SOLE economic definition of a rate
@@ -480,6 +571,10 @@ _STRAT_SOURCE_COLUMNS: Dict[str, tuple] = {
     "vintage": ("origination_date", "vintage_year"),
     "status": ("account_status", "loan_status", "performance_status"),
     "equity": ("protected_equity_percentage", "protected_equity_flag"),
+    "broker": ("origination_channel", "broker_channel", "broker_name", "broker"),
+    "borrower_type": ("borrower_type", "borrower_2_DOB", "borrower_2_dob",
+                      "second_borrower_dob", "borrower_2_date_of_birth"),
+    "ticket": ("ticket_bucket", "current_outstanding_balance"),
 }
 
 
@@ -597,7 +692,21 @@ def _funded_stratifications(df: pd.DataFrame, scope=None) -> List[Dict[str, Any]
                 if wl is not None and pd.notna(wl):
                     bar["waLtv"] = round(float(wl), 4)
                 bars.append(bar)
-            entry["bars"] = bars[:12]
+            # SELECT by materiality, then ORDER for display. ``_stratify``
+            # ranks by balance descending, so the top-12 cut keeps the bands
+            # that matter; ``presentation.order_bars`` then sequences the
+            # survivors the way a reader expects to see them — the governed
+            # ladder in config/mi/buckets.yaml for a banded dimension,
+            # alphabetical for a nominal one, unknown last.
+            #
+            # This ordering used to happen in the browser
+            # (``lib/stratOrder.sortStratBars``) and not at all in the investor
+            # pack, so the same LTV stratification read in band order on screen
+            # and in balance order in the deck. It is decided once, here.
+            entry["bars"] = _presentation.order_bars(bars[:12], dimension=key)
+            entry["displayOrder"] = _presentation.DISPLAY_ORDER_GOVERNED
+            entry["ordinal"] = _presentation.is_ordinal(
+                key, [b["label"] for b in entry["bars"]])
             coverage = _strat_coverage(df, key, scope)
             entry.update(coverage)
             if coverage.get("missingPortfolios"):
@@ -610,6 +719,264 @@ def _funded_stratifications(df: pd.DataFrame, scope=None) -> List[Dict[str, Any]
             out.append(entry)
         except Exception:  # noqa: BLE001 - a stratification must never break the snapshot
             continue
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Multi-dimensional cross-tabs
+#
+# Two governed band dimensions crossed on funded balance. This used to live
+# inside the investor PPTX (``mi_agent_pptx.mi_api._matrix`` / ``_multidim``),
+# which meant the deck owned an analytical definition the React product had no
+# way to reach: the dashboard could not draw the same chart even if it wanted
+# to, and nothing outside the renderer could check the grouping.
+#
+# It is a COMPOSITION, not a new calculation. The bands come from
+# ``cohorts._dimension_series`` and the governed stratification series — the same
+# bands every other funded chart uses — and the only arithmetic is a sum of
+# ``current_outstanding_balance`` per cell, which is what ``stratify`` does for
+# one dimension. Nothing new is derived, no threshold is introduced, and the
+# cells reconcile to the funded total by construction.
+# --------------------------------------------------------------------------- #
+
+#: Short display names for the governed stratification dimensions, used to build
+#: a pair's label. Declared once so a new pair is a single line below rather
+#: than a label invented in a renderer.
+DIMENSION_NAMES: Dict[str, str] = {
+    "ltv": "LTV", "age": "borrower age", "region": "region", "rate": "rate",
+    "product": "product", "vintage": "vintage", "status": "account status",
+    "equity": "protected equity", "broker": "broker / channel",
+    "borrower_type": "borrower type", "ticket": "ticket size",
+}
+
+#: The pairs offered, in the order a reader asks for them. Each is
+#: (key, x-dimension, y-dimension) over the governed stratification series;
+#: the label is derived, so adding a pair is one line.
+#:
+#: ``cross_tab`` is generic over all eleven dimensions — this list is the
+#: ECONOMICALLY MEANINGFUL subset, not a limit of the engine. LTV is the
+#: primary risk axis and pairs first; size, borrower and geography follow,
+#: because "how much of my exposure is high-LTV AND large-ticket" is the
+#: question a credit committee actually asks. Nothing here branches on asset
+#: class: a pair whose dimensions a tape cannot supply simply does not resolve.
+MULTIDIM_CANDIDATE_PAIRS: tuple = (
+    ("ltv_age", "ltv", "age"),
+    ("ltv_region", "ltv", "region"),
+    ("ltv_ticket", "ltv", "ticket"),
+    ("ltv_rate", "ltv", "rate"),
+    ("ltv_product", "ltv", "product"),
+    ("ltv_vintage", "ltv", "vintage"),
+    ("ltv_borrower_type", "ltv", "borrower_type"),
+    ("ticket_age", "ticket", "age"),
+    ("ticket_region", "ticket", "region"),
+    ("rate_vintage", "rate", "vintage"),
+    ("product_region", "product", "region"),
+    ("region_age", "region", "age"),
+)
+
+#: Kept as the historical default set (LTV against age, borrower type and
+#: region). Retained so a caller that wants the fixed three still has them;
+#: the deck now asks for a governed SELECTION instead.
+MULTIDIM_PAIRS: tuple = (
+    ("ltv_age", "Balance by LTV x borrower age", "ltv", "age"),
+    ("ltv_borrower_type", "Balance by LTV x borrower type", "ltv", "borrower_type"),
+    ("ltv_region", "Balance by LTV x region", "ltv", "region"),
+)
+
+#: How many crossings a page carries. Two core plus, where the book supports
+#: them, two deep-dive — enough to show the interaction without turning the
+#: pack into a catalogue of every pairing the engine can compute.
+MULTIDIM_WANT = 4
+
+#: A crossing has to be populated enough to read. Below this share of its cells
+#: carrying balance, the matrix is mostly empty and the eye reads noise.
+MULTIDIM_MIN_DENSITY = 0.18
+
+#: Reason codes specific to a crossing. The shared codes in
+#: ``mi_agent_api.presentation`` cover the rest.
+REASON_TOO_SPARSE = "TOO_SPARSE"
+REASON_REDUNDANT = "REDUNDANT"
+
+#: And it has to be a crossing. One row or one column is a one-dimensional
+#: stratification drawn as a grid, which the stratification pages already do
+#: better.
+MULTIDIM_MIN_AXIS = 2
+
+
+def pair_label(x_dimension: str, y_dimension: str) -> str:
+    """The display label for a pair, from the shared dimension names."""
+    x = DIMENSION_NAMES.get(x_dimension, x_dimension)
+    y = DIMENSION_NAMES.get(y_dimension, y_dimension)
+    return f"Balance by {x} x {y}"
+
+
+def _matrix_shape(table: Mapping[str, Any]) -> Dict[str, Any]:
+    """How readable this crossing is: axis sizes and the share of cells with
+    balance in them."""
+    matrix = table.get("matrix") or []
+    cells = sum(len(row) for row in matrix)
+    filled = sum(1 for row in matrix for v in row if v)
+    return {
+        "xCategories": len(table.get("xLabels") or ()),
+        "yCategories": len(table.get("yLabels") or ()),
+        "cells": cells,
+        "filledCells": filled,
+        "density": round(filled / cells, 4) if cells else 0.0,
+    }
+
+
+def select_multidim_pairs(df: pd.DataFrame, scope=None, *, want: int = 4,
+                          candidates: Sequence[tuple] = MULTIDIM_CANDIDATE_PAIRS
+                          ) -> Dict[str, Any]:
+    """The paired dimensions worth drawing for THIS book.
+
+    Every pair is resolved through the same generic ``cross_tab``; what varies
+    is which ones survive. A pair is dropped when a dimension the tape cannot
+    supply leaves it unresolved, when either axis collapses to a single
+    category (a crossing needs two sides), when the matrix is too sparse to
+    read, or when both of its dimensions already appear in pairs that were
+    selected — that last one is what stops four matrices telling one story.
+
+    Returns ``{"selected": {key: {...}}, "rejected": [{key, reason}]}``. The
+    rejection ledger is what the methodology page prints, so a reader can see
+    which crossings were considered and why they are not there.
+    """
+    # STAGE 1 — what can be read at all. Each gate produces a reason that is
+    # derivable from the crossing's own numbers.
+    usable, rejected = [], []
+    for index, (key, x_dim, y_dim) in enumerate(candidates or ()):
+        label = pair_label(x_dim, y_dim)
+        try:
+            table = cross_tab(df, x_dim, y_dim, scope)
+        except Exception:  # noqa: BLE001 - one pair must not break the rest
+            table = None
+        if not table:
+            rejected.append({"key": key, "label": label,
+                             "reasonCode": _presentation.REASON_NOT_SUPPLIED,
+                             "reason": "the tape does not supply both dimensions"})
+            continue
+        shape = _matrix_shape(table)
+        if (shape["xCategories"] < MULTIDIM_MIN_AXIS
+                or shape["yCategories"] < MULTIDIM_MIN_AXIS):
+            rejected.append({"key": key, "label": label,
+                             "reasonCode": _presentation.REASON_ONE_CATEGORY,
+                             "reason": ("one side of the crossing has a single "
+                                        "category, so this is a stratification "
+                                        "rather than a crossing")})
+            continue
+        if shape["density"] < MULTIDIM_MIN_DENSITY:
+            rejected.append({"key": key, "label": label,
+                             "reasonCode": REASON_TOO_SPARSE,
+                             "reason": (f"only {shape['density'] * 100:.0f}% of "
+                                        f"cells carry balance, too sparse to read")})
+            continue
+        # THE SAME INFORMATION RULE THE STRATIFICATIONS USE, over CELLS rather
+        # than bars: a crossing whose balance piles into a few cells tells a
+        # reader less than one that spreads across the grid.
+        cells = [{"balance": value} for row in (table.get("matrix") or ())
+                 for value in row if value]
+        info = _presentation.dispersion(cells)
+        shape["score"] = info["score"]
+        shape["evenness"] = info["evenness"]
+        usable.append((index, key, label, x_dim, y_dim, table, shape))
+
+    # STAGE 2 — rank by information, declaration order only as a tie-break.
+    # This used to be a single pass in declaration order, so the first four
+    # resolvable pairs won whatever the data said — the same defect the
+    # one-dimensional selector had, and the reason every fixture drew LTV
+    # against age, region, ticket and rate.
+    usable.sort(key=lambda item: (
+        -round(item[6]["score"], _presentation.SCORE_PRECISION), item[0]))
+
+    selected: Dict[str, Any] = {}
+    seen_dimensions: set = set()
+    for _index, key, label, x_dim, y_dim, table, shape in usable:
+        if len(selected) >= max(0, want):
+            rejected.append({
+                "key": key, "label": label,
+                "reasonCode": _presentation.REASON_LOWER_RANKED,
+                "reason": (f"{len(selected)} crossings carry more information "
+                           f"for this book (this {shape['score']:.2f})"),
+                "score": shape["score"]})
+            continue
+        if {x_dim, y_dim} <= seen_dimensions:
+            rejected.append({"key": key, "label": label,
+                             "reasonCode": REASON_REDUNDANT,
+                             "reason": ("both dimensions are already crossed on "
+                                        "this page, so it repeats a story told "
+                                        "above"),
+                             "score": shape["score"]})
+            continue
+        selected[key] = {"label": label, **table, "shape": shape}
+        seen_dimensions.update({x_dim, y_dim})
+
+    return {"selected": selected, "rejected": rejected}
+
+
+def cross_tab(df: pd.DataFrame, x_dimension: str, y_dimension: str,
+              scope=None) -> Optional[Dict[str, Any]]:
+    """Funded balance summed across two governed band dimensions.
+
+    Returns ``{xLabels, yLabels, matrix, points, total}`` or ``None`` when either
+    dimension is unavailable. Axis labels are ordered by the SAME governed ladder
+    the one-dimensional stratifications use, so an LTV axis reads low-to-high on
+    both surfaces and in both chart types.
+    """
+    balance_col = "current_outstanding_balance"
+    if df is None or balance_col not in getattr(df, "columns", []):
+        return None
+    x_series = _strat_series(df, x_dimension, scope)
+    y_series = _strat_series(df, y_dimension, scope)
+    if x_series is None or y_series is None:
+        return None
+
+    work = pd.DataFrame({
+        "x": x_series.astype("string"),
+        "y": y_series.astype("string"),
+        "balance": coerce_numeric(df[balance_col]),
+    }).dropna(subset=["x", "y"])
+    if work.empty:
+        return None
+
+    x_labels = _presentation.order_categories(work["x"].dropna().unique(),
+                                              dimension=x_dimension)
+    y_labels = _presentation.order_categories(work["y"].dropna().unique(),
+                                              dimension=y_dimension)
+    xi = {label: i for i, label in enumerate(x_labels)}
+    yi = {label: i for i, label in enumerate(y_labels)}
+
+    matrix = [[0.0] * len(x_labels) for _ in y_labels]
+    points: List[Dict[str, Any]] = []
+    for (xv, yv), sub in work.groupby(["x", "y"], dropna=True):
+        xk = _presentation.clean_label(xv)
+        yk = _presentation.clean_label(yv)
+        if xk not in xi or yk not in yi:
+            continue
+        value = round(float(sub["balance"].sum()), 2)
+        matrix[yi[yk]][xi[xk]] = value
+        points.append({"x": xi[xk], "y": yi[yk], "value": value,
+                       "xLabel": xk, "yLabel": yk, "count": int(len(sub))})
+    total = round(float(work["balance"].sum()), 2)
+    return {"xLabels": x_labels, "yLabels": y_labels, "matrix": matrix,
+            "points": points, "total": total,
+            "xDimension": x_dimension, "yDimension": y_dimension,
+            "measure": "current_outstanding_balance"}
+
+
+def multidimensional(df: pd.DataFrame, scope=None) -> Dict[str, Any]:
+    """Every governed cross-tab this book can support, keyed by pair.
+
+    A pair whose dimensions the tape cannot supply is simply absent, so a caller
+    renders what resolved rather than an empty frame.
+    """
+    out: Dict[str, Any] = {}
+    for key, label, x_dim, y_dim in MULTIDIM_PAIRS:
+        try:
+            table = cross_tab(df, x_dim, y_dim, scope)
+        except Exception:  # noqa: BLE001 - one pair must not break the rest
+            continue
+        if table:
+            out[key] = {"label": label, **table}
     return out
 
 
@@ -658,7 +1025,9 @@ def compute_funded_snapshot(
         wavg = _weighted_average(df["current_loan_to_value"], bal_series)
         pts = _to_points(wavg, _hint_scale(contract, "current_loan_to_value"))
         kpis.append(_kpi("wa_current_ltv", "Weighted avg current LTV",
-                         _fmt_pct_points(pts), fmt="pct", raw=pts))
+                         _fmt_pct_points(pts), fmt="pct", raw=pts,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (loan LTV × balance)", denominator="Σ balance"))
     else:
         kpis.append(_kpi("wa_current_ltv", "Weighted avg current LTV", "—",
                          fmt="pct", raw=None, available=False,
@@ -670,31 +1039,44 @@ def compute_funded_snapshot(
         wavg = _weighted_average(df["original_loan_to_value"], bal_series)
         pts = _to_points(wavg, _hint_scale(contract, "original_loan_to_value"))
         kpis.append(_kpi("wa_original_ltv", "Weighted avg original LTV",
-                         _fmt_pct_points(pts), fmt="pct", raw=pts))
+                         _fmt_pct_points(pts), fmt="pct", raw=pts,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (loan original LTV × balance)",
+                         denominator="Σ balance"))
 
     # Average loan balance.
     avg_balance = balance / loan_count if loan_count else None
     kpis.append(_kpi("avg_balance", "Average loan balance", _fmt_gbp(avg_balance),
-                     fmt="gbp", raw=round(avg_balance, 2) if avg_balance is not None else None))
+                     fmt="gbp", raw=round(avg_balance, 2) if avg_balance is not None else None,
+                     basis=BASIS_UNWEIGHTED,
+                     numerator="Σ balance", denominator="loan count"))
 
     # Weighted-average current interest rate (optional).
     if _has_values(df, "current_interest_rate"):
         wavg = _weighted_average(df["current_interest_rate"], bal_series)
         pts = _to_points(wavg, _hint_scale(contract, "current_interest_rate"))
         kpis.append(_kpi("wa_rate", "Weighted avg interest rate",
-                         _fmt_pct_points(pts), fmt="pct", raw=pts))
+                         _fmt_pct_points(pts), fmt="pct", raw=pts,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (loan rate × balance)", denominator="Σ balance"))
 
     # Weighted-average months on book (optional).
     if _has_values(df, "months_on_book"):
         wavg = _weighted_average(df["months_on_book"], bal_series)
         kpis.append(_kpi("wa_months_on_book", "Weighted avg months on book",
-                         _fmt_decimal(wavg), fmt="number", raw=wavg))
+                         _fmt_decimal(wavg), fmt="number", raw=wavg,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (months on book × balance)",
+                         denominator="Σ balance"))
 
     # Weighted-average youngest borrower age (optional).
     if _has_values(df, "youngest_borrower_age"):
         wavg = _weighted_average(df["youngest_borrower_age"], bal_series)
         kpis.append(_kpi("wa_age", "Weighted avg youngest age",
-                         _fmt_decimal(wavg), fmt="number", raw=wavg))
+                         _fmt_decimal(wavg), fmt="number", raw=wavg,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (youngest age × balance)",
+                         denominator="Σ balance"))
 
     # Single-borrower share (optional). ``borrower_type`` is the prepared
     # single/joint dimension (derived from second-applicant presence for ERM,
@@ -707,7 +1089,10 @@ def compute_funded_snapshot(
             pct = single / int(known.sum()) * 100.0
             kpis.append(_kpi("pct_single_borrowers", "Single borrowers",
                              _fmt_pct_points(pct), fmt="pct", raw=round(pct, 1),
-                             hint=f"{single:,d} of {int(known.sum()):,d} loans"))
+                             hint=f"{single:,d} of {int(known.sum()):,d} loans",
+                             basis=BASIS_COUNT_SHARE,
+                             numerator="loans with a single borrower",
+                             denominator="loans whose borrower type is known"))
 
     # Balance-weighted average property value (optional). Uses the same current
     # valuation input as NNEG/LTV, so it generalises to any collateralised book.
@@ -716,7 +1101,26 @@ def compute_funded_snapshot(
         kpis.append(_kpi("wa_property_value", "Weighted avg property value",
                          _fmt_gbp(wavg), fmt="gbp",
                          raw=round(wavg, 2) if wavg is not None else None,
-                         hint="balance-weighted current valuation"))
+                         hint="balance-weighted current valuation",
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (valuation × balance)", denominator="Σ balance"))
+
+    # AGGREGATE GEARING — the BOOK's LTV, as distinct from the typical pound's.
+    # Σ balance / Σ valuation: the ratio of aggregates a reader gets by dividing
+    # the two money tiles. It is surfaced under its OWN name rather than used to
+    # redefine weighted average LTV, because the two answer different questions
+    # and a funder may legitimately want either. Built from governed aggregates
+    # already computed here; no new primitive.
+    if _has_values(df, "current_valuation_amount"):
+        val_total = float(_num(df["current_valuation_amount"]).sum())
+        if val_total > 0:
+            gearing = balance / val_total * 100.0
+            kpis.append(_kpi("aggregate_gearing", "Aggregate gearing (book LTV)",
+                             _fmt_pct_points(gearing), fmt="pct",
+                             raw=round(gearing, 4),
+                             basis=BASIS_RATIO_OF_AGGREGATES,
+                             numerator="Σ balance", denominator="Σ valuation",
+                             hint="the book's LTV, not the typical loan's"))
 
     # ---- month-on-month change vs the prior available run -------------------
     monthly_change: Optional[Dict[str, Any]] = None

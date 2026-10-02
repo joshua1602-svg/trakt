@@ -39,8 +39,13 @@ _BALANCE = "current_outstanding_balance"
 #: dashboard's regional series and the MI Agent's regional answer about the same
 #: book could be measured on two different geographies and no surface said so.
 _FUNDED_BREAKDOWN_DIMS = {
-    "broker": "broker_channel",
-    "ltv_bucket": "ltv_bucket",
+    "broker": ("broker_channel",),
+    "ltv_bucket": ("ltv_bucket",),
+    # The CONSTITUENT BOOK. The prepared frames have always carried provenance —
+    # scoping filters on it — but no breakdown ever asked for it, so the one
+    # dimension a multi-book funder cares most about was the one the series
+    # could not be cut by. Governed display label first, id as the fallback.
+    "portfolio": ("source_portfolio_label", "source_portfolio_id"),
 }
 
 
@@ -118,6 +123,27 @@ def _reconciliation(df: pd.DataFrame, dataset: str, run_id: str,
     }
 
 
+def _resolve_breakdown_dim(df: pd.DataFrame, key: str,
+                           geography=None) -> Optional[str]:
+    """The first candidate column a breakdown dimension actually has data in.
+
+    Candidates, not a fixed column, so a dimension whose canonical name differs
+    between tapes still resolves — the same data-aware resolution
+    ``funded_bridge`` performs for its attribution dimension.
+
+    REGION IS NOT RESOLVED HERE. Which column a book reports region on is a
+    governed decision — the configured primary basis, resolved against the
+    frame — and ``_region_breakdown_column`` owns it. A candidate list here
+    would be a second, disagreeing answer to the same question.
+    """
+    if key == "region":
+        return _region_breakdown_column(df, geography)
+    for col in _FUNDED_BREAKDOWN_DIMS.get(key, ()):
+        if col in getattr(df, "columns", []) and df[col].notna().any():
+            return col
+    return None
+
+
 def _breakdown(df: pd.DataFrame, dim_col: str, value_col: str = _BALANCE
                ) -> List[Dict[str, Any]]:
     """``[{key, value}]`` summing ``value_col`` by ``dim_col``; missing keys go to
@@ -158,7 +184,7 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
     metric/reconciliation/breakdown shape is IDENTICAL regardless of source."""
     required = [_BALANCE, "current_loan_to_value", "current_interest_rate",
                 "youngest_borrower_age"]
-    want_breakdowns = breakdowns or ["broker", "region", "ltv_bucket"]
+    want_breakdowns = breakdowns or ["portfolio", "broker", "region", "ltv_bucket"]
 
     periods: List[Dict[str, Any]] = []
     run_ids: List[str] = []
@@ -202,8 +228,7 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
             "source_file": source,
         })
         for b in want_breakdowns:
-            dim_col = (_region_breakdown_column(df, geography) if b == "region"
-                       else _FUNDED_BREAKDOWN_DIMS.get(b))
+            dim_col = _resolve_breakdown_dim(df, b, geography)
             if dim_col:
                 for row in _breakdown(df, dim_col):
                     bd_series[b].append({"period": (rdate or run_id)[:7], **row})
@@ -454,6 +479,186 @@ def funded_bridge(output_root: str | os.PathLike, client_id: str,
 
 
 # --------------------------------------------------------------------------- #
+# ECONOMIC funded-balance bridge
+#
+# ``funded_bridge`` above answers "which DIMENSIONS moved the total" — regions,
+# brokers, LTV bands. This answers the different question a funder asks first:
+# *what happened to the loans?* Opening balance, plus the loans that arrived,
+# less the loans that left, plus what the loans present throughout did.
+#
+# NOTHING IS CALCULATED HERE. Two governed engines already own the economics and
+# this composes their output:
+#
+#   mi_agent.period_change.bridge.balance_bridge   the reconciled identity,
+#       over a stable loan key, refusing to report at all on duplicate or
+#       missing identifiers, mixed currency or a missing balance field;
+#   analytics_lib.history.classify_exits           the exit leg split on
+#       EVIDENCE into redemption / default / maturity / unexplained.
+#
+# The two compose exactly: the classified buckets sum to the bridge's exit leg,
+# which is asserted here rather than assumed.
+#
+# One deliberate restraint. ``movement_on_continuing_loans`` is NOT relabelled
+# as interest. On a roll-up book it is mostly accretion; on an amortising book
+# it is mostly repayment; on either it also absorbs further advances and any
+# restatement. Separating them needs per-loan period movement, which the
+# canonical model does not carry. It is reported as what it is — the movement on
+# the loans present at both dates.
+# --------------------------------------------------------------------------- #
+
+#: Presentation-ready labels for the exit buckets, so both surfaces name them
+#: identically. The keys are ``analytics_lib.history``'s own constants.
+EXIT_LABELS = {
+    "redemption": "Redeemed",
+    "default_exit": "Exited in default",
+    "maturity": "Matured",
+    "unknown_exit": "Exited — reason not evidenced",
+}
+
+
+def _snapshot_frame(frame_record):
+    from mi_agent.period_change.models import SnapshotFrame
+    return SnapshotFrame(snapshot_id=str(frame_record.get("run_id") or ""),
+                         reporting_date=(str(frame_record.get("reporting_date"))
+                                         if frame_record.get("reporting_date") else None),
+                         frame=frame_record.get("df"))
+
+
+def _exit_frames(opening, closing):
+    """The same two frames, addressable by the exit classifier.
+
+    ``analytics_lib.history`` keys loans on ``loan_identifier`` and nothing
+    else. A regime-projected book carries the ESMA RREL1 name
+    (``unique_identifier``) INSTEAD of the analytics one, so the classifier
+    declines on it — and the bridge then shows a total exit bar for a book whose
+    exit reasons are sitting right there on the tape.
+
+    This aliases the column and changes NOTHING else: the identifiers are the
+    same strings, the classification rules are the classifier's own, and where
+    neither name is present both frames are handed back untouched so the
+    classifier declines exactly as it does today. No new analytic is performed.
+    """
+    from analytics_lib.history import LOAN_ID_FIELD
+
+    for frame in (opening, closing):
+        if LOAN_ID_FIELD in getattr(frame, "columns", ()):
+            return opening, closing        # already addressable; leave it alone
+    alias = next((c for c in _LOAN_ID_COLS
+                  if c in getattr(opening, "columns", ())
+                  and c in getattr(closing, "columns", ())), None)
+    if alias is None:
+        return opening, closing
+    return (opening.rename(columns={alias: LOAN_ID_FIELD}),
+            closing.rename(columns={alias: LOAN_ID_FIELD}))
+
+
+def funded_balance_movement(output_root: str | os.PathLike, client_id: str,
+                            to_run_id: Optional[str] = None, *, scope=None,
+                            start_period: Optional[str] = None) -> Dict[str, Any]:
+    """The economic opening-to-closing bridge for the governed funded book.
+
+    ``start_period`` (``YYYY-MM``) opens the bridge at a named period; omitted,
+    it opens at the period immediately before the close, which is the movement a
+    reporting pack describes. Returns ``available: False`` with the engine's own
+    reason wherever the bridge declines to report — a bridge that cannot
+    reconcile must say so rather than present a partial identity.
+    """
+    frames = funded_frames(output_root, client_id, to_run_id, scope=scope)
+    if len(frames) < 2:
+        return {"available": False,
+                "reason": ("an opening-to-closing bridge needs two governed "
+                           f"reporting periods; {len(frames)} available"),
+                "periodsAvailable": len(frames)}
+
+    end = frames[-1]
+    start = None
+    if start_period:
+        want = str(start_period)[:7]
+        start = next((f for f in frames[:-1] if _period_label(f) == want), None)
+    start = start or frames[-2]
+    if _period_label(start) == _period_label(end):
+        return {"available": False,
+                "reason": "the opening and closing periods resolve to the same period"}
+
+    from mi_agent.period_change.bridge import balance_bridge
+    bridge = balance_bridge(_snapshot_frame(start), _snapshot_frame(end)).to_dict()
+    if not bridge.get("reconciles"):
+        return {"available": False,
+                "reason": bridge.get("limitation") or
+                          f"the balance bridge reported {bridge.get('status')}",
+                "status": bridge.get("status"),
+                "bridge": bridge}
+
+    # The exit leg, split on evidence. Absent evidence fields the whole exit
+    # balance lands in ``unknown_exit``, which is a data-quality finding and is
+    # shown as one — never quietly folded into redemptions.
+    exits: Dict[str, Any] = {}
+    try:
+        from analytics_lib.history import classify_exits
+        opening_df, closing_df = _exit_frames(start["df"], end["df"])
+        exits = classify_exits(opening_df, closing_df,
+                               as_of=str(end.get("reporting_date") or "")) or {}
+    except Exception as exc:  # noqa: BLE001 - a bridge without the split is still a bridge
+        exits = {"classified": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    exit_total = round(float(bridge.get("exited_loan_opening_balance") or 0.0), 2)
+    components = []
+    if exits.get("classified"):
+        for key, label in EXIT_LABELS.items():
+            bucket = exits.get(key) or {}
+            balance = round(float(bucket.get("balance") or 0.0), 2)
+            if balance:
+                components.append({"key": key, "label": label, "balance": balance,
+                                   "loanCount": int(bucket.get("loan_count") or 0)})
+        classified_total = round(sum(c["balance"] for c in components), 2)
+        # The two engines must agree. They are computed independently from the
+        # same pair of snapshots, so a disagreement is a real defect, not a
+        # rounding artefact — report it rather than draw a bridge that lies.
+        exits_reconcile = abs(classified_total - exit_total) <= 0.01
+    else:
+        classified_total, exits_reconcile = None, None
+
+    opening = round(float(bridge["opening_balance"]), 2)
+    closing = round(float(bridge["closing_balance"]), 2)
+    return {
+        "available": True,
+        "openingPeriod": _period_label(start),
+        "closingPeriod": _period_label(end),
+        "openingDate": start.get("reporting_date"),
+        "closingDate": end.get("reporting_date"),
+        "identifierField": bridge.get("identifier_field"),
+        "openingBalance": opening,
+        "newLoanBalance": round(float(bridge["new_loan_closing_balance"]), 2),
+        "exitedLoanBalance": exit_total,
+        "continuingMovement": round(float(bridge["movement_on_continuing_loans"]), 2),
+        "closingBalance": closing,
+        "netChange": round(closing - opening, 2),
+        "newLoanCount": bridge.get("new_loan_count"),
+        "exitedLoanCount": bridge.get("exited_loan_count"),
+        "continuingLoanCount": bridge.get("continuing_loan_count"),
+        "reconciles": True,
+        "residual": bridge.get("residual"),
+        "tolerance": bridge.get("rounding_tolerance"),
+        "exitComponents": components,
+        "exitsClassified": bool(exits.get("classified")),
+        "exitsReconcile": exits_reconcile,
+        "exitEvidenceFields": list(exits.get("evidence_fields") or ()),
+        "exitClassificationReason": exits.get("reason"),
+        "lineage": {
+            "identity": ("opening + new loans - exited loans + movement on "
+                         "continuing loans = closing"),
+            "engine": "mi_agent.period_change.bridge.balance_bridge",
+            "exits": "analytics_lib.history.classify_exits (evidence-based)",
+            "continuingMovement": (
+                "The movement on loans present at BOTH dates. It is not split "
+                "into interest, repayment or further advance: that separation "
+                "needs per-loan period movement, which the canonical model does "
+                "not carry."),
+        },
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Funded cohort PROGRESSION (static-pool seasoning across reporting periods)
 # --------------------------------------------------------------------------- #
 _VALUATION_COLS = ("indexed_valuation_amount", "current_valuation_amount",
@@ -505,7 +710,15 @@ def _nneg_metrics(df) -> Dict[str, Any]:
     return {
         "nneg_exposure": round(exposure, 2),
         "nneg_headroom": round(float((v - b).sum()), 2),
+        # A RATIO OF AGGREGATES — the pool's gearing, complement of Σb/Σv. It is
+        # deliberately NOT the same basis as ``wa_ltv`` in the same payload,
+        # which is the balance-weighted mean of each loan's own LTV. Two
+        # LTV-shaped figures, two bases, both correct; a reader who assumes one
+        # is 100% minus the other will be wrong by the Jensen gap, so the basis
+        # travels with the measure.
         "nneg_headroom_pct": (round(1.0 - float(b.sum()) / vsum, 6) if vsum else None),
+        "nneg_headroom_pct_basis": "ratio of aggregates (1 - Σ balance / Σ valuation)",
+        "wa_ltv_basis": "balance-weighted mean of loan-level LTV",
     }
 
 
@@ -728,6 +941,151 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
     }
 
 
+#: The identity column a case-level pipeline comparison keys on. It is the
+#: contract's own natural key, carried from the source — NOT a hash. That
+#: matters: ``snapshot.keys.make_pipeline_opportunity_id`` hashes mutable
+#: business attributes including ``loan_amount``, so an amount amendment changes
+#: the key and one case reads as an exit plus an arrival with no amount
+#: movement — destroying exactly the leg this measure exists to report.
+_PIPELINE_ID = "pipeline_case_identifier"
+
+
+def _case_index(df, id_col: str = _PIPELINE_ID):
+    """``df`` keyed by case identity, or ``None`` when identity is not governed."""
+    if df is None or id_col not in getattr(df, "columns", ()):
+        return None
+    ids = df[id_col].astype(str).str.strip()
+    if not bool(ids.notna().any()) or (ids == "").all():
+        return None
+    if ids.duplicated().any():
+        return None                     # not an identity; refuse rather than guess
+    out = df.copy()
+    out.index = ids
+    return out
+
+
+def pipeline_stage_movement(pipeline_root: str | os.PathLike, client_id: str,
+                            *, to_run_id: Optional[str] = None,
+                            historical_model: Optional[Dict[str, Any]] = None
+                            ) -> Dict[str, Any]:
+    """Per-stage opening-to-closing reconciliation between two weekly extracts.
+
+    For each live stage, on both counts and amounts::
+
+        opening live + arrivals - departures +/- amount change on stayers
+            = closing live
+
+    This is a COMPOSITION of data the pipeline path already produces: two
+    prepared weekly extracts, joined on the governed case identifier. No new
+    analytic, no new model, no new primitive. Departures are split by where the
+    case actually went — on to another stage, completed, withdrawn, or absent
+    from the extract entirely — because "left the stage" and "left the pipeline"
+    are different events and a funnel that conflates them cannot be read.
+
+    Returns ``available: False`` with a reason wherever identity cannot be
+    governed. There is deliberately no fallback: without a stable case key the
+    only honest answer is that this cannot be reported.
+    """
+    from . import pipeline_contract as pipeline_mod
+    from . import pipeline_prep as prep_mod
+
+    inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
+    extracts = list(inv.get("extracts") or ())
+    cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
+    if cut_ym:
+        extracts = [e for e in extracts
+                    if not (e.get("pipeline_extract_date")
+                            and e["pipeline_extract_date"][:7] > cut_ym)]
+    if len(extracts) < 2:
+        return {"available": False,
+                "reason": ("a stage movement needs two governed weekly extracts; "
+                           f"{len(extracts)} available"),
+                "extractsAvailable": len(extracts)}
+
+    frames = []
+    for ext in extracts[-2:]:
+        try:
+            df, _report = pipeline_mod.load_prepared_pipeline(
+                ext, historical_model=historical_model)
+        except Exception as exc:  # noqa: BLE001
+            return {"available": False,
+                    "reason": f"a weekly extract could not be prepared: {exc}"}
+        frames.append((ext.get("pipeline_extract_date"), df))
+
+    (open_week, open_df), (close_week, close_df) = frames
+    opening = _case_index(open_df)
+    closing = _case_index(close_df)
+    if opening is None or closing is None:
+        return {"available": False,
+                "reason": ("case-level movement needs a stable, unique "
+                           f"{_PIPELINE_ID!r} in both weekly extracts; the "
+                           "governed pipeline contract did not resolve one"),
+                "openingWeek": open_week, "closingWeek": close_week}
+
+    def _stage(frame, key):
+        value = frame["pipeline_stage"].get(key) if "pipeline_stage" in frame.columns else None
+        return str(value).upper() if value is not None else "ABSENT"
+
+    def _amount(frame, keys):
+        if not keys or _BALANCE not in frame.columns:
+            return 0.0
+        return round(float(coerce_numeric(frame.loc[sorted(keys), _BALANCE]).sum()), 2)
+
+    open_keys, close_keys = set(opening.index), set(closing.index)
+    stages: List[Dict[str, Any]] = []
+    for stage in prep_mod.ACTIVE_STAGES:
+        was = {k for k in open_keys if _stage(opening, k) == stage}
+        now = {k for k in close_keys if _stage(closing, k) == stage}
+        arrived, departed, stayed = now - was, was - now, was & now
+
+        destinations: Dict[str, Dict[str, Any]] = {}
+        for key in departed:
+            where = _stage(closing, key) if key in close_keys else "ABSENT"
+            bucket = destinations.setdefault(
+                where, {"stage": where, "caseCount": 0, "amount": 0.0, "_keys": set()})
+            bucket["caseCount"] += 1
+            bucket["_keys"].add(key)
+        for bucket in destinations.values():
+            bucket["amount"] = _amount(opening, bucket.pop("_keys"))
+
+        opening_amount = _amount(opening, was)
+        closing_amount = _amount(closing, now)
+        arrivals_amount = _amount(closing, arrived)
+        departures_amount = _amount(opening, departed)
+        amount_change = round(_amount(closing, stayed) - _amount(opening, stayed), 2)
+        identity = round(opening_amount + arrivals_amount - departures_amount
+                         + amount_change, 2)
+        stages.append({
+            "stage": stage,
+            "openingCaseCount": len(was), "openingAmount": opening_amount,
+            "arrivalCaseCount": len(arrived), "arrivalAmount": arrivals_amount,
+            "departureCaseCount": len(departed), "departureAmount": departures_amount,
+            "persistingCaseCount": len(stayed), "amountChangeOnPersisting": amount_change,
+            "closingCaseCount": len(now), "closingAmount": closing_amount,
+            "departuresByDestination": sorted(destinations.values(),
+                                              key=lambda d: -d["amount"]),
+            "residual": round(identity - closing_amount, 2),
+            "reconciles": abs(identity - closing_amount) <= 0.01,
+        })
+
+    return {
+        "available": True,
+        "openingWeek": open_week, "closingWeek": close_week,
+        "identifierField": _PIPELINE_ID,
+        "openingCaseCount": len(open_keys), "closingCaseCount": len(close_keys),
+        "persistingCaseCount": len(open_keys & close_keys),
+        "stages": stages,
+        "reconciles": all(st["reconciles"] for st in stages),
+        "lineage": {
+            "identity": ("opening live + arrivals - departures "
+                         "+/- amount change on persisting cases = closing live"),
+            "source": "two governed weekly pipeline extracts, joined on case identity",
+            "note": ("Departures are split by where the case went. A case that "
+                     "left a stage has not necessarily left the pipeline."),
+        },
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Pipeline evolution (governed weekly extracts)
 # --------------------------------------------------------------------------- #
@@ -789,6 +1147,12 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
                 "dataset": "pipeline",
                 "extract_date": edate,
                 "total_records": case_count,
+                # The live/terminal split of the extract as read, beside the
+                # open-pipeline count above: flow and conversion measures read
+                # the whole extract, and this says how it divides.
+                "extract_records": int(summary["row_count"]),
+                "live_records": case_count,
+                "terminal_records": int(summary["row_count"]) - case_count,
                 "total_balance": (round(float(amount), 2) if amount is not None else None),
                 "coverage_by_balance_pct": 100.0,
                 "missing_measure_fields": [],
@@ -1167,6 +1531,37 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
 # --------------------------------------------------------------------------- #
 # Forecast bridge evolution (funded balance + weighted pipeline, per funded run)
 # --------------------------------------------------------------------------- #
+#: A forecast track record needs more than one observation.
+FORECAST_ACCURACY_MIN_OBSERVATIONS = 2
+
+
+def _forecast_accuracy(errors) -> Dict[str, Any]:
+    """Summarise per-period forecast error into a track record.
+
+    ``errors`` is ``[(period, error_pct)]``. Returns the structured finding —
+    never a sentence: the presentation layer decides wording, the engine decides
+    what is true.
+    """
+    values = [e for _p, e in errors]
+    if len(values) < FORECAST_ACCURACY_MIN_OBSERVATIONS:
+        return {
+            "available": False,
+            "observations": len(values),
+            "reason": (f"a forecast track record needs at least "
+                       f"{FORECAST_ACCURACY_MIN_OBSERVATIONS} periods carrying a "
+                       f"prior forecast; {len(values)} available"),
+        }
+    worst_period, worst = max(errors, key=lambda e: abs(e[1]))
+    return {
+        "available": True,
+        "observations": len(values),
+        "biasPct": round(sum(values) / len(values), 2),
+        "errorPct": round(sum(abs(v) for v in values) / len(values), 2),
+        "worstPct": round(worst, 2),
+        "worstPeriod": worst_period,
+    }
+
+
 def forecast_evolution(output_root: str | os.PathLike,
                        pipeline_root: str | os.PathLike, client_id: str,
                        to_run_id: Optional[str] = None, *,
@@ -1211,14 +1606,68 @@ def forecast_evolution(output_root: str | os.PathLike,
             "reconciliation": fp.get("reconciliation"),
             "source_file": fp.get("source_file"),
         })
+
+    # WAS THE PRIOR FORECAST RIGHT? The forecast a run published becomes the
+    # prediction the NEXT run's actual tests. That is a re-indexing of the series
+    # already built above — the same numbers, shifted one period — and it is done
+    # here rather than in each surface because it was previously derived in the
+    # browser (``EvolutionPanel``'s forecastVariance) and therefore existed on
+    # exactly one of the two surfaces that should show it.
+    #
+    # No new economics: ``prior_forecast`` at period N IS
+    # ``forecast_funded_balance`` at period N-1, and the variance is the
+    # difference between two figures already reconciled above. The first period
+    # carries none, because nothing forecast it.
+    for index, period in enumerate(periods):
+        if index == 0:
+            period["metrics"]["prior_forecast"] = None
+            period["metrics"]["forecast_variance"] = None
+            continue
+        prior = periods[index - 1]["metrics"].get("forecast_funded_balance")
+        actual = period["metrics"].get("funded_balance")
+        period["metrics"]["prior_forecast"] = prior
+        period["metrics"]["forecast_variance"] = (
+            round(float(actual) - float(prior), 2)
+            if prior is not None and actual is not None else None)
+
+    # -- FORECAST ACCURACY: an ENGINE measure, not a slide's arithmetic ------
+    # Percentage error per period, and the track record over them. Both were
+    # computed in the PPTX layer (``mi_agent_pptx.forecast_accuracy``), which
+    # meant the one number a funder uses to judge the forecaster lived in a
+    # renderer and React could not have shown it at all. No new economics: the
+    # inputs are the prior forecast and the actual, already reconciled above.
+    for period in periods:
+        metrics = period["metrics"]
+        prior, actual = metrics.get("prior_forecast"), metrics.get("funded_balance")
+        metrics["forecast_error_pct"] = (
+            round((float(actual) - float(prior)) / abs(float(prior)) * 100.0, 4)
+            if prior not in (None, 0) and actual is not None else None)
+
+    errors = [(p["period"], p["metrics"]["forecast_error_pct"]) for p in periods
+              if p["metrics"].get("forecast_error_pct") is not None]
+
     return {
         "dataset": "forecast",
         "portfolioId": client_id,
         "toRunId": to_run_id,
         "periods": periods,
+        #: The forecaster's track record. ``bias`` is the mean SIGNED error and
+        #: says which way it leans; ``error`` is the mean ABSOLUTE error and says
+        #: how far off it typically was. A negative bias means the forecast ran
+        #: high. Reported only from two observations: one period in which a
+        #: forecast happened to be close is luck, and calling that a mean error
+        #: dresses a coincidence as a property of the process.
+        "forecastAccuracy": _forecast_accuracy(errors),
+        #: Periods carrying a testable prior forecast. A forecast-vs-actual view
+        #: needs at least one; a track record needs more than one.
+        "priorForecastPeriods": sum(
+            1 for p in periods if p["metrics"].get("prior_forecast") is not None),
         "lineage": {
             "source": "funded central tapes + governed weighted pipeline",
             "formula": "forecast = funded balance + Σ(weighted expected pipeline)",
+            "priorForecast": ("this run's ACTUAL funded balance beside the forecast "
+                              "the PRIOR run published — the same series, offset by "
+                              "one reporting period"),
         },
         "singlePeriod": len(periods) <= 1,
     }

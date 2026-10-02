@@ -238,21 +238,23 @@ def test_redundant_monthly_change_tiles_follow_the_dashboards_rule():
     (["<20%", "20-30%", ">=100%"], ["<20%", "20-30%", ">=100%"]),
 ])
 def test_bars_read_in_the_dashboards_order(given, expected):
-    """The cases stratOrder.ts documents, one for one."""
-    from mi_agent_pptx.strat_order import order_bars
+    """The governed display order both surfaces consume
+    (``mi_agent_api.presentation``; its parity with the dashboard is held in
+    ``tests/test_presentation_parity.py``)."""
+    from mi_agent_api.presentation import order_bars
     assert [b["label"] for b in order_bars([{"label": g} for g in given])] == expected
 
 
-def test_the_port_tracks_its_source():
-    ts = (_UI / "lib" / "stratOrder.ts").read_text(encoding="utf-8")
-    for fn in ("cleanBucketLabel", "bucketBound", "sortStratBars"):
-        assert f"export function {fn}" in ts, f"{fn} moved — re-port strat_order.py"
-
-
 def test_ordering_never_alters_a_value():
-    from mi_agent_pptx.strat_order import order_bars
+    from mi_agent_api.presentation import order_bars
     out = order_bars([{"label": "40-50%", "balance": 2.0}, {"label": "20-30%", "balance": 9.0}])
     assert {(b["label"], b["balance"]) for b in out} == {("40-50%", 2.0), ("20-30%", 9.0)}
+
+
+def test_the_deck_has_no_second_ordering_owner():
+    """The deck once carried its own port of stratOrder.ts beside the shared
+    module, and the publication gate then disagreed with the page it drew."""
+    assert not (_ROOT / "mi_agent_pptx" / "strat_order.py").exists()
 
 
 # --------------------------------------------------------------------------- #
@@ -294,9 +296,10 @@ def test_a_sterling_book_reads_exactly_as_before():
 
 def test_the_deck_puts_the_books_currency_in_force():
     src = (_ROOT / "mi_agent_pptx" / "mi_api.py").read_text(encoding="utf-8")
-    assert "data.currency_code = _currency.resolve_and_set(" in src
+    assert "data.currency_code = _currency.resolve_currency_code(" in src
+    assert "_currency.use_currency(data.currency_code)" in src
     cli = (_ROOT / "mi_agent_pptx" / "cli.py").read_text(encoding="utf-8")
-    assert "_currency.set_currency(getattr(data, \"currency_code\"" in cli
+    assert "_currency.use_currency(data.currency_code)" in cli
 
 
 # --------------------------------------------------------------------------- #
@@ -311,8 +314,8 @@ def test_a_limit_carries_its_governed_operator():
 
 def test_headroom_carries_its_unit():
     from mi_agent_pptx import concentration as C
-    assert C.format_headroom({"headroom": 15.79, "unit": "percent"}) == "15.79pp"
-    assert C.format_headroom({"headroom": None, "unit": "percent"}) == "—"
+    assert C.format_headroom(15.79, "percent", dp=2) == "15.79pp"
+    assert C.format_headroom(None, "percent") == "—"
 
 
 def test_a_value_beside_its_limit_does_not_round_onto_it():

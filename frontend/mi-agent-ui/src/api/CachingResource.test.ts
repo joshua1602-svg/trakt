@@ -16,6 +16,7 @@ function countingClient(): { client: AgentClient; counts: Record<string, number>
     getForecastSnapshot: vi.fn(async () => ({}) as any),
     getFundedEvolution: vi.fn(async () => ({}) as any),
     getPipelineEvolution: vi.fn(async () => ({}) as any),
+    getPipelineMovement: vi.fn(async () => ({ dataset: "pipeline_movement" as const, portfolioId: "p", available: false, reason: "no extracts", stages: [] })),
     getForecastEvolution: vi.fn(async () => ({}) as any),
     getFunnelEvolution: vi.fn(async (p: string) => { bump(`funnel:${p}`); return { portfolioId: p } as any; }),
     getRiskLimits: vi.fn(async () => ({}) as any),

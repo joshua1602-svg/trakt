@@ -73,6 +73,13 @@ export interface BarDatum {
   /** Optional secondary value rendered to the right (e.g. weighted £). */
   secondary?: string;
   count?: number;
+  /**
+   * The parts this bar is made of, in stacking order. Supplied together they
+   * must sum to `value`; a bar drawn as one block shows the destination and
+   * hides the journey, which on a forecast cut is the whole question — how
+   * much of this exposure exists today, and how much is expected to arrive.
+   */
+  parts?: { label: string; value: number; className: string }[];
 }
 
 /**
@@ -177,11 +184,22 @@ export function BarList({
             <span className="t-meta truncate" title={d.label}>
               {d.label}
             </span>
-            <div className="h-3 overflow-hidden rounded-[2px] bg-navy-950">
-              <div
-                className="h-full rounded-[2px] bg-cyan-500"
-                style={{ width: `${Math.max(2, (d.value / max) * 100)}%` }}
-              />
+            <div className="flex h-3 overflow-hidden rounded-[2px] bg-navy-950">
+              {d.parts && d.parts.length > 0 ? (
+                d.parts.map((part) => (
+                  <div
+                    key={part.label}
+                    className={`h-full ${part.className}`}
+                    title={`${part.label}: ${render(part.value)}`}
+                    style={{ width: `${Math.max(0, (part.value / max) * 100)}%` }}
+                  />
+                ))
+              ) : (
+                <div
+                  className="h-full rounded-[2px] bg-cyan-500"
+                  style={{ width: `${Math.max(2, (d.value / max) * 100)}%` }}
+                />
+              )}
             </div>
             {/* The figure is the point of the row; the label and any suffix
                 are context, so they sit a full ink step behind it. */}

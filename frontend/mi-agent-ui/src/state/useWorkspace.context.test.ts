@@ -66,6 +66,7 @@ function makeClient(ask: (req: AgentRequest) => Promise<AgentResponse>): AgentCl
     getFundedEvolution: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getPipelineEvolution: async () => ({}) as any,
+    getPipelineMovement: async () => ({ dataset: "pipeline_movement" as const, portfolioId: "p", available: false, reason: "no extracts", stages: [] }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getForecastEvolution: async () => ({}) as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

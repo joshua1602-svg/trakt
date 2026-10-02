@@ -16,6 +16,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+
+from . import presentation as _presentation
 from mi_agent import portfolio_lens as lens_mod
 
 VIEWS = ("funded", "pipeline", "forecast")
@@ -360,6 +362,16 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
     """Forecast-by-dimension breakdowns for the Forecast view (region / LTV /
     completion month), capped where long."""
     from .pipeline_contract import cap_breakdown
+    from .pipeline_prep import live_mask
+
+    # THE CUTS ADD UP TO THE BRIDGE. The forecast is funded plus the LIVE
+    # pipeline weighted by conversion, and the bridge's headline says so — but
+    # these breakdowns summed the weighted amount over the whole extract, so
+    # the waterfall's own monthly steps came to £7.0m under a £4.1m closing
+    # block. A reader adding the steps of a bridge is doing the one thing a
+    # bridge is drawn for.
+    if pipeline_df is not None and len(pipeline_df):
+        pipeline_df = pipeline_df[live_mask(pipeline_df)]
     region = forecast_dimension_breakdown(funded_df, pipeline_df, "geographic_region_obligor")
     ltv = forecast_dimension_breakdown(funded_df, pipeline_df, "ltv_bucket")
     # Completion-month: pipeline contributes weighted by month; funded is "now".
@@ -370,18 +382,33 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
                      "weighted_expected_funded_amount")
     by_month = [{"month": k, "weightedExpectedFundedAmount": round(v, 2)}
                 for k, v in sorted(month.items())]
-    # Re-cap region/ltv to top 10 for the visual, keyed on forecastAmount.
-    def _cap(rows):
+    # SELECT by materiality (top 10 + Other), then ORDER for display through the
+    # shared presentation owner. The uncapped forms stay ranked by amount, which
+    # is what a caller inspecting the full distribution wants; the CAPPED forms
+    # are what gets drawn, and a drawn LTV axis must read low-to-high on every
+    # surface that draws it. Without this the Forecast view's LTV cut was the one
+    # banded chart in the product still ordered by size.
+    def _cap(rows, dimension):
+        # THE PARTS TRAVEL WITH THE TOTAL. The capped form dropped
+        # ``fundedAmount``, so a consumer could draw the forecast but not what
+        # it is made of — and a forecast bar drawn as one block shows the
+        # destination while hiding how much of it already exists. Both parts are
+        # carried through the cap, and the aggregated "Other" row sums them the
+        # same way it sums the total.
         capped = cap_breakdown(
             [{"key": r["key"], "caseCount": 0, "pipelineAmount": r["forecastAmount"],
-              "weightedExpectedFundedAmount": r["weightedPipelineAmount"]} for r in rows], 10)
-        return capped
+              "fundedAmount": r["fundedAmount"],
+              "weightedExpectedFundedAmount": r["weightedPipelineAmount"]}
+             for r in rows], 10)
+        return _presentation.order_bars(capped, dimension=dimension,
+                                        label_key="key")
     return {
         "byRegion": region,
         "byLtvBucket": ltv,
         "byCompletionMonth": by_month,
-        "byRegionCapped": _cap(region),
-        "byLtvBucketCapped": _cap(ltv),
+        "byRegionCapped": _cap(region, "region"),
+        "byLtvBucketCapped": _cap(ltv, "ltv"),
+        "displayOrder": _presentation.DISPLAY_ORDER_GOVERNED,
     }
 
 

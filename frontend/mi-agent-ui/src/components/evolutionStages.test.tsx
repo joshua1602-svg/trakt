@@ -25,6 +25,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getForecastSnapshot: vi.fn(),
     getFundedEvolution: vi.fn(async () => mockFundedEvolution("client_001")),
     getPipelineEvolution: vi.fn(async () => mockPipelineEvolution("client_001")),
+    getPipelineMovement: vi.fn(async () => ({ dataset: "pipeline_movement" as const, portfolioId: "p", available: false, reason: "no extracts", stages: [] })),
     getForecastEvolution: vi.fn(async () => mockForecastEvolution("client_001")),
     getFunnelEvolution: vi.fn(async () => mockFunnelEvolution("client_001")),
     getRiskLimits: vi.fn(async () => mockRiskLimits("client_001")),

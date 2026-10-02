@@ -63,6 +63,61 @@ export interface PipelineEvolution {
   error?: string;
 }
 
+/** Where a case that left a stage actually went. */
+export interface StageDeparture {
+  /** The destination stage, or ABSENT for a case no longer in the extract. */
+  stage: string;
+  caseCount: number;
+  amount: number;
+}
+
+/**
+ * One live stage's opening-to-closing reconciliation, on counts AND amounts:
+ *
+ *   opening live + arrivals - departures +/- amount change on stayers
+ *     = closing live
+ */
+export interface PipelineStageMovement {
+  stage: string;
+  openingCaseCount: number;
+  openingAmount: number;
+  arrivalCaseCount: number;
+  arrivalAmount: number;
+  departureCaseCount: number;
+  departureAmount: number;
+  persistingCaseCount: number;
+  /** Movement on cases present in BOTH extracts — an amendment, not an exit. */
+  amountChangeOnPersisting: number;
+  closingCaseCount: number;
+  closingAmount: number;
+  departuresByDestination: StageDeparture[];
+  residual: number;
+  reconciles: boolean;
+}
+
+/**
+ * What happened to pipeline cases between two governed weekly extracts.
+ *
+ * `available: false` carries the engine's own reason. There is deliberately no
+ * fallback: without a stable case identifier in both extracts the only honest
+ * answer is that this cannot be reported.
+ */
+export interface PipelineMovement {
+  dataset: "pipeline_movement";
+  portfolioId: string;
+  available: boolean;
+  reason?: string;
+  openingWeek?: string | null;
+  closingWeek?: string | null;
+  identifierField?: string;
+  openingCaseCount?: number;
+  closingCaseCount?: number;
+  persistingCaseCount?: number;
+  stages: PipelineStageMovement[];
+  reconciles?: boolean;
+  lineage?: Record<string, unknown>;
+}
+
 export interface ForecastEvolution {
   dataset: "forecast";
   portfolioId: string;

@@ -36,6 +36,21 @@ if str(_ROOT) not in sys.path:
 _FIXTURE = _ROOT / "tests" / "fixtures" / "pipeline_history_5w"
 
 #: The fixture's five governed extracts, from its movement table.
+#:
+#: These are LIVE PIPELINE STOCK — cases still capable of becoming funded loans.
+#: They were previously the whole extract, which counted a completed case (which
+#: has funded, and is in the funded book) and a withdrawn case (which has gone
+#: away) as pipeline. Read straight off the fixture's own Status column:
+#:
+#:     week          rows  live      live amt       all amt
+#:     2026-05-01       6     6     2,300,000     2,300,000
+#:     2026-05-08       7     7     2,800,000     2,800,000
+#:     2026-05-15       8     8     3,600,000     3,600,000
+#:     2026-05-22       8     5     2,400,000     3,600,000   2 Completed, 1 Withdrawn
+#:     2026-05-29       8     5     2,400,000     3,600,000   2 Completed, 1 Withdrawn
+#:
+#: The first three weeks are unchanged because the fixture has no terminal case
+#: until week four — which is what makes this fixture worth asserting against.
 WEEKS = ("2026-05-01", "2026-05-08", "2026-05-15", "2026-05-22", "2026-05-29")
 #: The OPEN pipeline: from 2026-05-22 two cases have completed and one has
 #: withdrawn, so they leave the series (they stay in the extract, not in it).

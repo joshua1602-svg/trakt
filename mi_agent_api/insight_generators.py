@@ -29,6 +29,8 @@ from .insight_contract import (
     TICKET_MIX_SHIFT, TICKET_SIZE, WEIGHTED_LTV, Insight, Omission,
 )
 
+from . import currency as _currency
+
 Result = Tuple[List[Insight], List[Omission]]
 
 
@@ -36,27 +38,17 @@ Result = Tuple[List[Insight], List[Omission]]
 # Formatting — one place, so every headline reads the same way
 # --------------------------------------------------------------------------- #
 def money(v: Optional[float]) -> str:
-    """Prose money, in the GOVERNED reporting currency.
+    """Prose notation for a monetary amount, in the GOVERNED reporting currency.
 
-    This used to print a pound sign whatever the book was denominated in. It is
-    shared by the dashboard's observations and the investor deck's narrative,
-    so a EUR book read "+£2.7m" on both while its KPI tiles — which already
-    went through ``currency`` — said €. The symbol now comes from the same
-    request-scoped currency the tiles use; with nothing resolved it is the
-    platform default, so a sterling book reads exactly as before.
+    The symbol is whatever ``mi_agent_api.currency`` resolved for this request or
+    batch — never a literal. This function writes React's weekly brief and the
+    investor pack's executive summary, so a hard-coded symbol here put the wrong
+    currency on both surfaces for a non-GBP book while their KPI tiles (which
+    already went through ``currency.format_money``) were right.
     """
     if v is None:
         return "—"
-    from . import currency as _currency
-    sym = _currency.current_symbol()
-    a = abs(v)
-    if a >= 1e9:
-        return f"{sym}{v / 1e9:.2f}bn"
-    if a >= 1e6:
-        return f"{sym}{v / 1e6:.1f}m"
-    if a >= 1e3:
-        return f"{sym}{v / 1e3:.0f}k"
-    return f"{sym}{v:,.0f}"
+    return _currency.format_money(v, suffixes=("bn", "m", "k"))
 
 
 def signed_money(v: Optional[float]) -> str:

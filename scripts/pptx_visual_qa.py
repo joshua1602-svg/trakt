@@ -529,17 +529,9 @@ def inspect(content: bytes, currency: str, side: dict):
     if expected and expected not in body:
         findings.append(f"no {currency} amounts ({expected}) anywhere in the deck")
 
-    # Bucket order, from the render record the drawing functions wrote. The
-    # governed ladder lives in a shared presentation module where one exists;
-    # without it the check is skipped and SAID to be skipped, rather than
-    # passing vacuously.
-    try:
-        from mi_agent_api import presentation as P
-    except ImportError:
-        P = None
-        findings.append("bucket-order check skipped: no shared presentation "
-                        "module in this build")
-    for entry in (side.get("rendered") or ()) if P else ():
+    # Bucket order, from the render record the drawing functions wrote.
+    from mi_agent_api import presentation as P
+    for entry in side.get("rendered") or ():
         if entry.get("kind") != "barlist" or not entry.get("dimension"):
             continue
         dim = entry["dimension"]

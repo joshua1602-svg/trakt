@@ -28,6 +28,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from mi_agent_api import currency as _currency
+
 from .data_resolver import ResolvedData
 from .registry_loader import RegistryLoader
 
@@ -44,27 +46,27 @@ def _is_nan(v: Any) -> bool:
 
 
 def compact_currency(value: float, symbol: Optional[str] = None) -> str:
-    """Compact money for figures and axes — "£104.8MM", "€329K".
+    """Tile / chart-label notation, in the GOVERNED reporting currency.
 
-    The symbol is the GOVERNED reporting currency unless one is passed. It was
-    a hard-coded pound, which is how a EUR book's composition page, vintage and
-    cohort tables and every chart axis came out in sterling.
+    The symbol defaults to whatever ``mi_agent_api.currency`` resolved for this
+    deck build — the same ContextVar the dashboard's KPI tiles read through
+    ``snapshots._fmt_gbp``. It used to default to a literal pound sign, so a book
+    whose governed currency was EUR rendered EUR on the dashboard and GBP in the
+    investor pack. Pass an explicit symbol only to override deliberately.
     """
     if value is None or _is_nan(value):
         return "—"
-    if symbol is None:
-        from mi_agent_api import currency as _currency
-        symbol = _currency.current_symbol()
+    sym = symbol if symbol is not None else _currency.current_symbol()
     v = float(value)
     sign = "-" if v < 0 else ""
     a = abs(v)
     if a >= 1e9:
-        return f"{sign}{symbol}{a / 1e9:.2f}BN"
+        return f"{sign}{sym}{a / 1e9:.2f}BN"
     if a >= 1e6:
-        return f"{sign}{symbol}{a / 1e6:.1f}MM"
+        return f"{sign}{sym}{a / 1e6:.1f}MM"
     if a >= 1e3:
-        return f"{sign}{symbol}{a / 1e3:.0f}K"
-    return f"{sign}{symbol}{a:,.0f}"
+        return f"{sign}{sym}{a / 1e3:.0f}K"
+    return f"{sign}{sym}{a:,.0f}"
 
 
 def signed_currency(value: float) -> str:

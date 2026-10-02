@@ -33,6 +33,11 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 #: statements of fact about the book, not as internal error strings.
 REASON_CONDITION = "condition"
 REASON_NO_DATA = "no data"
+#: A slide dropped because ANOTHER slide in this deck answers the same question
+#: better for this book. This is not an absent capability, and the ledger must
+#: not describe it as one: a pack that renders concentration headroom and then
+#: states "no governed risk-limit artefact" contradicts itself on the page.
+REASON_SUPERSEDED = "superseded"
 
 
 @dataclass(frozen=True)
@@ -104,6 +109,21 @@ def _periods(payload: Any, minimum: int = 2) -> bool:
     return len(payload.get("periods") or ()) >= minimum
 
 
+
+def _informative_dimensions(funded: Mapping[str, Any]) -> int:
+    """How many governed dimensions this book can actually distribute on.
+
+    The shared rule in ``mi_agent_api.presentation``, applied to the same
+    stratification payload the slides read — so the condition that decides
+    whether a page exists and the selector that fills it cannot disagree.
+    """
+    from mi_agent_api import presentation as _sel
+
+    return sum(1 for st in (funded.get("stratifications") or ())
+               if isinstance(st, Mapping) and st.get("bars")
+               and _sel.is_informative(st.get("bars") or (), value_key="balance"))
+
+
 def _cohort_progression_ready(data: Any) -> bool:
     """True when the governed static pool has something to season.
 
@@ -152,6 +172,12 @@ def build_facts(data: Any) -> Dict[str, Any]:
         # -- funded ---------------------------------------------------------
         "has_funded": bool(funded.get("kpis")),
         "has_stratifications": bool(funded.get("stratifications")),
+        # HOW MANY CUTS THE BOOK ACTUALLY SUPPORTS, by the same shared rule the
+        # slides select with. A deep-dive stratification page continues from the
+        # page above it, so it has content only where more informative
+        # dimensions exist than the first page could draw. Counting them here
+        # lets the page be OMITTED with a reason rather than drawn empty.
+        "informative_dimensions": _informative_dimensions(funded),
         "has_movement": bool(ctx and any(s.has_movement for s in ctx.type_slices)),
         # Governed attribution across at least one dimension.
         "has_attribution": any(getattr(b, "available", False)
@@ -164,6 +190,21 @@ def build_facts(data: Any) -> Dict[str, Any]:
         # through it would claim a trend the data does not contain.
         "has_cohort_progression": _cohort_progression_ready(data),
         "has_multidim": bool(getattr(data, "multidim", {}) or {}),
+        # The reconciled economic bridge (opening + new - exited + continuing).
+        # Only true when the identity actually closed for this book: an
+        # unreconciled bridge is not shown, it is omitted with its reason.
+        "has_balance_movement": bool((getattr(data, "balance_movement", {}) or {}
+                                      ).get("available")),
+        # Exit reasons carried by evidence on the tape. Where this is false the
+        # bridge still renders, with exits in one bar rather than split.
+        "has_exit_reasons": bool((getattr(data, "balance_movement", {}) or {}
+                                  ).get("exitsClassified")
+                                 and (getattr(data, "balance_movement", {}) or {}
+                                      ).get("exitsReconcile")),
+        # A per-book forward view only means something when a book-level
+        # projection actually resolved.
+        "has_portfolio_projections": bool((getattr(data, "portfolio_projections", {}) or {}
+                                           ).get("portfolios")),
         # -- pipeline --------------------------------------------------------
         "has_pipeline": bool(getattr(data, "pipeline", {}) or {}),
         "has_pipeline_history": _periods(getattr(data, "pipeline_evolution", {})),
@@ -193,7 +234,82 @@ def build_facts(data: Any) -> Dict[str, Any]:
         "has_concentration_forward": bool(
             ((getattr(data, "concentration", {}) or {}).get("states") or {}).get("available")),
     }
+
+    # -- QUANTITATIVE facts -------------------------------------------------
+    # The booleans above answer "does this exist?". A conditional pack also
+    # needs "how much of it is there?", because the difference between a new
+    # book and a seasoned one is not that one has no history — it is that one
+    # has too little history for a trend to mean anything. These three are read
+    # off already-resolved payloads; nothing is computed for them.
+    funded_periods = len((getattr(data, "funded_evolution", {}) or {}).get("periods") or ())
+    pipeline_periods = len((getattr(data, "pipeline_evolution", {}) or {}).get("periods") or ())
+    forecast_periods = len((getattr(data, "forecast_evolution", {}) or {}).get("periods") or ())
+    cohort_count = len((getattr(data, "cohorts", {}) or {}).get("cohorts") or ())
+    constituent_books = len({
+        str(row.get("key")) for row in
+        (((getattr(data, "funded_evolution", {}) or {}).get("breakdowns") or {}
+          ).get("portfolio") or ())
+        if row.get("key") is not None})
+
+    funded_balance = _kpi_raw(funded, "balance")
+    pipeline_amount = _num((getattr(data, "pipeline", {}) or {}).get("pipelineAmount"))
+    denominator = (funded_balance or 0.0) + (pipeline_amount or 0.0)
+
+    # -- CAPABILITY facts ----------------------------------------------------
+    # One boolean per published capability, named ``can_<metric id>``, taken
+    # from the registry's own resolution against this portfolio's canonical
+    # shape. This is what lets a deck config say "include this page where the
+    # book supports the measure" without ever naming an asset class: the
+    # registry declares the ECONOMIC conditions a capability needs, and a book
+    # that meets them gets it whatever it is called.
+    for metric, availability in (getattr(data, "capabilities", {}) or {}).items():
+        facts[f"can_{metric}"] = bool(getattr(availability, "available", False))
+
+    facts.update({
+        #: Reporting periods of funded history actually resolved.
+        "funded_periods": funded_periods,
+        #: Weekly pipeline extracts actually resolved.
+        "pipeline_periods": pipeline_periods,
+        #: Funded runs carrying a forecast. A forecast-vs-actual comparison needs
+        #: THREE: two to produce a prior forecast and an actual to test it
+        #: against, plus one more before the comparison is a track record rather
+        #: than a single data point.
+        "forecast_periods": forecast_periods,
+        #: Origination vintages the governed cohort table found.
+        "cohort_count": cohort_count,
+        #: Distinct constituent books present in the governed period x book
+        #: funded history. This is what separates "one book" from "a portfolio
+        #: of books": a stack, a per-book forward view and a book-level driver
+        #: sentence all need more than one, and none of them is worth a page
+        #: when there is only one.
+        "constituent_books": constituent_books,
+        #: Funded balance, from the governed KPI (never recomputed).
+        "funded_balance": float(funded_balance or 0.0),
+        #: Pipeline balance, from the governed pipeline snapshot.
+        "pipeline_amount": float(pipeline_amount or 0.0),
+        #: Pipeline as a share of the book it would join. This is what makes a
+        #: book "growing": not that a pipeline exists, but that it is large
+        #: enough relative to the funded book for the origination story to be
+        #: the story. A fraction 0-1.
+        "pipeline_share": (round(float(pipeline_amount or 0.0) / denominator, 4)
+                           if denominator else 0.0),
+    })
     return facts
+
+
+def _num(value: Any) -> Optional[float]:
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _kpi_raw(funded: Mapping[str, Any], kpi_id: str) -> Optional[float]:
+    """The raw value behind a governed KPI tile, or ``None``."""
+    for kpi in (funded or {}).get("kpis") or ():
+        if isinstance(kpi, Mapping) and kpi.get("id") == kpi_id:
+            return _num(kpi.get("raw"))
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -209,6 +325,27 @@ def _strat_guard(spec: Mapping[str, Any], data: Any) -> Optional[str]:
         wanted = ", ".join(keys) if keys else "the requested dimensions"
         return f"the funded tape carries no {wanted} stratification"
     return None
+
+
+def _geo_guard(spec: Mapping[str, Any], data: Any) -> Optional[str]:
+    """The AREA-LEVEL map, and an honest reason when it is absent.
+
+    Geography is two different things on this tape. The map needs area-level
+    exposure (ITL3); the region stratification needs only a region field, and a
+    book routinely has the second without the first. Saying "no geographic
+    exposure resolved" while a regional bar list renders four pages earlier
+    reads, correctly, as a contradiction — so the reason names WHICH geography
+    is missing and, when the coarser cut did render, points at it.
+    """
+    if (getattr(data, "geo", {}) or {}).get("areas"):
+        return None
+    strats = (getattr(data, "funded", {}) or {}).get("stratifications") or []
+    regional = any(st.get("bars") for st in strats
+                   if str(st.get("key") or "") in ("region", "geographic_region_obligor"))
+    if regional:
+        return ("no area-level (ITL3) exposure on this tape; regional "
+                "distribution is reported on the funded stratifications")
+    return "no geographic exposure resolved for this book"
 
 
 def _evolution_guard(attr: str, label: str, minimum: int = 2
@@ -232,14 +369,22 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
     "strat_barlists": _strat_guard,
     # At least one paired-dimension panel must actually have data — an "available"
     # multidim payload whose panels are all empty would render an empty slide.
+    # At least one paired-dimension panel must actually have data — an
+    # "available" multidim payload whose panels are all empty would render an
+    # empty slide.
+    #
+    # ASKS WHAT IT MEANS, NOT WHICH KEYS. This used to name three specific
+    # pairs (ltv_age, ltv_borrower_type, ltv_region), which was invisible only
+    # while the selector returned them in declaration order every time. The
+    # moment pairs were chosen on information content the guard dropped a page
+    # carrying four perfectly good crossings, because none of them happened to
+    # be the three it had been told to look for.
     "multidim": lambda s, d: (
-        None if any(((getattr(d, "multidim", {}) or {}).get(k) or {}).get(f)
-                    for k, f in (("ltv_age", "points"),
-                                 ("ltv_borrower_type", "matrix"),
-                                 ("ltv_region", "matrix")))
+        None if any(isinstance(v, Mapping) and v.get("matrix")
+                    for k, v in (getattr(d, "multidim", {}) or {}).items()
+                    if not str(k).startswith("_"))
         else "paired-dimension analysis is not available for this book"),
-    "geo": lambda s, d: (None if (getattr(d, "geo", {}) or {}).get("areas")
-                         else "no geographic exposure resolved for this book"),
+    "geo": _geo_guard,
     "funded_evolution": _evolution_guard("funded_evolution", "funded evolution"),
     "cohorts": lambda s, d: (None if (getattr(d, "cohorts", {}) or {}).get("cohorts")
                              else "no origination vintage data on the funded tape"),
@@ -297,6 +442,14 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
         None if (getattr(d, "portfolio", None) is not None
                  and len(d.portfolio.type_slices) > 1)
         else "only one portfolio type is in scope"),
+    "balance_movement": lambda s, d: (
+        None if (getattr(d, "balance_movement", {}) or {}).get("available")
+        else str((getattr(d, "balance_movement", {}) or {}).get("reason")
+                 or "the funded balance bridge did not reconcile for this period")),
+    "funded_stock": _evolution_guard("funded_evolution", "funded stock over time"),
+    "portfolio_projections": lambda s, d: (
+        None if (getattr(d, "portfolio_projections", {}) or {}).get("portfolios")
+        else "no constituent-book projection resolved for this scope"),
     "exec_insights": lambda s, d: (
         None if (getattr(d, "insights", {}) or {}).get("insights")
         else "no governed observations cleared the materiality thresholds"),
@@ -343,18 +496,41 @@ def select_slides(slides: Sequence[Mapping[str, Any]], data: Any,
                 # A malformed condition must not silently drop investor content.
                 included = True
             if not included:
-                omitted.append(SlideOmission(sid, title, _explain(str(condition), known),
-                                             REASON_CONDITION))
+                omitted.append(_omission(spec, sid, title,
+                                         _explain(str(condition), known),
+                                         REASON_CONDITION, kept))
                 continue
 
         reason = will_render(spec, data)
         if reason:
-            omitted.append(SlideOmission(sid, title, reason, REASON_NO_DATA))
+            omitted.append(_omission(spec, sid, title, reason,
+                                     REASON_NO_DATA, kept))
             continue
 
         kept.append(spec)
 
     return kept, omitted
+
+
+def _omission(spec: Mapping[str, Any], sid: str, title: str, reason: str,
+              category: str, kept: Sequence[Mapping[str, Any]]) -> SlideOmission:
+    """Record a dropped slide, preferring "covered elsewhere" to "unavailable".
+
+    A slide config may name the slide that SUPERSEDES it. When that slide is in
+    the deck, the honest reason this one is absent is that the reader already
+    has the answer — not that the capability is missing. Saying the latter while
+    the superseding slide renders two pages earlier is the contradiction this
+    exists to prevent.
+    """
+    replacement = str(spec.get("superseded_by") or "")
+    if replacement:
+        by = next((k for k in kept if str(k.get("id")) == replacement), None)
+        if by is not None:
+            return SlideOmission(
+                sid, title,
+                f"covered by {by.get('title') or replacement}",
+                REASON_SUPERSEDED)
+    return SlideOmission(sid, title, reason, category)
 
 
 #: Investor-facing wording for the conditions the config actually uses.
@@ -373,17 +549,123 @@ _CONDITION_WORDING: Dict[str, str] = {
     "has_concentration": "no governed concentration tests are configured for this portfolio",
     "has_attribution": "no prior reporting period to attribute movement against",
     "has_pipeline_history": "fewer than two weekly pipeline extracts are available",
+    "has_geo": "no area-level (ITL3) exposure resolved for this book",
+    "has_balance_movement": "the funded balance bridge did not reconcile for this period",
+    "has_portfolio_projections": "no constituent-book projection resolved for this scope",
+    "constituent_books > 1": "only one constituent book is in scope",
+    "constituent_books <= 1": "the constituent books are reported individually "
+                              "on the portfolio composition page",
+    "has_funnel": "no weekly origination extracts to measure conversion from",
+    "has_cohorts": "the funded tape carries no origination vintage",
+    "has_cohort_progression": "no vintage holds loans in two or more reporting "
+                              "periods, so there is no seasoning to show",
+    "not has_cohort_progression": "the cohort seasoning page already states each "
+                                  "vintage at formation",
+    "not has_balance_movement": "the loan-level balance bridge answers this on "
+                                "its own page",
+    "not has_concentration": "the approved concentration tests answer this on "
+                             "their own page",
+    "has_forecast_projection": "insufficient run-rate history for a scale-up "
+                               "projection",
+    "has_forecast_history": "no prior run published a forecast to test",
+    "has_stratifications": "the funded tape carries no stratification dimensions",
+    "informative_dimensions": ("the book distributes on no more dimensions than "
+                               "the page above already draws"),
+    "type_count > 1 or portfolio_count > 1": "one portfolio and one portfolio "
+                                            "type are in scope",
+    "funded_periods >= 2": "fewer than two reporting periods are available",
+    "cohort_count >= 3": "fewer than three origination vintages",
+    "funded_balance >= 25000000": "the book is not large enough for paired-"
+                                  "dimension cells to be read as anything but "
+                                  "noise",
+}
+
+#: Investor-facing wording for the THRESHOLD conditions the pack uses. A funder
+#: must never be shown ``pipeline_share >= 0.15``: it is machinery, it explains
+#: nothing, and it belongs to the same family as the storage paths and module
+#: names this page was cleaned of. Each entry says what the threshold MEANS.
+_THRESHOLD_WORDING: Dict[str, str] = {
+    "pipeline_share": "the pipeline is small relative to the funded book, so "
+                      "this origination detail would not change the picture",
+    "funded_balance": "the book is not large enough for this additional cut to "
+                      "earn a page",
+    "funded_periods": "too few reporting periods for this view",
+    "forecast_periods": "too few runs carrying a forecast for a track record",
+    "cohort_count": "too few origination vintages for a formation profile",
+    "pipeline_periods": "too few weekly pipeline extracts for this view",
 }
 
 
 def _explain(condition: str, facts: Mapping[str, Any]) -> str:
-    """A readable reason for a condition that excluded a slide."""
+    """A readable reason for a condition that excluded a slide.
+
+    NEVER the expression itself. This text is printed in a client-facing
+    methodology ledger, and ``the reporting condition 'has_stratifications and
+    funded_balance >= 100000000 and constituent_books <= 1' was not met`` shows
+    a funder the machinery instead of telling them why a page is absent.
+
+    The reason is found by asking the SAME evaluator that excluded the slide
+    which top-level ``and`` clause actually failed, then wording that clause —
+    by its exact text where the config uses a known form, else by the governed
+    facts it names. Names are matched as identifiers, never as substrings: a
+    substring match reported "no forecast is available for this book" for a
+    condition that had only failed ``has_forecast_projection``.
+    """
     text = condition.strip()
     if text in _CONDITION_WORDING:
         return _CONDITION_WORDING[text]
-    # Name the first governed fact in the expression that is falsy — that is the
-    # one an investor would want explained.
-    for name, wording in _CONDITION_WORDING.items():
-        if " " not in name and name in text and not facts.get(name):
+    for clause in _clauses(text):
+        try:
+            if evaluate_condition(clause, facts):
+                continue                      # this clause was satisfied
+        except ConditionError:
+            continue
+        wording = _word_clause(clause, facts)
+        if wording:
             return wording
-    return f"the reporting condition '{text}' was not met"
+    return "this book does not meet the reporting conditions for this section"
+
+
+def _word_clause(clause: str, facts: Mapping[str, Any]) -> Optional[str]:
+    """Investor wording for one failing clause, or ``None``."""
+    text = clause.strip()
+    if text in _CONDITION_WORDING:
+        return _CONDITION_WORDING[text]
+    names = _names(text)
+    for name in names:
+        if name in _CONDITION_WORDING and not facts.get(name):
+            return _CONDITION_WORDING[name]
+    for name in names:
+        if name in _THRESHOLD_WORDING:
+            return _THRESHOLD_WORDING[name]
+    return None
+
+
+def _names(expression: str) -> List[str]:
+    """The governed fact names an expression reads, in source order."""
+    try:
+        tree = ast.parse(expression.strip(), mode="eval")
+    except SyntaxError:
+        return []
+    out: List[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id not in out:
+            out.append(node.id)
+    return out
+
+
+def _clauses(condition: str) -> List[str]:
+    """The top-level ``and`` operands of an expression, as source text."""
+    try:
+        tree = ast.parse(condition.strip(), mode="eval").body
+    except SyntaxError:
+        return [condition]
+    if isinstance(tree, ast.BoolOp) and isinstance(tree.op, ast.And):
+        out = []
+        for node in tree.values:
+            try:
+                out.append(ast.unparse(node))
+            except Exception:  # noqa: BLE001 - fall back to the whole expression
+                return [condition]
+        return out
+    return [condition]
