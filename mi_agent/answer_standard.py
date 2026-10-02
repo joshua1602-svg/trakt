@@ -118,6 +118,11 @@ _BASIS_WORDS = {"collateral": "the property's location",
 _NO_BASIS_WORDS = "the book's own region field"
 
 
+def basis_words(basis: Optional[str]) -> Optional[str]:
+    """A geography basis in a reader's words, or None for no basis."""
+    return _BASIS_WORDS.get(str(basis or ""))
+
+
 def region_note(source_field_rows: Optional[dict] = None, *, noun: str = "case",
                 unmapped: int = 0, unmapped_amount: float = 0.0,
                 unplaced_amount: float = 0.0, unplaced_of: str = "",

@@ -2611,3 +2611,30 @@ Not in phase 1: an answer carried forward to a follow-up ("And 12?") — phase
 2; a cleared chat's token presented again with the OLD chat id cannot be told
 from a live one without a server store — it is bound to its user and expires
 in five minutes.
+
+MEASURED (2026-10-02 08:37 UTC, 0c116861, RERUN.md). Every reply sent with
+its continuation matched its stand-alone twin, 4 of 4 — the half of the D25
+pass mark that is the conversation's own. The other half, "every ask-back
+asks", was 4 of 6, and neither miss is the conversation's:
+
+    C02   "the completion run rate over the last few weeks" was read as the
+          run rate "for the pipeline" and declined; so was its twin. The
+          run-rate population misread (§31, §35) — a reading the compiler
+          cannot correct on its own: the recorded Q134 reading bound the same
+          measure over the pipeline for an Offer-to-completion pull-through,
+          so re-reading "pipeline" as the forecast would answer that one
+          wrongly. A fix is in what the model is told about the measure, and
+          under §37 that is measured against the baseline before it is used.
+    C05   "How has the balance changed?" was answered with a stated default
+          (month on month, the size of the change and what moved) where the
+          bank expected an ask-back. Whether a stated default or an ask-back
+          is the right answer to it is the bank owner's call; the figure
+          matched its twin.
+
+The run found one gap in the phase itself: the reading a reply states ("I
+read your earlier question as …") is `plan_decline.understood`, which named
+the measures, population, filters and dimensions but not the plan's geography
+— and the region is exactly what C01 and C06's replies supplied. It now names
+the level and the basis ("by NUTS3 region (the property's location)") and any
+places the plan is restricted to; every decline that states its reading says
+it too. An execution change: the model's view is the baseline's.

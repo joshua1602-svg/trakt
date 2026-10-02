@@ -226,7 +226,35 @@ def understood(plan: Optional[Mapping[str, Any]]) -> str:
                      f"{_value(f.get('value'))}")
     for d in (output.get("dimensions") or ()):
         parts.append(f"by {_named(d.get('concept'), labels)}")
+    parts.extend(_geography(output.get("geography") or plan.get("geography")))
     return ", ".join(parts)
+
+
+def _geography(geo: Optional[Mapping[str, Any]]) -> List[str]:
+    """The plan's geography contract in words: the level, the basis and any
+    places it is restricted to. A region is a breakdown the compiler carries
+    apart from the dimensions, and it is often exactly what a reply to an
+    ask-back supplied ("The property's") — so a reading that left it out
+    restated the question without the answer to the ask (askback run,
+    2026-10-02)."""
+    if not geo:
+        return []
+    from mi_agent import mi_geography, region_basis
+    from mi_agent.answer_standard import basis_words
+    field = geo.get("canonical_field")
+    level = (geo.get("resolved_level") or region_basis.level_of(field)
+             or geo.get("requested_level") or "")
+    place = region_basis.LEVEL_LABELS.get(str(level), "region")
+    basis = basis_words(mi_geography.basis_of_field(field)
+                        or mi_geography.normalise_basis(geo.get("requested_basis")))
+    if basis:
+        place = f"{place} ({basis})"
+    parts: List[str] = []
+    if geo.get("group_by"):
+        parts.append(f"by {place}")
+    if geo.get("values"):
+        parts.append(f"where the {place} is {_value(list(geo['values']))}")
+    return parts
 
 
 def _first_blocking(body: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:

@@ -150,3 +150,21 @@ def test_a_comparator_is_read_as_words():
                          "filters": [{"concept": "borrower_age",
                                       "comparator": "gt", "value": 55}]}]}
     assert "where borrower age is above 55" in decline.understood(plan)
+
+
+def test_a_region_is_read_with_its_level_and_basis():
+    """The askback run (2026-10-02): "With your reply, I read your earlier
+    question as balance, for the funded book" — the region the reply supplied
+    was not in the reading. It is part of the plan, and is said."""
+    plan = {"population": {"base": "funded"},
+            "outputs": [{"measures": [{"concept": "balance"}], "dimensions": [],
+                         "filters": []}],
+            "geography": {"canonical_field": "geographic_region_collateral",
+                          "resolved_level": "nuts3", "group_by": True}}
+    assert decline.understood(plan).endswith(
+        "by NUTS3 region (the property's location)")
+    plan["geography"] = {"canonical_field": "geographic_region_obligor_itl3",
+                         "resolved_level": "itl3", "group_by": False,
+                         "values": ["Kent"]}
+    assert decline.understood(plan).endswith(
+        "where the ITL3 sub-region (the borrower's address) is Kent")

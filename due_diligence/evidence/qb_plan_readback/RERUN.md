@@ -646,3 +646,29 @@ intents added beside the baseline's.
     2026-10-02  08:35 UTC 0c116861 deployed (run 36984606253, success): the
                 model-view guard and baseline (§37) and conversation phase 1
                 (§38), switched off for users. Next: `askback`
+    2026-10-02  08:37 UTC ASKBACK RUN on 0c116861 (conversation switched on
+                for the run only; 18 asked, all recorded; files uploaded).
+                Every reply sent with a continuation was read with the
+                question it answers and matched its stand-alone twin: 4 of 4
+                (C01 "The property's" -> balance by property region at NUTS3,
+                South East £19.5m of 11 regions, as its twin; C03 "With the
+                previous extract" -> pipeline +£2.9m, £966.9m to £969.8m, as
+                its twin; C04 "£100m" -> around 2027-01, base £3.0m/month, as
+                its twin; C06 "The borrower's" -> declined, borrower region
+                at ITL3 not in this book, as its twin). The ask-back asked in
+                4 of 6 (C01, C03, C04, C06) and said what it needed each
+                time. Not asked: C02 "completion run rate over the last few
+                weeks" was read as the run rate "for the pipeline" and
+                declined (population not measured) — its twin, the 8-week run
+                rate, declined the same way this time (it answered in the
+                sign-off run): the run-rate misread of §31/§35, not the
+                conversation; C02's bare "8", with no continuation to carry,
+                was asked back on its own, as it should be. C05 "How has the
+                balance changed?" was answered with a stated default (July to
+                August, +£5.9m) rather than asked back; its reply and twin
+                gave the same figure. No answer found wrong. Finding: a
+                reply's "I read your earlier question as balance, for the
+                funded book" left out the region the reply supplied — the
+                reading now names the plan's geography (level and basis; the
+                model's view is unchanged). Cold forecast question 53s (was
+                146s); a cold first question 55s
