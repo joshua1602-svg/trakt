@@ -36,7 +36,26 @@ export interface DrillModel {
   totals: Record<string, number>;
 }
 
-const ADDITIVE_FORMATS = new Set<ValueFormat>(["gbp", "number"]);
+/**
+ * ADDITIVITY IS THE ENGINE'S, NOT OURS.
+ *
+ * This module used to decide whether a measure could be summed from its DISPLAY
+ * FORMAT — `gbp` or `number` meant additive. A format cannot tell a sum from an
+ * average: `current_outstanding_balance_sum` and `current_outstanding_balance_avg`
+ * are both money. Under the old rule the insight engine summed ten broker
+ * AVERAGES into a "portfolio total" of £3.06m against a real book of £38.6m and
+ * reported shares of it.
+ *
+ * The engine already knows — it uses the same fact to decide whether a capped
+ * bar keeps an aggregated "Other" bucket — and now publishes it as
+ * `displayHints[key].additive`. We read it. When it is absent we treat the
+ * measure as NOT additive, because a missing contract must never re-open the
+ * guess: an un-summed measure loses a share, a wrongly-summed one invents a
+ * total.
+ */
+function additiveFromContract(hint?: { additive?: boolean }): boolean {
+  return hint?.additive === true;
+}
 
 /** Beyond this many distinct numeric values we treat the axis as continuous. */
 const MAX_NUMERIC_CATEGORIES = 24;
@@ -86,7 +105,7 @@ export function buildDrillModel(artifact: DrillArtifact): DrillModel | null {
         label: labelFor(key),
         format,
         scale: hints[key]?.scale,
-        additive: !!format && ADDITIVE_FORMATS.has(format),
+        additive: additiveFromContract(hints[key]),
       });
     }
   } else {
@@ -101,7 +120,7 @@ export function buildDrillModel(artifact: DrillArtifact): DrillModel | null {
         label: col.label,
         format: col.format,
         scale: col.scale,
-        additive: !!col.format && ADDITIVE_FORMATS.has(col.format),
+        additive: additiveFromContract(col),
       });
     }
   }

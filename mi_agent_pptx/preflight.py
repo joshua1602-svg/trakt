@@ -366,10 +366,12 @@ def _gate_pipeline_reconciles(text: Optional[str], pipeline) -> GateResult:
     # one on the page (millions, one decimal — the pack's own convention).
     millions = f"{float(amount) / 1e6:.1f}"
     ok = millions in text.replace(",", "")
+    from mi_agent_api import currency as _currency
+    sym = _currency.current_symbol()
     return GateResult("pipeline_reconciles", ok,
                       f"pipeline headline reconciles to the governed snapshot "
-                      f"(£{millions}MM)" if ok else
-                      f"pipeline headline £{millions}MM does not appear in the deck",
+                      f"({sym}{millions}MM)" if ok else
+                      f"pipeline headline {sym}{millions}MM does not appear in the deck",
                       evidence={"pipeline_amount": amount})
 
 
@@ -495,6 +497,81 @@ def _gate_no_duplicate_observations(insights, watchlist) -> GateResult:
                       evidence={"duplicates": dupes[:4], "total": len(headlines)})
 
 
+def _gate_governed_bucket_order(build_report) -> GateResult:
+    """Every banded bar list was DRAWN in the governed order.
+
+    The order is decided once, upstream, by ``mi_agent_api.presentation`` against
+    the ladder in ``config/mi/buckets.yaml``, and the React bar list consumes the
+    same payload. This checks the deck actually honoured it — not the payload it
+    was handed, but the sequence ``render.draw_barlist`` walked, captured inside
+    the drawing function itself.
+
+    It exists because a bar list is a PNG: its category order cannot be read back
+    out of the finished .pptx, so without this the one property most likely to
+    drift is the one nothing could see. That is exactly how the deck came to draw
+    LTV bands in balance order while the dashboard drew them in band order.
+
+    A dimension the registry does not band (region, product, broker) has no
+    governed ladder and is not checked here — there is nothing to check it
+    against.
+    """
+    from mi_agent_api import presentation as _presentation
+
+    drawn = [e for e in (build_report.get("rendered") or [])
+             if e.get("kind") == "barlist" and e.get("dimension")]
+    offenders = []
+    checked = 0
+    for entry in drawn:
+        dimension = entry.get("dimension")
+        ladder = _presentation.governed_ladder(dimension)
+        if not ladder:
+            continue
+        checked += 1
+        categories = [str(c) for c in (entry.get("categories") or [])]
+        expected = [c for c in _presentation.order_categories(
+            categories, dimension=dimension)]
+        if categories != expected:
+            offenders.append({"chart": entry.get("chart"), "dimension": dimension,
+                              "drawn": categories, "expected": expected})
+    if offenders:
+        names = ", ".join(str(o["dimension"]) for o in offenders)
+        return GateResult("governed_bucket_order", False,
+                          f"bar list(s) drawn out of the governed bucket order: {names}",
+                          evidence={"offenders": offenders})
+    return GateResult("governed_bucket_order", True,
+                      f"{checked} banded bar list(s) drawn in the governed bucket order",
+                      evidence={"checked": checked})
+
+
+def _gate_governed_currency(text, data) -> GateResult:
+    """No foreign currency symbol reached the page.
+
+    The deck renders in the currency ``mi_agent_api.currency`` resolved for the
+    book. If any OTHER currency symbol appears in the rendered text, something
+    formatted money without going through the governed formatter — which is the
+    defect this gate exists to stop coming back.
+    """
+    from mi_agent_api import currency as _currency
+
+    code = getattr(data, "currency_code", None) or "GBP"
+    expected = _currency.symbol_for(code).strip()
+    if text is None:
+        return GateResult("governed_currency", False, "deck could not be read")
+    foreign = sorted({sym.strip() for c, sym in
+                      (("GBP", "£"), ("EUR", "€"), ("USD", "$"), ("JPY", "¥"))
+                      if sym.strip() and sym.strip() != expected
+                      and sym.strip() in text})
+    if foreign:
+        return GateResult("governed_currency", False,
+                          f"the deck reports in {code} ({expected}) but also renders "
+                          f"{', '.join(foreign)}",
+                          evidence={"expected": expected, "found": foreign})
+    return GateResult("governed_currency", True,
+                      f"every monetary figure renders in the governed currency "
+                      f"{code} ({expected})",
+                      evidence={"currency_code": code})
+
+
 def _gate_mandatory_slides(records: Sequence[Mapping[str, Any]]) -> GateResult:
     """Cover, methodology and appendix are the disclosure spine of the pack."""
     ids = {str(r.get("id")) for r in records}
@@ -512,6 +589,116 @@ def _gate_mandatory_slides(records: Sequence[Mapping[str, Any]]) -> GateResult:
 # --------------------------------------------------------------------------- #
 # Entry point.
 # --------------------------------------------------------------------------- #
+
+def _gate_stock_and_movement_agree(records, data) -> GateResult:
+    """The stock page and the movement page must close on the same number.
+
+    They are computed by different engines from the same governed snapshots:
+    the stock series is the funded-evolution loader's per-period balance, the
+    bridge is ``period_change.balance_bridge`` reconciling loan by loan. A pack
+    that prints one closing balance on page six and a different one on page nine
+    has done the reader more harm than either page did good, and no reader can
+    be expected to notice which of the two to believe.
+
+    The gate is skipped where only one of the pages is in the deck. It is
+    MANDATORY where both are: this is the reconciliation the pack's credibility
+    rests on.
+    """
+    ids = {str(r.get("id")) for r in records or ()
+           if not r.get("placeholder")}
+    if not {"funded_stock", "balance_movement"} <= ids:
+        return GateResult("stock_and_movement_agree", True,
+                          "the stock and movement pages are not both in this deck",
+                          mandatory=False)
+    movement = getattr(data, "balance_movement", {}) or {}
+    periods = (getattr(data, "funded_evolution", {}) or {}).get("periods") or []
+    closing = movement.get("closingBalance")
+    stock = next((( p.get("metrics") or {}).get("funded_balance")
+                  for p in reversed(periods)
+                  if (p.get("metrics") or {}).get("funded_balance") is not None),
+                 None)
+    if closing is None or stock is None:
+        return GateResult("stock_and_movement_agree", False,
+                          "one of the two pages rendered without a closing balance")
+    gap = abs(float(stock) - float(closing))
+    # A hundredth of a currency unit, matching the bridge's own tolerance.
+    ok = gap <= max(0.01, abs(float(closing)) * 1e-9)
+    return GateResult("stock_and_movement_agree", ok,
+                      "the stock series and the balance bridge close on the same "
+                      "figure" if ok else
+                      f"the stock page closes at {stock} and the movement page at "
+                      f"{closing}",
+                      evidence={"stock_closing": stock, "bridge_closing": closing,
+                                "gap": gap})
+
+
+def _gate_stack_reconciles(build_report, data) -> GateResult:
+    """A stacked stock chart must sum to the period total it sits beside.
+
+    The stack is drawn from the governed per-book breakdown and the totals come
+    from the same loader, so they agree by construction — which is exactly why
+    this is worth pinning. A stack whose parts do not sum to the whole is the
+    one defect a reader cannot see and cannot recover from.
+    """
+    # The render record keys the chart under "chart" (see render._record).
+    drawn = [r for r in (build_report.get("rendered") or ())
+             if r.get("chart") == "funded_stock" and len(r.get("series") or ()) > 1]
+    if not drawn:
+        return GateResult("stack_reconciles", True,
+                          "no multi-book stock stack in this deck", mandatory=False)
+    evo = getattr(data, "funded_evolution", {}) or {}
+    periods = evo.get("periods") or []
+    rows = ((evo.get("breakdowns") or {}).get("portfolio")) or []
+    labels = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
+              for p in periods]
+    summed: Dict[str, float] = {}
+    for row in rows:
+        summed[str(row.get("period"))] = (summed.get(str(row.get("period")), 0.0)
+                                          + float(row.get("value") or 0.0))
+    bad = []
+    for label, period in zip(labels, periods):
+        total = (period.get("metrics") or {}).get("funded_balance")
+        if total is None:
+            continue
+        gap = abs(float(total) - summed.get(label, 0.0))
+        if gap > max(0.01, abs(float(total)) * 1e-6):
+            bad.append({"period": label, "total": total,
+                        "stack": summed.get(label, 0.0), "gap": gap})
+    return GateResult("stack_reconciles", not bad,
+                      f"the per-book stack sums to the period total in all "
+                      f"{len(labels)} periods" if not bad else
+                      f"the per-book stack does not sum to the period total in "
+                      f"{len(bad)} period(s)",
+                      evidence={"offenders": bad})
+
+
+def _gate_projection_totals(records, data) -> GateResult:
+    """The per-book forward view's total must be the sum of what it prints.
+
+    The engine correctly holds an UNATTRIBUTED weighted pipeline outside the
+    per-book rows and adds it to the total, with its own disclosure. A slide
+    that renders the rows and the total but not that line prints a total its own
+    rows do not sum to — the first arithmetic a funder checks.
+    """
+    ids = {str(r.get("id")) for r in records or () if not r.get("placeholder")}
+    if "portfolio_projections" not in ids:
+        return GateResult("projection_totals", True,
+                          "no per-book forward view in this deck", mandatory=False)
+    pp = getattr(data, "portfolio_projections", {}) or {}
+    books = pp.get("portfolios") or []
+    rows = sum(float(b.get("projectedBalance") or 0.0) for b in books)
+    unattributed = float(pp.get("unattributedExpectedOriginations") or 0.0)
+    total = float(pp.get("totalProjectedBalance") or 0.0)
+    gap = abs((rows + unattributed) - total)
+    ok = gap <= 0.02
+    return GateResult("projection_totals", ok,
+                      "the projection total equals the rows the page prints"
+                      if ok else
+                      f"the per-book rows plus the unattributed line sum to "
+                      f"{rows + unattributed} but the total states {total}",
+                      evidence={"row_total": rows, "unattributed": unattributed,
+                                "stated_total": total, "gap": gap})
+
 
 def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport:
     """Evaluate every publication gate for a generated deck."""
@@ -544,5 +731,17 @@ def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport
         _gate_no_unsupported_causal_language(text),
         _gate_no_duplicate_observations(getattr(data, "insights", None),
                                         getattr(data, "watchlist", None)),
+        # -- v2.3: presentation parity with the React dashboard --------------
+        # These two are the structural enforcement of the parity the deck exists
+        # to have. Both check the RENDERED deck: the order the drawing functions
+        # actually walked, and the symbols that actually reached the page.
+        _gate_governed_bucket_order(build_report),
+        _gate_governed_currency(text, data),
+        # -- v3.0: the stock and the movement are one story ------------------
+        # Two engines, two pages, one book. If they close on different numbers
+        # the pack is worse than either page alone.
+        _gate_stock_and_movement_agree(records, data),
+        _gate_stack_reconciles(build_report, data),
+        _gate_projection_totals(records, data),
     ])
     return report

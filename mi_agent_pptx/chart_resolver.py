@@ -82,21 +82,47 @@ _STAGE_LABELS = {
 
 
 def render_bridge_waterfall(out_path, steps, width_in, height_in, theme=THEME,
-                            dpi=220):
+                            dpi=220, chart_id=None):
     """Render a forecast-bridge waterfall (funded → +weighted pipeline → forecast).
 
     *steps* is an ordered list of ``(label, value, kind)`` where kind is
     ``base`` / ``add`` / ``sub`` / ``total``. Mirrors the dashboard waterfall
     colours (base navy, add periwinkle, total mint).
+
+    The steps are RECORDED, for the same reason bar-list categories are: they
+    become pixels the moment the figure is saved, so neither a publication gate
+    nor a test can otherwise see which legs a bridge actually drew — and "did
+    the exit leg get split by reason" is exactly that kind of question.
     """
     from pathlib import Path as _P
-    colors = {"base": theme.navy, "add": theme.peri, "sub": theme.negative,
+    from .render import _record
+
+    _record("waterfall", chart_id,
+            categories=[str(label) for label, _v, _k in steps],
+            values=[float(v or 0.0) for _l, v, _k in steps],
+            kinds=[str(k) for _l, _v, k in steps])
+    colors = {"base": theme.bar_neutral, "add": theme.peri, "sub": theme.negative,
               "total": theme.mint}
     fig = plt.figure(figsize=(width_in, height_in), dpi=dpi)
     fig.patch.set_facecolor(theme.bg_panel)
-    # Left margin fits a full compact-currency tick. At 0.11 a book in the
-    # hundreds of millions clipped the leading £ off "£800.0MM".
-    ax = fig.add_axes([0.155, 0.14, 0.815, 0.80])
+    # Left margin fits a full compact-currency tick. A fixed fraction reserved
+    # 1.9in of gutter on a full-width bridge for a label needing 0.7in; it is
+    # measured from the labels the axis will actually draw.
+    from .render import _money_ticks, axis_left
+
+    _tops = []
+    _run = 0.0
+    for _lab, _v, _k in steps:
+        _v = float(_v or 0.0)
+        if _k in ("base", "total"):
+            _run = _v
+        elif _k == "add":
+            _run += _v
+        else:
+            _run -= _v
+        _tops.append(_run)
+    left = axis_left(width_in, _money_ticks(_tops, compact_currency), pt=9.5)
+    ax = fig.add_axes([left, 0.14, 0.965 - left, 0.80])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
@@ -448,7 +474,7 @@ class ChartResolver:
                                      f"Dimension '{spec.get('dimension')}' unavailable for a bridge.")
         # Colours mirror the React waterfall (base / inflow / fallout / total).
         col = {"add": self.theme.peri, "sub": self.theme.negative,
-               "total": self.theme.mint, "base": self.theme.navy}
+               "total": self.theme.mint, "base": self.theme.bar_neutral}
         n = len(items)
         bar_w = 0.62
         levels: List[float] = []

@@ -46,18 +46,41 @@ class PptxTheme:
     peri: str = "#22d3ee"          # SECONDARY / accent (cyan; was periwinkle)
     accent: str = "#8893A8"
 
-    # --- dark surfaces (from index.css design tokens) -----------------------
-    bg_page: str = "#171a1f"       # --color-app-ground (page background)
-    bg_panel: str = "#232830"      # --surface-dashboard (chart / card panel)
-    bg_panel_alt: str = "#2c323c"  # --surface-artifact (alt panel)
-    line: str = "#262a31"          # --color-line
-    line_soft: str = "#1a1c20"     # --color-line-soft (grid)
+    # --- surfaces: the dashboard's ELEVATION GRAMMAR, not just its colours ---
+    # The dashboard composes a view as the Core Dashboard surface, with DARKER
+    # cards set into it (Card: navy-900 at 70% over that surface) and raised
+    # tiles one step lighter than the card (StatTile: navy-800). The deck used
+    # to invert this — light grey boxes on a near-black page — which is why a
+    # slide and the screen it was meant to mirror read as two products even
+    # once both were "Slate & Cyan". A slide IS the Core Dashboard surface.
+    #
+    # Field names are the stable contract (read at ~50 call sites); only the
+    # values carry the grammar.
+    bg_page: str = "#232830"       # --surface-dashboard (the slide)
+    bg_cover: str = "#171a1f"      # --color-app-ground (cover only)
+    bg_panel: str = "#16191f"      # Card: --color-navy-900 @70% on the slide
+    bg_panel_alt: str = "#1c2027"  # StatTile: --color-navy-800 (raised)
+    bg_inset: str = "#151920"      # --color-navy-850 (table head / inset)
+    bg_well: str = "#0a0b0d"       # --color-navy-950: the track a bar sits in
+    #: A neutral QUANTITY drawn as a bar — a waterfall's opening balance. The
+    #: lightest step of the slate ladder (--color-navy-500): plainly visible on
+    #: a card, carrying no accent. ``navy`` (navy-800) is a surface, and once
+    #: cards became the dark well a navy-800 bar all but vanished into it.
+    bar_neutral: str = "#454e5c"
+    line: str = "#262a31"          # --color-line (panel + control edges)
+    line_soft: str = "#1a1c20"     # --color-line-soft (row hairline / grid)
+    line_strong: str = "#3a3f48"   # --color-line-strong (structural; neutral rail)
 
-    # --- ink / text ---------------------------------------------------------
-    ink_100: str = "#eef1f2"       # primary text
-    ink_300: str = "#9da4ab"       # secondary text
-    ink_400: str = "#767d87"       # muted text
-    ink_500: str = "#656b74"       # faint text / footers
+    # --- ink: the dashboard's seven-step ramp --------------------------------
+    # Separated steps so a figure, its label and its footnote cannot be
+    # confused for each other (index.css: "Ink ramp").
+    ink_50: str = "#ffffff"        # nothing above a headline figure
+    ink_100: str = "#eef1f2"       # figures, titles
+    ink_200: str = "#ccd2d6"       # table body, primary reading text
+    ink_300: str = "#9da4ab"       # row headers, secondary text
+    ink_400: str = "#767d87"       # field labels
+    ink_500: str = "#656b74"       # footnotes, hints, provenance
+    ink_600: str = "#454a52"       # disabled only
 
     # --- semantic accents ---------------------------------------------------
     positive: str = "#2E7D5B"
@@ -100,6 +123,15 @@ class PptxTheme:
         "Segoe UI", "Helvetica Neue", "Arial", "DejaVu Sans", "sans-serif",
     )
     font_mono: str = "DejaVu Sans Mono"
+    #: Headline figures and any numeral in a column. The dashboard sets them in
+    #: a monospace face with tabular figures (``.t-figure`` / ``.t-num``) so a
+    #: column of values is scannable. Consolas ships with Office on Windows
+    #: and macOS, so it is the face PowerPoint will actually find; matplotlib
+    #: keeps ``font_mono`` because it renders from the fonts on this host.
+    font_figure: str = "Consolas"
+    #: The one interface accent, as a bar fill. The dashboard's bar list fills
+    #: with ``bg-cyan-500``; ``peri`` (cyan-400) stays the line / emphasis step.
+    cyan_500: str = "#06b6d4"
 
     # --- sequential scale (slate -> cyan) for heatmaps ----------------------
     sequential: List[str] = field(default_factory=lambda: [

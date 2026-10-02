@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
@@ -94,6 +94,30 @@ class DashboardData:
     movement: Dict[str, Any] = field(default_factory=dict)
     #: Deterministic watch items (see :mod:`mi_agent_pptx.watchlist`).
     watchlist: Dict[str, Any] = field(default_factory=dict)
+    #: The ECONOMIC opening-to-closing bridge (evolution.funded_balance_movement):
+    #: opening + new - exits + movement on continuing = closing, with the exit
+    #: leg split on evidence. Distinct from ``movement``, which attributes the
+    #: same net change across dimensions.
+    balance_movement: Dict[str, Any] = field(default_factory=dict)
+    #: Per-constituent-book forward view (forecast_bridge.portfolio_projections):
+    #: current balance, expected originations, governed run-off retention where
+    #: the client supplied a curve, and the disclosure where they did not.
+    portfolio_projections: Dict[str, Any] = field(default_factory=dict)
+    #: Utilisation history per approved concentration test across governed
+    #: snapshots (``/mi/concentration-tests/history``). Empty when no approved
+    #: configuration exists or no history resolves.
+    concentration_history: Dict[str, Any] = field(default_factory=dict)
+    #: What Trakt can and cannot report for THIS portfolio, from the published
+    #: capability registry (``trakt_core.capability``) — ``metric id ->
+    #: Availability``. This is how the pack stays asset-agnostic: it asks
+    #: whether a capability resolves for this book's canonical shape, never
+    #: whether the book is a particular asset class. Discovery reads columns
+    #: and two enum mixes; it computes none of the metrics it describes.
+    capabilities: Dict[str, Any] = field(default_factory=dict)
+    #: The GOVERNED reporting currency for this book, resolved through
+    #: ``mi_agent_api.currency`` exactly as the dashboard resolves it for a
+    #: request. The deck never picks a currency of its own.
+    currency_code: str = "GBP"
 
     def note(self, msg: str) -> None:
         if msg and msg not in self.notes:
@@ -414,10 +438,53 @@ def _local_funded_frames(cuts: List[Tuple[str, str]], cid: str,
     return frames
 
 
+def _prior_from_runs(out_root: Optional[str], cid: str, run_id: Optional[str],
+                     context_id: Optional[str] = None):
+    """The prior period exactly as the dashboard's ``/mi/snapshot`` route finds it.
+
+    That route discovers prior RUNS under the onboarding output root
+    (``discover_snapshots`` → ``find_prior_run`` → ``resolve_tape_path``). The
+    deck only ever looked for dated platform-canonical files, so on a book that
+    arrives as runs it found no prior period at all — and every movement the
+    dashboard shows under a KPI ("+£3.7MM, +3.7% vs prior run") was blank in
+    the pack built from the same data. Same rule, same answer.
+
+    Local roots only: a blob root keeps the dated-cut path below, which reads
+    the same governed platform history the dashboard's blob index is built on.
+    """
+    root = str(out_root or "")
+    if not root or not run_id or root.startswith("blob://"):
+        return None, None, None
+    try:
+        from mi_agent_api import snapshots as snap
+        prior = snap.find_prior_run(snap.discover_snapshots(root), cid, run_id)
+        if not prior:
+            return None, None, None
+        tape = snap.resolve_tape_path(root, cid, prior["run_id"])
+        if tape is None:
+            return None, None, None
+        df, _report = snap.load_prepared_run(tape)
+    except Exception:  # noqa: BLE001 — a prior comparison is additive, never fatal
+        return None, None, None
+    df = _scoped_to(df, cid, context_id)
+    if df is None or df.empty:
+        return None, None, None
+    return df, prior["run_id"], prior.get("reporting_date")
+
+
 def _prior_funded(cuts: List[Tuple[str, str]], cid: str, reporting_date: Optional[str],
-                  context_id: Optional[str] = None):
-    """The prepared funded frame for the reporting period BEFORE *reporting_date*
-    (the most recent dated cut strictly earlier), for month-on-month KPI deltas."""
+                  context_id: Optional[str] = None, *, out_root: Optional[str] = None,
+                  run_id: Optional[str] = None):
+    """The prepared funded frame for the reporting period BEFORE *reporting_date*,
+    for period-on-period KPI deltas.
+
+    The dashboard's own rule first (:func:`_prior_from_runs`), so the two
+    surfaces compare against the same period; then the most recent dated
+    platform cut strictly earlier, which is the only history some deployments
+    carry."""
+    by_run = _prior_from_runs(out_root, cid, run_id, context_id)
+    if by_run[0] is not None:
+        return by_run
     if not cuts:
         return None, None, None
     earlier = [(d, p) for d, p in cuts if not reporting_date or d < str(reporting_date)]
@@ -437,130 +504,39 @@ def _prior_funded(cuts: List[Tuple[str, str]], cid: str, reporting_date: Optiona
 _BALANCE = "current_outstanding_balance"
 
 
-def _borrower_type_series(df: pd.DataFrame):
-    if "borrower_type" in df.columns and df["borrower_type"].notna().any():
-        return df["borrower_type"].astype("string")
-    for col in ("borrower_2_DOB", "borrower_2_dob", "second_borrower_dob",
-                "borrower_2_date_of_birth"):
-        if col in df.columns:
-            joint = df[col].notna() & (df[col].astype(str).str.strip() != "")
-            return joint.map({True: "Joint", False: "Single"}).astype("string")
-    return None
+# NOTE: ``_ltv_series`` / ``_age_series`` / ``_broker_series`` /
+# ``_borrower_type_series`` / ``_ticket_series`` / ``_stratify_dim`` /
+# ``_extra_stratifications`` USED TO LIVE HERE. They gave the
+# deck three stratifications the dashboard did not have, picked their own source
+# columns, and — for ticket size — carried bin edges that contradicted
+# ``config/mi/buckets.yaml``. That made the renderer a second owner of an
+# economic definition.
+#
+# All three dimensions are now declared in ``mi_agent_api.snapshots._STRAT_DIMS``
+# and computed by the same engine as every other stratification, so they arrive
+# on the governed snapshot payload like the rest and the deck simply draws them.
+# Nothing was relocated into a parallel PPTX helper: the code is gone, and the
+# capability is in the layer that already owned the other eight dimensions.
 
 
-def _ticket_series(df: pd.DataFrame):
-    if "ticket_bucket" in df.columns and df["ticket_bucket"].notna().any():
-        return df["ticket_bucket"].astype("string")
-    if _BALANCE not in df.columns:
-        return None
-    from analytics_lib.numeric import coerce_numeric
-    bal = coerce_numeric(df[_BALANCE])
-    bins = [0, 100_000, 150_000, 200_000, 250_000, 300_000, 400_000, 1e12]
-    labels = ["<£100K", "£100–150K", "£150–200K", "£200–250K", "£250–300K",
-              "£300–400K", "£400K+"]
-    return pd.cut(bal, bins, labels=labels, right=False).astype("string")
+def _multidim(df: pd.DataFrame, scope=None) -> Dict[str, Any]:
+    """The governed multi-dimensional cross-tabs for this book.
 
-
-def _broker_series(df: pd.DataFrame):
-    for col in ("broker_channel", "broker_name", "broker", "origination_channel"):
-        if col in df.columns and df[col].notna().any():
-            return df[col].astype("string")
-    return None
-
-
-def _region_series(df: pd.DataFrame):
-    for col in ("geographic_region_collateral", "geographic_region_obligor", "region"):
-        if col in df.columns and df[col].notna().any():
-            return df[col].astype("string")
-    return None
-
-
-def _ltv_series(df: pd.DataFrame):
-    from mi_agent_api import cohorts as _c
-    series, _h = _c._dimension_series(df, "ltv", "Y")
-    return series
-
-
-def _age_series(df: pd.DataFrame):
-    from mi_agent_api import cohorts as _c
-    series, _h = _c._dimension_series(df, "age", "Y")
-    return series
-
-
-def _stratify_dim(df: pd.DataFrame, series, key: str, label: str):
-    """One stratification ``{key,label,bars:[{label,balance,count,sharePct}]}`` —
-    the same shape ``snapshots._funded_stratifications`` emits."""
-    if series is None or _BALANCE not in df.columns:
-        return None
-    from analytics_lib.stratify import stratify as _stratify
-    work = df.assign(__dim=series)
-    if work["__dim"].notna().sum() == 0:
-        return None
-    try:
-        tbl = _stratify(work, "__dim", balance_col=_BALANCE)
-    except Exception:  # noqa: BLE001
-        return None
-    if tbl.empty:
-        return None
-    bars = [{"label": str(r["__dim"]), "balance": round(float(r["balance_sum"]), 2),
-             "count": int(r["loan_count"]),
-             "sharePct": round(float(r["balance_share"]) * 100.0, 1)}
-            for _, r in tbl.iterrows()]
-    bars.sort(key=lambda b: b["balance"], reverse=True)
-    return {"key": key, "label": label, "bars": bars[:12]}
-
-
-def _extra_stratifications(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    """Broker / borrower-type / ticket-size funded stratifications (each skipped
-    when the source column is absent)."""
-    out = []
-    for series, key, label in (
-        (_broker_series(df), "broker", "By broker / channel"),
-        (_borrower_type_series(df), "borrower_type", "By borrower type"),
-        (_ticket_series(df), "ticket", "By ticket size"),
-    ):
-        st = _stratify_dim(df, series, key, label)
-        if st:
-            out.append(st)
-    return out
-
-
-def _matrix(df: pd.DataFrame, x_series, y_series):
-    """``(x_labels, y_labels, matrix, points)`` of summed balance for two banded
-    dimensions — feeds the multi-dimension bubble / heatmap charts."""
-    from analytics_lib.numeric import coerce_numeric
-    if x_series is None or y_series is None or _BALANCE not in df.columns:
-        return None
-    work = pd.DataFrame({"x": x_series.astype("string"), "y": y_series.astype("string"),
-                         "bal": coerce_numeric(df[_BALANCE])}).dropna(subset=["x", "y"])
-    if work.empty:
-        return None
-    x_labels = [str(v) for v in sorted(work["x"].dropna().unique())]
-    y_labels = [str(v) for v in sorted(work["y"].dropna().unique())]
-    xi = {v: i for i, v in enumerate(x_labels)}
-    yi = {v: i for i, v in enumerate(y_labels)}
-    matrix = [[0.0] * len(x_labels) for _ in y_labels]
-    points = []
-    for (xv, yv), sub in work.groupby(["x", "y"]):
-        b = float(sub["bal"].sum())
-        matrix[yi[str(yv)]][xi[str(xv)]] = round(b, 2)
-        points.append({"x": xi[str(xv)], "y": yi[str(yv)], "value": round(b, 2)})
-    return {"xLabels": x_labels, "yLabels": y_labels, "matrix": matrix, "points": points}
-
-
-def _multidim(df: pd.DataFrame) -> Dict[str, Any]:
-    """LTV×Age (bubble), LTV×BorrowerType (heatmap), LTV×Region (heatmap)."""
-    ltv = _ltv_series(df)
-    out: Dict[str, Any] = {}
-    m = _matrix(df, ltv, _age_series(df))
-    if m:
-        out["ltv_age"] = m
-    m = _matrix(df, ltv, _borrower_type_series(df))
-    if m:
-        out["ltv_borrower_type"] = m
-    m = _matrix(df, ltv, _region_series(df))
-    if m:
-        out["ltv_region"] = m
+    ``_matrix`` and the pair list used to live here, which made the deck the only
+    owner of a grouping the React product could not reach. Both now live in
+    ``mi_agent_api.snapshots`` (``cross_tab`` / ``multidimensional``, served at
+    ``/mi/multidim``), so the dashboard and the pack consume one analytical
+    result with one set of axis orders.
+    """
+    from mi_agent_api import snapshots as snap
+    # The GOVERNED SELECTION, not the fixed historical three. The generator is
+    # generic over eleven dimensions and the pack was drawing the same LTV
+    # crossed with age, borrower type and region on every book; which crossings
+    # a book can actually support is a property of the book.
+    chosen = snap.select_multidim_pairs(df, scope, want=snap.MULTIDIM_WANT)
+    out = dict(chosen["selected"])
+    if chosen["rejected"]:
+        out["_rejected"] = chosen["rejected"]
     return out
 
 
@@ -602,6 +578,7 @@ def build_dashboard_data(
     prior_run_dir: Optional[str] = None,  # accepted for CLI compatibility (unused)
     portfolio_context: Optional[str] = None,
     tenant_id: Optional[str] = None,
+    scale_targets: Optional[List[float]] = None,
 ) -> DashboardData:
     """Compute the full set of dashboard payloads for *run_dir*, headless.
 
@@ -626,7 +603,7 @@ def build_dashboard_data(
     if funded_uri:
         overrides["MI_AGENT_PLATFORM_CANONICAL"] = funded_uri
 
-    with _api_env(overrides):
+    with ExitStack() as stack, _api_env(overrides):
         from mi_agent.mi_query_validator import load_mi_semantics
         from mi_agent_api.data_source import semantics_path
         from mi_agent_api import snapshots as snap
@@ -650,9 +627,30 @@ def build_dashboard_data(
                 pass
         data.reporting_date = reporting_date
 
+        # -- Governed reporting currency -------------------------------
+        # The same resolution the API performs per request
+        # (``datasets._apply_request_currency``): approved client configuration
+        # outranks the tape, the tape outranks the platform default.
+        #
+        # It is ENTERED here, not merely recorded, because the figures are
+        # formatted downstream of this point: ``compute_funded_snapshot`` writes
+        # each KPI tile's display string through ``currency.format_money``, and
+        # the insight/watchlist generators write prose money. Both must run with
+        # the book's currency in force or the deck says GBP while the dashboard
+        # says EUR. ``stack`` closes at the end of the function, so the process
+        # is left exactly as it was found.
+        try:
+            from mi_agent_api import currency as _currency
+            data.currency_code = _currency.resolve_currency_code(
+                funded_df, client_id=cid)
+            stack.enter_context(_currency.use_currency(data.currency_code))
+        except Exception as exc:  # noqa: BLE001 - never break a deck on currency
+            data.note(f"currency: {type(exc).__name__}: {exc}")
+
         funded_cuts = _dated_funded_cuts(out_root, cid)
         prior_df, prior_rid, prior_rd = _prior_funded(funded_cuts, cid, reporting_date,
-                                                      portfolio_context)
+                                                      portfolio_context,
+                                                      out_root=out_root, run_id=rid)
 
         # -- Governed portfolio context (scope + constituent books) -------
         # Resolved from the UNSCOPED frame so the registry sees every book, then
@@ -676,14 +674,8 @@ def build_dashboard_data(
                 reporting_date=reporting_date, prior_df=prior_df,
                 prior_run_id=prior_rid, prior_reporting_date=prior_rd,
                 scope=scope))
-            # Extra funded stratifications the deck shows (broker / borrower type /
-            # ticket size) — computed with the same stratify engine as the snapshot,
-            # appended so the deck renders one consistent BarList visual.
-            extra = _extra_stratifications(funded_df)
-            if extra and isinstance(data.funded.get("stratifications"), list):
-                have = {s.get("key") for s in data.funded["stratifications"]}
-                data.funded["stratifications"] += [s for s in extra if s["key"] not in have]
-            data.multidim = _guard(data, "multidim", lambda: _multidim(funded_df))
+            data.multidim = _guard(data, "multidim",
+                                   lambda: _multidim(funded_df, scope))
             data.cohorts = _guard(data, "cohorts",
                                   lambda: _cohorts(funded_df, cid, pid, reporting_date))
             # Static-pool seasoning, ONE governed call per cohort the deck will
@@ -737,24 +729,56 @@ def build_dashboard_data(
         # date, so it is only resolved when concentration produced nothing.
         data.concentration = _guard(data, "concentration",
                                     lambda: _concentration(out_root, cid, rid, scope))
+        # Movement: how each approved test's utilisation has travelled. Only
+        # asked for when there ARE approved tests — the history service would
+        # otherwise repeat the same "no approved configuration" answer.
+        if data.concentration.get("tests"):
+            data.concentration_history = _guard(
+                data, "concentration_history",
+                lambda: _concentration_history(out_root, cid, rid, scope))
         # Only when the concentration service itself could not run — it consults
         # the extracted monitor internally, so any other path would repeat it.
         if not data.concentration:
             data.risk = _guard(data, "risk", lambda: _risk(out_root, cid, rid))
-        data.extrapolation = _guard(data, "extrapolation",
-                                    lambda: _extrapolation(out_root, prow, cid, rid, history))
+        data.extrapolation = _guard(
+            data, "extrapolation",
+            lambda: _extrapolation(out_root, prow, cid, rid, history,
+                                   scale_targets))
 
         # -- Movement attribution (governed bridge, once per dimension) ------
         data.movement = _guard(data, "movement",
                                lambda: _movement(out_root, cid, rid, scope, data,
                                                  prior_reporting_date=prior_rd))
 
+        # -- ECONOMIC movement: what happened to the LOANS -------------------
+        # The same governed composition ``/mi/evolution/funded-movement`` serves.
+        data.balance_movement = _guard(
+            data, "balance_movement",
+            lambda: _balance_movement(out_root, cid, rid, scope, prior_rd))
+
+        # -- Per-book forward view -------------------------------------------
+        # Already served at /mi/forecast/snapshot and rendered by nothing.
+        data.portfolio_projections = _guard(
+            data, "portfolio_projections",
+            lambda: _portfolio_projections(funded_df, registry, scope, data))
+
+        # -- WHAT THIS BOOK SUPPORTS -----------------------------------------
+        # Resolved AFTER the funded history, because several capabilities turn
+        # on how many governed snapshots exist rather than on any column.
+        data.capabilities = _guard(
+            data, "capabilities",
+            lambda: _capabilities(funded_df, data.funded_evolution)) or {}
+
         pipe_snapshots = _pipeline_extract_count(prow, pipe_cid)
 
     # -- Deterministic executive summary (no LLM) ------------------------
     # Built last: every generator reads an already-resolved governed payload.
-    data.insights = _guard(data, "insights", lambda: _insights(data))
-    data.watchlist = _guard(data, "watchlist", lambda: _watchlist(data))
+    # Re-entered under the book's currency because these generators write prose
+    # money (``insight_generators.money``) and the scope above has closed.
+    from mi_agent_api import currency as _currency_tail
+    with _currency_tail.use_currency(data.currency_code):
+        data.insights = _guard(data, "insights", lambda: _insights(data))
+        data.watchlist = _guard(data, "watchlist", lambda: _watchlist(data))
 
     # Provenance + diagnostics ------------------------------------------
     if source and source.get("source_file"):
@@ -912,6 +936,47 @@ def _movement(out_root, cid, rid, scope, data: DashboardData,
                              lens_label=lens_label, note=data.note)
 
 
+def _balance_movement(out_root, cid, rid, scope, prior_reporting_date):
+    """The governed economic bridge, opened at the SAME period the funded
+    snapshot compares against so the pack measures one window throughout."""
+    from mi_agent_api import evolution
+    start = str(prior_reporting_date)[:7] if prior_reporting_date else None
+    return evolution.funded_balance_movement(out_root, cid, rid, scope=scope,
+                                             start_period=start)
+
+
+def _capabilities(funded_df, funded_evolution) -> Dict[str, Any]:
+    """Every published capability resolved against this portfolio's shape.
+
+    ``metric id -> Availability``. The registry is asset-agnostic by
+    construction — a capability declares the economic conditions it needs, and
+    any book meeting them gets it — which is precisely the property the pack
+    needs: conditional reporting driven by what the tape supports, never by a
+    branch on what the book is called.
+    """
+    from trakt_core import capability as cap
+
+    periods = len((funded_evolution or {}).get("periods") or ()) or 1
+    shape = cap.describe_portfolio(funded_df, history_periods=periods)
+    return {a.metric: a for a in cap.resolve_all(shape)}
+
+
+def _portfolio_projections(funded_df, registry, scope, data: DashboardData):
+    """The per-constituent-book forward view.
+
+    ``forecast_bridge.portfolio_projections`` is the same function
+    ``/mi/forecast/snapshot`` attaches as ``portfolioProjections``. It applies a
+    run-off curve ONLY where the client has supplied an approved one and
+    discloses every book where it has not; nothing is modelled here.
+    """
+    from mi_agent_api import forecast_bridge as fb
+    bridge = (data.forecast or {}).get("forecastBridge") or {}
+    weighted = bridge.get("weightedExpectedFundedAmount")
+    return fb.portfolio_projections(
+        funded_df, registry, scope,
+        weighted_pipeline=(float(weighted) if weighted else 0.0))
+
+
 def _watchlist(data: DashboardData) -> Dict[str, Any]:
     from . import watchlist as _wl
     return _wl.build(data)
@@ -1038,6 +1103,19 @@ def _risk(out_root, cid, rid):
     return risk_limits.compute_risk_limits(out_root, cid, rid)
 
 
+def _concentration_history(out_root, cid, rid, scope):
+    """Utilisation of each approved test across REAL governed snapshots.
+
+    ``concentration_tests_api.compute_history`` — the same service behind
+    ``/mi/concentration-tests/history``, which the React Risk Limits workspace
+    already reads. It evaluates today's approved configuration against each
+    historical frame, so the series is comparable period to period. The deck
+    renders the direction; it computes none of it.
+    """
+    from mi_agent_api import concentration_tests_api as ct
+    return ct.compute_history(out_root, cid, rid, scope=scope)
+
+
 def _concentration(out_root, cid, rid, scope):
     """The governed concentration-test envelope — the SAME service the Risk Limits
     workspace, MI Query and Copilot use (``/mi/concentration-tests``).
@@ -1053,7 +1131,16 @@ def _concentration(out_root, cid, rid, scope):
     return ct.compute_concentration_tests(out_root, cid, rid, scope=scope)
 
 
-def _extrapolation(out_root, prow, cid, rid, history):
+def _extrapolation(out_root, prow, cid, rid, history, scale_targets=()):
+    """The governed scale-up projection.
+
+    ``scale_targets`` are the funding / securitisation thresholds the DECK
+    CONFIG names (``deck.scale_targets`` in the pack definition). They are
+    passed to the governed ladder through the ``extra_thresholds`` parameter it
+    already exposes, so naming a target is a configuration decision and not a
+    new forecast primitive — the projection itself is unchanged.
+    """
     from mi_agent_api import forecast_extrapolation as fx
     return fx.build_extrapolation(out_root, prow or out_root, cid, rid,
-                                  history_model=history)
+                                  history_model=history,
+                                  extra_thresholds=tuple(scale_targets or ()))
