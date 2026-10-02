@@ -42,11 +42,26 @@ TRUTH = {
 TERMINAL_WEEK = "2026-05-29"
 
 
-def _prepared(week: str):
+def _prepared(week: str, *, historical_model=None):
     from mi_agent_api import pipeline_prep as prep
     source = next((FIXTURE / week).glob("*.csv"))
-    df, report = prep.prepare_pipeline_mi_dataset(pd.read_csv(source), as_of_date=week)
+    df, report = prep.prepare_pipeline_mi_dataset(pd.read_csv(source), as_of_date=week,
+                                                  historical_model=historical_model)
     return df, report
+
+
+def _measured_history():
+    """The fixture's own five extracts, measured at test-book scale (D21: a
+    stage's rate is measured or the weighted figure is withheld; see
+    ``tests/measured_history.py``). A weighted figure is only stated on a
+    measured history, so a test of what it sums reads one."""
+    from mi_agent_api.pipeline_history import build_historical_completion_model
+    from tests.measured_history import TEST_BOOK_THRESHOLDS
+    entries = [{"source_file": str(next((FIXTURE / week).glob("*.csv"))),
+                "pipeline_extract_date": week} for week in sorted(TRUTH)]
+    return build_historical_completion_model(
+        entries, min_observations=TEST_BOOK_THRESHOLDS["min_observations"],
+        runoff_settings=dict(TEST_BOOK_THRESHOLDS["runoff_settings"]))
 
 
 # --------------------------------------------------------------------------- #
@@ -117,7 +132,8 @@ def test_weighted_expected_carries_no_terminal_case():
     already-funded loans as expected future funding, and nothing else would
     catch it.
     """
-    df, report = _prepared(TERMINAL_WEEK)
+    df, report = _prepared(TERMINAL_WEEK, historical_model=_measured_history())
+    assert report["weighting_complete"] is True
     terminal = df[df["pipeline_stage"].astype(str).str.upper().isin(
         ("COMPLETED", "WITHDRAWN"))]
     assert len(terminal) >= 2, "fixture carries no terminal case"
