@@ -697,3 +697,6 @@ intents added beside the baseline's.
                 repeating. Next: deploy, then `run_production_bank.sh
                 <principal> signoff` — promote only on 88/88 and no wrong
                 answer — then `conversations`
+    2026-10-02  11:55 UTC e9602062 deployed (run 37003419282, success):
+                Claude Opus 5.5 as the candidate model view (§40). Next:
+                `run_production_bank.sh <principal> signoff` on it
