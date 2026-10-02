@@ -92,6 +92,23 @@ export interface ForecastMethodology {
   excludedStageCounts?: Record<string, number>;
   currentSnapshot?: string | null;
   pointInTimeNote?: string;
+  /** The stage run-off model the expected state weights by (methodology
+   * "stage_runoff"). Absent on a build or book without one. */
+  runoff?: {
+    available: boolean;
+    appToOfferPullThrough?: number | null;
+    offerToCompletionPullThrough?: number | null;
+    stages?: Record<
+      string,
+      { windowDays?: number | null; windowBasis?: string | null; pullThrough?: number | null }
+    >;
+  };
+  notForecast?: {
+    kfiCount?: number | null;
+    kfiAmount?: number | null;
+    lapsedCount?: number | null;
+    lapsedAmount?: number | null;
+  };
 }
 
 export interface PipelineDriver {
