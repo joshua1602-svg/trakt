@@ -38,6 +38,7 @@ from .evaluation import (
 )
 from .library import ConcentrationLibrary
 from .metrics import (
+    COMPONENT_COL,
     PROBABILITY_COL,
     evaluate_metric,
     resolve_role_column,
@@ -139,7 +140,7 @@ _PIPELINE_BASIS_ALIASES = {
     "collateral_geography": "geographic_region_obligor",
 }
 
-STATE_COMPONENT_COL = "__state_component__"
+STATE_COMPONENT_COL = COMPONENT_COL
 
 
 # --------------------------------------------------------------------------- #
@@ -153,6 +154,13 @@ def active_pipeline(pipeline_df: Optional[pd.DataFrame]
     "pipeline"`` (open KFI/APPLICATION/OFFER). Excluded and counted:
     withdrawn/cancelled (``withdrawn``), already funded (``funded`` — those
     loans live in the funded book), and unknown/out-of-scope stages.
+
+    Under the stage run-off forecast two more open populations are not
+    funding pipeline and are excluded, counted, from BOTH forward states:
+    KFIs (``not_forecast_kfi`` — top of funnel, never forecast to fund) and
+    cases sitting past their stage's validity window (``expired_<stage>`` —
+    lapsed in practice). Including them made the "all pipeline converts"
+    stress assume every one of thousands of illustrations funds.
     """
     if pipeline_df is None or pipeline_df.empty:
         return pd.DataFrame(), {}
@@ -167,7 +175,16 @@ def active_pipeline(pipeline_df: Optional[pd.DataFrame]
                    "funded": "already_completed",
                    "unknown": "unknown_stage"}[reason]
             excluded[key] = n
-    return pipeline_df[status == "pipeline"].copy(), excluded
+    keep = status == "pipeline"
+    if "completion_probability_source" in pipeline_df.columns:
+        source = pipeline_df["completion_probability_source"].astype(str)
+        for prefix, key in (("not_forecast_", "kfi_not_forecast"),
+                            ("expired_", "lapsed_past_stage_window")):
+            hit = keep & source.str.startswith(prefix)
+            if int(hit.sum()):
+                excluded[key] = int(hit.sum())
+            keep &= ~hit
+    return pipeline_df[keep].copy(), excluded
 
 
 def build_state_frame(funded_df: Optional[pd.DataFrame],

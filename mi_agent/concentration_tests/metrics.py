@@ -22,6 +22,7 @@ Conventions shared with the existing risk monitor:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Protocol
 
 import pandas as pd
@@ -116,14 +117,28 @@ def _normalise_rate(series: pd.Series) -> pd.Series:
     return v
 
 
-def _basis_values(series: pd.Series, role: str) -> pd.Series:
+#: Set by the forward-state frame builder: which source each row came from
+#: ("funded" / "pipeline"). Sources are prepared separately and may state a
+#: rate or an LTV on different scales, so scale is judged per source.
+COMPONENT_COL = "__state_component__"
+
+
+def _basis_values(df: pd.DataFrame, col: str, role: str) -> pd.Series:
     """The numeric series a test reads for ``role``, in the unit its
-    thresholds are written in."""
+    thresholds are written in. In a combined funded + pipeline frame each
+    source's scale is judged on its own rows: the funded tape can carry
+    0.0956 while the pipeline extract carries 7.85 for the same unit."""
     if role.startswith("ltv_"):
-        return _normalise_ltv(series)
-    if role == "interest_rate":
-        return _normalise_rate(series)
-    return coerce_numeric(series)
+        normalise = _normalise_ltv
+    elif role == "interest_rate":
+        normalise = _normalise_rate
+    else:
+        return coerce_numeric(df[col])
+    if COMPONENT_COL in df.columns and df[COMPONENT_COL].nunique(dropna=False) > 1:
+        parts = [normalise(df.loc[idx, col])
+                 for _, idx in df.groupby(COMPONENT_COL, dropna=False).groups.items()]
+        return pd.concat(parts).reindex(df.index)
+    return normalise(df[col])
 
 
 _BALANCE_ROLE_FOR_DENOMINATOR = {
@@ -234,6 +249,57 @@ def _norm_text(series: pd.Series) -> pd.Series:
     return series.astype(str).str.strip().str.lower()
 
 
+@lru_cache(maxsize=16)
+def _region_taxonomy(client_id: Optional[str]):
+    try:
+        from engine import region_taxonomy
+        return region_taxonomy.resolve_taxonomy(client_id)
+    except Exception:  # noqa: BLE001 - no taxonomy is a no-op, never a failure
+        return None
+
+
+def _client_of(df: pd.DataFrame) -> Optional[str]:
+    for c in ("client_id", "trakt_client_id"):
+        if c in df.columns:
+            vals = [v for v in df[c].dropna().astype(str).str.strip().unique() if v]
+            if len(vals) == 1:
+                return vals[0]
+    return None
+
+
+def _region_key(raw: Any, taxonomy: Any) -> str:
+    """The governed reporting region for one label, lower-cased, so the
+    tape's "Yorkshire and humberside" and a covenant's "Yorkshire and The
+    Humber" meet. A label the taxonomy cannot resolve keeps its own text —
+    it is never bucketed into a neighbouring region."""
+    text = str(raw).strip().lower()
+    detail, _method = taxonomy.resolve_detail(raw)
+    reporting, _rule = taxonomy.to_reporting(detail)
+    return reporting.strip().lower() if reporting else text
+
+
+def _category_text(df: pd.DataFrame, col: str, role: Optional[str]) -> pd.Series:
+    """Comparable category labels for ``role``. Region labels go through the
+    client's governed region taxonomy — the same one the funded and pipeline
+    preparation apply — so a test matches every spelling a tape carries."""
+    text = _norm_text(df[col])
+    taxonomy = _region_taxonomy(_client_of(df)) if role == "region" else None
+    if taxonomy is None:
+        return text
+    raw = df[col]
+    keys = {v: _region_key(v, taxonomy) for v in raw.dropna().unique()}
+    return raw.map(keys).where(raw.notna(), text)
+
+
+def _category_values(values: List[Any], role: Optional[str],
+                     df: pd.DataFrame) -> List[str]:
+    """A test's configured category values, keyed like :func:`_category_text`."""
+    taxonomy = _region_taxonomy(_client_of(df)) if role == "region" else None
+    if taxonomy is None:
+        return [str(v).strip().lower() for v in values]
+    return [_region_key(v, taxonomy) for v in values]
+
+
 def _share_result(df: pd.DataFrame, mask: pd.Series, bal: pd.Series,
                   total: float, metric: MetricDefinition, basis: str,
                   resolved: Dict[str, str]) -> MetricComputation:
@@ -278,13 +344,13 @@ def _eval_share_of_balance(df, lib, metric, params, external=None):
         return MetricComputation.missing(role or "dimension",
                                          role_candidates(lib, role or ""),
                                          unit=metric.unit, total_loans=len(df))
-    values = [v.strip().lower() for v in _values_from_params(params)]
+    values = _category_values(_values_from_params(params), role, df)
     if not values:
         return MetricComputation(
             value=None, unit=metric.unit, data_status=DATA_MISSING,
             total_loans=len(df),
             notes="No filter values configured for this test.")
-    mask = _norm_text(df[col]).isin(values)
+    mask = _category_text(df, col, role).isin(values)
     return _share_result(df, mask, bal, total, metric, basis, {role: col})
 
 
@@ -302,8 +368,8 @@ def _eval_dimension_share(df, lib, metric, params, external=None):
         return MetricComputation.missing(role or dimension,
                                          role_candidates(lib, role or dimension),
                                          unit=metric.unit, total_loans=len(df))
-    values = [str(v).strip().lower() for v in (params.get("values") or [])]
-    mask = _norm_text(df[col]).isin(values)
+    values = _category_values(params.get("values") or [], role, df)
+    mask = _category_text(df, col, role).isin(values)
     return _share_result(df, mask, bal, total, metric, basis, {role: col})
 
 
@@ -342,7 +408,7 @@ def _eval_share_of_balance_numeric(df, lib, metric, params, external=None):
         return MetricComputation(
             value=None, unit=metric.unit, data_status=DATA_MISSING,
             total_loans=len(df), notes="No numeric threshold configured.")
-    series = _basis_values(df[col], role)
+    series = _basis_values(df, col, role)
     comparison = str(_param(metric, params, "comparison") or "above")
     mask = (series < threshold) if comparison == "below" else (series > threshold)
     mask = mask.fillna(False)
@@ -405,8 +471,8 @@ def _eval_largest_group_share(df, lib, metric, params, external=None):
         return MetricComputation.missing(role or "dimension",
                                          role_candidates(lib, role or ""),
                                          unit=metric.unit, total_loans=len(df))
-    excluded = {str(v).strip().lower() for v in (params.get("exclude_values") or [])}
-    groups = _norm_text(df[col])
+    excluded = set(_category_values(params.get("exclude_values") or [], role, df))
+    groups = _category_text(df, col, role)
     sums = bal.groupby(groups).sum()
     sums = sums[~sums.index.isin(excluded)]
     sums = sums[sums.index.notna() & (sums.index != "nan") & (sums.index != "")]
@@ -429,7 +495,7 @@ def _eval_distinct_group_count(df, lib, metric, params, external=None):
         return MetricComputation.missing(role or "dimension",
                                          role_candidates(lib, role or ""),
                                          unit=metric.unit, total_loans=len(df))
-    groups = _norm_text(df[df[col].notna()][col])
+    groups = _category_text(df[df[col].notna()], col, role)
     groups = groups[(groups != "") & (groups != "nan")]
     min_share = params.get("min_share")
     if min_share is not None:
@@ -442,7 +508,7 @@ def _eval_distinct_group_count(df, lib, metric, params, external=None):
         total = float(bal.sum(skipna=True))
         if not total:
             return _no_denominator(metric, "current_balance", len(df))
-        shares = bal.groupby(_norm_text(df[col])).sum() / total * 100.0
+        shares = bal.groupby(_category_text(df, col, role)).sum() / total * 100.0
         groups = pd.Series(shares[shares >= float(min_share)].index)
     count = int(groups.nunique())
     mask = df[col].notna() if col in df.columns else None
@@ -466,7 +532,7 @@ def _eval_weighted_average(df, lib, metric, params, external=None):
     if col is None:
         return MetricComputation.missing(role, role_candidates(lib, role),
                                          unit=metric.unit, total_loans=len(df))
-    values = _basis_values(df[col], role)
+    values = _basis_values(df, col, role)
     deduction = params.get("deduction_percent")
     if deduction is None and "deduction_percent" in (metric.parameters or {}):
         # A NET average with no confirmed deduction is not a net average. The
@@ -585,7 +651,7 @@ def _eval_field_extremum(df, lib, metric, params, *, take_max: bool,
     if col is None:
         return MetricComputation.missing(role, role_candidates(lib, role),
                                          unit=metric.unit, total_loans=len(df))
-    values = _basis_values(df[col], role)
+    values = _basis_values(df, col, role)
     if not values.notna().any():
         return MetricComputation(
             value=None, unit=metric.unit, data_status=DATA_MISSING,
@@ -865,10 +931,10 @@ def _eval_filtered_share(df, lib, metric, params, external=None):
         resolved[role] = col
         values = f.get("values")
         if values:
-            mask &= _norm_text(df[col]).isin(
-                [str(v).strip().lower() for v in values])
+            mask &= _category_text(df, col, role).isin(
+                _category_values(values, role, df))
         else:
-            series = _basis_values(df[col], role)
+            series = _basis_values(df, col, role)
             if f.get("min") is not None:
                 mask &= (series >= float(f["min"])).fillna(False)
             if f.get("max") is not None:

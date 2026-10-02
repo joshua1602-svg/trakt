@@ -202,6 +202,43 @@ class TestBorrowers:
         assert r.value == 15.0
 
 
+class TestRegionsMatchThroughTheGovernedTaxonomy:
+    """ERE's tape spells regions the old standard-region way. A covenant
+    names the current ITL1 region. Both go through the region taxonomy the
+    funded and pipeline preparation already apply, so they meet."""
+
+    @pytest.fixture()
+    def book(self):
+        return pd.DataFrame({
+            "loan_id": ["A", "B", "C", "D", "E"],
+            "current_outstanding_balance": [100_000, 200_000, 300_000,
+                                            150_000, 250_000],
+            "collateral_geography": ["Yorkshire and humberside", "East Anglia",
+                                     "Greater London", "South East",
+                                     "Humberside"],
+        })
+
+    @pytest.mark.parametrize("regions, share", [
+        (["Yorkshire And The Humber"], 10.0),
+        (["East Of England"], 20.0),
+        (["London", "South East"], 45.0),
+        (["Greater London", "South East"], 45.0),
+    ])
+    def test_a_covenant_region_meets_the_tape_spelling(self, lib, book,
+                                                        regions, share):
+        r = run(lib, book, "geo_region_share", {"regions": regions})
+        assert r.value == share
+
+    def test_an_unresolved_label_is_not_bucketed_into_a_neighbour(self, lib,
+                                                                   book):
+        # "Humberside" alone straddles two regions and is deliberately unmapped.
+        r = run(lib, book, "geo_region_share",
+                {"regions": ["Yorkshire And The Humber"]})
+        assert r.loans_in_numerator == 1
+        r = run(lib, book, "geo_region_share", {"regions": ["Humberside"]})
+        assert r.value == 25.0
+
+
 class TestRatesAndLtv:
     def test_gross_wac(self, lib, funded_frame):
         w = funded_frame.current_outstanding_balance
