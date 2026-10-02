@@ -39,8 +39,16 @@
   },
   "conversation_reader": {
     "what_this_is": "The conversation reader's view (design §39): everything it is shown for every message. It turns a follow-up or a reply into one complete question for the interpreter above, whose view is unchanged. Pinned like the interpreter's: a change to it fails test_the_models_view_is_the_baselines until the conversation bank is re-run on it and matches or beats the results recorded here.",
-    "fingerprint": "ea8ebe6e6a9509e1dbccb431bc625d40f8ead38324b8a731c9ebcb11ace31eb9",
+    "fingerprint": "d1b7a39b47834bf71c9d84c8a694308d09419f8743458b607fcbb2cccfafde68",
     "measured_by": null,
-    "results": null
+    "results": null,
+    "model": "claude-opus-5-5"
+  },
+  "candidate": {
+    "what_this_is": "A change to the model's view under measurement (design §40): it is deployed and measured BEFORE it replaces the baseline above. The guard accepts exactly this fingerprint as well as the baseline's, and nothing else; the candidate either becomes the baseline (the sign-off set matched or beat the results above) or is withdrawn.",
+    "change": "Claude Opus 5.5: model claude-opus-5-5; effort low (Opus 5.5 always thinks; the signed-off build ran with the intent tool forced, so no thinking); the intent tool asked for in the prompt, not forced (Opus 5.5 rejects a forced call), and asked once more if a response has no call; server-side fallback on a safety-classifier decline; max_tokens 16000 for the thinking. The prompts, the catalogue and the tool schema are unchanged.",
+    "model_view_fingerprint": "2affd8d99ea9cf2cfde57bea127fb835faac72d976ceb1728ce6c62f873ba207",
+    "measured_by": null,
+    "to_promote": "run_production_bank.sh <principal> signoff on the deployed candidate; it must match or beat must_answer 88/88 and wrong_answers 0 above, with the variants scored by score_variants.py"
   }
 }

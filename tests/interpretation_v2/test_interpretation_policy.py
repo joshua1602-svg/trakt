@@ -286,12 +286,21 @@ def test_the_measured_policy_has_not_moved_since_it_was_measured():
     # which only a reply to an ask-back reads and the `askback` run measures).
     import json
 
+    #
+    # A view UNDER MEASUREMENT is the one exception (design §40): recorded as
+    # the named candidate beside the baseline, deployed, and promoted only if
+    # the sign-off set matches or beats the baseline — the same rule, with
+    # the change named while it is measured rather than hidden until then.
     from mi_agent.interpretation_v2.opus_interpreter import model_view_fingerprint
     baseline = json.loads((_REPO_ROOT / "config/mi/model_view_baseline.json")
                           .read_text(encoding="utf-8"))
-    assert model_view_fingerprint() == baseline["model_view_fingerprint"], (
+    candidate = baseline.get("candidate") or {}
+    accepted = {baseline["model_view_fingerprint"]}
+    if candidate and candidate.get("measured_by") is None:
+        accepted.add(candidate["model_view_fingerprint"])
+    assert model_view_fingerprint() in accepted, (
         f"what the model is shown moved since it was measured at "
-        f"{baseline['commit'][:8]}")
+        f"{baseline['commit'][:8]}, and is not the recorded candidate")
 
 
 def test_production_surfaces_are_untouched():
@@ -311,7 +320,9 @@ def test_the_model_and_tool_configuration_did_not_change():
     from mi_agent.interpretation_v2.opus_interpreter import (
         CONFIGURED_MODEL, INTENT_TOOL_NAME, AnthropicInterpreterClient)
 
-    assert CONFIGURED_MODEL == "claude-opus-5"
+    # Claude Opus 5.5 since design §40 — the candidate under measurement
+    # against the Claude Opus 5 baseline.
+    assert CONFIGURED_MODEL == "claude-opus-5-5"
     assert INTENT_TOOL_NAME == "emit_candidate_intent"
     client = AnthropicInterpreterClient.__init__
     defaults = inspect.signature(client).parameters
@@ -319,9 +330,12 @@ def test_the_model_and_tool_configuration_did_not_change():
         "temperature must stay unset so the benchmark configuration is the one "
         "Run 6 used")
     # ONE model call a question (owner direction 2026-09-29, P0 design §21):
-    # the governed catalogue is in the prompt, so the first round forces the
-    # intent tool. It was six retrieve-then-think rounds, about three used.
+    # the governed catalogue is in the prompt, so the first round asks for the
+    # intent tool. It was six retrieve-then-think rounds, about three used. On
+    # a model that cannot be forced to call it (Claude Opus 5.5) a response
+    # without the call is asked for once more, and only once (§40).
     assert AnthropicInterpreterClient.max_rounds == 1
+    assert AnthropicInterpreterClient.retries_without_call == 1
 
 
 def test_the_policy_phase_changed_only_the_interpreter():

@@ -2713,3 +2713,49 @@ Not in phase 2: comparing across answers ("compare it with the one before")
 — phase 3, on answer composition; the dashboard sending the continuation back
 (the browser's own follow-up guessing, `lib/analysisContext.ts`, is replaced
 by it), which ships from main.
+
+## 40. Claude Opus 5.5 — the candidate under measurement (2026-10-02)
+
+Owner, 2026-10-02: "We must upgrade to Opus 5.5." Claude Opus 5 is not being
+retired: Anthropic's model-deprecations page lists it Active, not deprecated,
+retirement "not sooner than July 24, 2027", with at least 60 days' notice. The
+move is made because Claude Opus 5.5 is the current Opus and costs less — $4 /
+$20 per million tokens against $5 / $25, and cached input $0.20 against $0.50,
+which is most of what a question costs here (the catalogue is ~50k cached
+tokens) — not because of a deadline. So it is made the governed way: measured
+against the signed-off baseline before it is relied on.
+
+WHAT CHANGES. The interpreter and the conversation reader run on
+`claude-opus-5-5` (`mi_agent_config.DEFAULT_MODEL`). Claude Opus 5.5 has two
+breaking changes that touch this code:
+
+    FORCED TOOL USE IS REJECTED  The intent tool was forced (`tool_choice:
+               tool`); Claude Opus 5.5 returns a 400 for that. The call is asked
+               for in the prompt — the rules already say "Answer only by calling
+               the emit_candidate_intent tool" — and a response without it is
+               asked once more, once. The intent is still parsed fail-closed;
+               strict tool use is not used, because the schema's length and
+               range limits are outside what strict mode accepts.
+    THINKING IS ALWAYS ON      Effort is the only control, default `medium`. The
+               signed-off build forced the tool, which leaves no room to think,
+               so the closest setting is `low` (Anthropic's starting point for a
+               route that had none), set explicitly; `max_tokens` 16000 leaves
+               room for it.
+
+A safety-classifier decline (`stop_reason: "refusal"`) is recorded with its
+category and not asked again; server-side fallback (`fallbacks: "default"`) re-
+runs a false positive on Anthropic's recommended model, and the model that
+served is recorded on every outcome. The prompts, the catalogue and the tool
+schema are unchanged.
+
+THE CANDIDATE. A model change moves the model's view, so the guard (§37) would
+refuse it. It is recorded instead as the named CANDIDATE in
+config/mi/model_view_baseline.json (2affd8d9…), with what changed and what
+promotes it; the guard accepts the baseline's fingerprint or that candidate's,
+nothing else, and the runner says which one a run measures. Promotion: deploy,
+run `run_production_bank.sh <principal> signoff`, and only if it matches or
+beats the baseline (must-answer 88/88, no wrong answer, the variants scored)
+does the candidate become the baseline. Otherwise it is withdrawn and the
+interpreter stays on Claude Opus 5, which is supported. The conversation bank
+(§39) is then run on Claude Opus 5.5 — not first on Claude Opus 5, whose
+readings would all need repeating.

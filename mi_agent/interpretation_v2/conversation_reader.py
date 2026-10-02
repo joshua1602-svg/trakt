@@ -108,7 +108,9 @@ since — return outcome "cannot".
 
 Use the book's governed terms, listed below, only to recognise what the user \
 means and to name choices; never to add a figure, grouping or restriction the \
-user did not ask for.\
+user did not ask for.
+
+Answer only by calling the `record_complete_question` tool.\
 """
 
 
@@ -352,7 +354,7 @@ class ConversationReader:
 def default_reader() -> ConversationReader:
     """The reader over the same model client and settings as the interpreter."""
     from .opus_interpreter import AnthropicInterpreterClient
-    return ConversationReader(AnthropicInterpreterClient(max_tokens=1024))
+    return ConversationReader(AnthropicInterpreterClient(max_tokens=4096))
 
 
 def reader_view(vocabulary: Optional[GovernedVocabulary] = None) -> Dict[str, Any]:
@@ -360,12 +362,15 @@ def reader_view(vocabulary: Optional[GovernedVocabulary] = None) -> Dict[str, An
     the interpreter's (`test_the_models_view_is_the_baselines`), so a change
     to it is a measured change."""
     from .opus_interpreter import AnthropicInterpreterClient
-    client = AnthropicInterpreterClient(max_tokens=1024)
+    from .opus_interpreter import forces_tool, uses_fallbacks
+    client = AnthropicInterpreterClient(max_tokens=4096)
     return {"system": build_system_blocks(vocabulary),
             "user": build_user_prompt("<MESSAGE>", None),
             "tool": build_tool_schema(), "tool_name": READER_TOOL_NAME,
             "model": client.model, "max_tokens": client._max_tokens,
-            "temperature": client._temperature}
+            "temperature": client._temperature, "effort": client.effort,
+            "forced_tool": forces_tool(client.model),
+            "fallbacks": uses_fallbacks(client.model)}
 
 
 def reader_view_fingerprint(vocabulary: Optional[GovernedVocabulary] = None) -> str:

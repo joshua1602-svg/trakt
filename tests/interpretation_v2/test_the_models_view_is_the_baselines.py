@@ -31,12 +31,35 @@ def _baseline():
     return json.loads(_BASELINE.read_text(encoding="utf-8"))
 
 
+def _recorded():
+    """The fingerprints the guard accepts: the signed-off baseline's and,
+    while one is under measurement, the named candidate's (§40)."""
+    baseline = _baseline()
+    accepted = {baseline["model_view_fingerprint"]}
+    candidate = baseline.get("candidate")
+    if candidate and candidate.get("measured_by") is None:
+        accepted.add(candidate["model_view_fingerprint"])
+    return accepted
+
+
 def test_the_models_view_is_the_signed_off_one():
     baseline = _baseline()
-    assert model_view_fingerprint() == baseline["model_view_fingerprint"], (
+    assert model_view_fingerprint() in _recorded(), (
         "The text the model is shown has changed since the signed-off build "
-        f"{baseline['commit'][:8]}. Re-run the sign-off set on this change and "
-        "move config/mi/model_view_baseline.json only if it matches or beats the baseline.")
+        f"{baseline['commit'][:8]} and is not the recorded candidate. Record the "
+        "change as the candidate in config/mi/model_view_baseline.json, deploy "
+        "it, run the sign-off set on it, and promote it only if it matches or "
+        "beats the baseline.")
+
+
+def test_a_candidate_says_what_changed_and_what_promotes_it():
+    """A view under measurement is named, not merely tolerated."""
+    candidate = _baseline().get("candidate")
+    if candidate:
+        assert candidate["change"] and candidate["to_promote"]
+        assert len(candidate["model_view_fingerprint"]) == 64
+        assert (candidate["model_view_fingerprint"]
+                != _baseline()["model_view_fingerprint"])
 
 
 def test_the_fingerprint_does_not_depend_on_the_process():
@@ -47,7 +70,8 @@ def test_the_fingerprint_does_not_depend_on_the_process():
                PYTHONPATH=os.pathsep.join([str(_ROOT), os.environ.get("PYTHONPATH", "")]))
     out = subprocess.run([sys.executable, "-c", code], cwd=_ROOT, env=env,
                          capture_output=True, text=True, check=True)
-    assert out.stdout.strip() == _baseline()["model_view_fingerprint"]
+    assert out.stdout.strip() == model_view_fingerprint()
+    assert out.stdout.strip() in _recorded()
 
 
 def test_the_baseline_records_what_was_measured():

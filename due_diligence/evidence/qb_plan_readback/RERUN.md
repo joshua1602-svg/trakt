@@ -687,3 +687,13 @@ intents added beside the baseline's.
     2026-10-02  11:31 UTC 8321dfb7 deployed (run 37001204626, success):
                 conversation phase 2 (§39), switched off for users. Next:
                 `run_production_bank.sh <principal> conversations`
+    2026-10-02  Built, not deployed: Claude Opus 5.5 (design §40) — the
+                interpreter and the conversation reader on claude-opus-5-5,
+                effort low, the intent tool asked for rather than forced (asked
+                once more if missing), server-side fallback on a safety
+                decline. Recorded as the CANDIDATE model view (2affd8d9…)
+                beside the Claude Opus 5 baseline. The conversation run on
+                Claude Opus 5 (8321dfb7) is not made: every reading would need
+                repeating. Next: deploy, then `run_production_bank.sh
+                <principal> signoff` — promote only on 88/88 and no wrong
+                answer — then `conversations`

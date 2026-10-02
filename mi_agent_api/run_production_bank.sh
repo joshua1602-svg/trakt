@@ -138,10 +138,11 @@ print(f"vocabulary: {VOCABULARY_VERSION}")
 try:
     from mi_agent.interpretation_v2.opus_interpreter import model_view_fingerprint
     view = model_view_fingerprint()
-    base = json.loads(Path("config/mi/model_view_baseline.json")
-                      .read_text()).get("model_view_fingerprint")
+    recorded = json.loads(Path("config/mi/model_view_baseline.json").read_text())
+    base = recorded.get("model_view_fingerprint")
+    candidate = (recorded.get("candidate") or {}).get("model_view_fingerprint")
     print(f"model view: {view[:12]} "
-          f"({'the signed-off baseline' if view == base else 'CHANGED since the signed-off baseline ' + str(base)[:12]})")
+          f"({'the signed-off baseline' if view == base else 'the CANDIDATE under measurement (design §40) — this run measures it against the baseline ' + str(base)[:12] if view == candidate else 'CHANGED since the signed-off baseline ' + str(base)[:12]})")
 except Exception as exc:  # noqa: BLE001 - a preflight note, never a refusal
     print(f"model view: not read ({type(exc).__name__})")
 if conversations:

@@ -36,9 +36,10 @@ whole surface — two functions and one service to inspect, not a call graph.
 Structured generation
 ---------------------
 The intent is generated through a tool schema with
-``additionalProperties: false`` at every level and ``tool_choice`` pinned to
-that tool. That is strict structured generation where the provider supports it.
-It is still not trusted: :func:`~mi_agent.interpretation_v2.intent.parse_candidate_intent`
+``additionalProperties: false`` at every level. On a model that accepts forced
+tool use the call is pinned to that tool; Claude Opus 5.5 rejects forced tool
+use, so there the prompt asks for the call and a response without one is asked
+once more (§40). It is still not trusted: :func:`~mi_agent.interpretation_v2.intent.parse_candidate_intent`
 re-validates everything fail-closed, because a schema is a request and a parser
 is a guarantee.
 
@@ -87,7 +88,42 @@ INTENT_TOOL_NAME = "emit_candidate_intent"
 try:  # pragma: no cover - configuration import, exercised indirectly
     from mi_agent.mi_agent_config import DEFAULT_MODEL as CONFIGURED_MODEL
 except Exception:  # noqa: BLE001
-    CONFIGURED_MODEL = "claude-opus-5"
+    CONFIGURED_MODEL = "claude-opus-5-5"
+
+#: HOW MUCH THE MODEL THINKS (P0 design §40). Claude Opus 5.5 always thinks,
+#: and effort is the only control; its default is `medium`. The signed-off
+#: build ran Claude Opus 5 with the intent tool forced, which leaves no room to
+#: think — so the closest setting to what the sign-off measured is `low`, the
+#: level Anthropic's migration guidance starts a route that had no thinking at.
+#: Moved only on a measured gain, like every other part of the model's view.
+CONFIGURED_EFFORT = "low"
+
+#: Models that reject a forced `tool_choice` (`any` / `tool`): the call is
+#: asked for in the prompt instead, and a response without it asked once more.
+_FORCED_TOOL_REJECTED = ("claude-opus-5-5", "claude-fable-5-1",
+                         "claude-mythos-5-1", "claude-sonnet-5-5")
+
+#: SERVER-SIDE FALLBACK on a safety-classifier decline (`stop_reason:
+#: "refusal"`): the request is re-run on the model Anthropic recommends for
+#: that category, so a false positive is not an outage. The model that served
+#: is recorded on every outcome (`model_id`), so a question read by the
+#: fallback model is visible in the record.
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+_FALLBACK_MODELS = ("claude-opus-5-5", "claude-opus-5", "claude-fable-5-1",
+                    "claude-sonnet-5-5")
+
+
+def forces_tool(model: str) -> bool:
+    """Whether `model` accepts a forced `tool_choice`."""
+    return not str(model or "").startswith(_FORCED_TOOL_REJECTED)
+
+
+def _bare(model: str) -> str:
+    return str(model or "").split("[", 1)[0]
+
+
+def uses_fallbacks(model: str) -> bool:
+    return _bare(model) in _FALLBACK_MODELS
 
 
 SYSTEM_PROMPT = """\
@@ -418,6 +454,8 @@ def model_view(vocabulary: Optional[GovernedVocabulary] = None) -> Dict[str, Any
         "tool": build_tool_schema(), "tool_name": INTENT_TOOL_NAME,
         "model": client.model, "max_tokens": client._max_tokens,
         "temperature": client._temperature, "max_rounds": client.max_rounds,
+        "effort": client.effort, "forced_tool": forces_tool(client.model),
+        "fallbacks": uses_fallbacks(client.model),
     }
 
 
@@ -447,17 +485,59 @@ class AnthropicInterpreterClient:
     #: tools and more rounds still works — but the interpreter offers none.
     max_rounds = 1
 
+    #: A response without the tool call is asked for once more — and only
+    #: where the call could not be forced (§40). A transport retry, the
+    #: client's own business: the interpreter still makes one interpretation.
+    retries_without_call = 1
+
     def __init__(self, *, model: str = CONFIGURED_MODEL,
-                 api_key: Optional[str] = None, max_tokens: int = 4096,
+                 api_key: Optional[str] = None, max_tokens: int = 16000,
                  temperature: Optional[float] = None,
+                 effort: Optional[str] = CONFIGURED_EFFORT,
                  timeout: float = 180.0, max_rounds: Optional[int] = None) -> None:
         self.model = model
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        # Room for the thinking as well as the intent: thinking counts toward
+        # `max_tokens` even though its text is not returned.
         self._max_tokens = max_tokens
         self._temperature = temperature
+        self.effort = effort
         self._timeout = timeout
         if max_rounds is not None:
             self.max_rounds = max(1, int(max_rounds))
+
+    def request_kwargs(self, *, system: Sequence[Mapping[str, Any]],
+                       tools: Sequence[Mapping[str, Any]],
+                       messages: Sequence[Mapping[str, Any]], tool_name: str,
+                       last_round: bool) -> Dict[str, Any]:
+        """The `messages.create` arguments for one round — built here, apart
+        from the network call, so what is sent can be tested."""
+        kwargs: Dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": self._max_tokens,
+            "system": [dict(block) for block in system],
+            "tools": [dict(t) for t in tools],
+            "messages": list(messages),
+        }
+        # The last round asks for the intent tool: FORCED where the model
+        # accepts it, otherwise left to the model with the prompt asking for
+        # it (Claude Opus 5.5 rejects a forced call with a 400).
+        kwargs["tool_choice"] = ({"type": "tool", "name": tool_name}
+                                 if last_round and forces_tool(self.model)
+                                 else {"type": "auto"})
+        # Not every model exposes a temperature control, and the SDK rejects
+        # the argument outright where it does not.
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
+        body: Dict[str, Any] = {}
+        if self.effort:
+            body["output_config"] = {"effort": self.effort}
+        if uses_fallbacks(self.model):
+            body["fallbacks"] = "default"
+            kwargs["extra_headers"] = {"anthropic-beta": FALLBACK_BETA}
+        if body:
+            kwargs["extra_body"] = body
+        return kwargs
 
     @property
     def available(self) -> bool:
@@ -490,24 +570,16 @@ class AnthropicInterpreterClient:
         calls: List[Dict[str, Any]] = []
         model_id = ""
 
-        for round_index in range(self.max_rounds):
-            kwargs: Dict[str, Any] = {
-                "model": self.model,
-                "max_tokens": self._max_tokens,
-                "system": [dict(block) for block in system],
-                "tools": tools,
-                "messages": messages,
-            }
-            # The last round FORCES the intent tool. Left to itself a model can
-            # keep retrieving; the loop has to end in a verdict, and ending it
-            # by giving up would turn a bounded budget into a silent failure.
-            kwargs["tool_choice"] = ({"type": "tool", "name": tool_name}
-                                     if round_index == self.max_rounds - 1
-                                     else {"type": "auto"})
-            # Not every model exposes a temperature control, and the SDK rejects
-            # the argument outright where it does not.
-            if self._temperature is not None:
-                kwargs["temperature"] = self._temperature
+        retries = 0 if forces_tool(self.model) else self.retries_without_call
+        round_index = 0
+        while round_index < self.max_rounds:
+            # The last round asks for the intent tool. Left to itself a model
+            # can keep retrieving; the loop has to end in a verdict, and ending
+            # it by giving up would turn a bounded budget into a silent failure.
+            kwargs = self.request_kwargs(
+                system=system, tools=tools, messages=messages,
+                tool_name=tool_name,
+                last_round=round_index == self.max_rounds - 1)
             usage["model_calls"] += 1
             try:
                 message = client.messages.create(**kwargs)
@@ -542,6 +614,20 @@ class AnthropicInterpreterClient:
                                      metadata_calls=tuple(calls))
 
             if not metadata_requests:
+                stop = str(getattr(message, "stop_reason", "") or "")
+                if stop == "refusal":
+                    details = getattr(message, "stop_details", None)
+                    category = getattr(details, "category", None) if details else None
+                    return ModelResponse(payload=None, model_id=model_id,
+                                         usage=usage,
+                                         error=f"declined by the model's safety "
+                                               f"classifier ({category or 'no category'})",
+                                         metadata_calls=tuple(calls))
+                if retries > 0 and round_index == self.max_rounds - 1:
+                    # The call could not be forced and was not made: asked
+                    # once more, the same request.
+                    retries -= 1
+                    continue
                 return ModelResponse(payload=None, model_id=model_id, usage=usage,
                                      raw_text="".join(text_parts),
                                      error="no tool_use block in the response",
@@ -559,6 +645,7 @@ class AnthropicInterpreterClient:
                                 "tool_use_id": getattr(block, "id", ""),
                                 "content": json.dumps(result, default=str)})
             messages.append({"role": "user", "content": results})
+            round_index += 1
 
         return ModelResponse(payload=None, model_id=model_id, usage=usage,
                              error=f"no intent after {self.max_rounds} rounds",
