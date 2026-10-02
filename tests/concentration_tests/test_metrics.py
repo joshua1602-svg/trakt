@@ -217,6 +217,35 @@ class TestRatesAndLtv:
                    "deduction_basis": "servicing_fee_only"})
         assert net.value == round(gross.value - 0.5, 2)
 
+    def test_a_fractional_rate_tape_is_read_in_percent(self, lib, funded_frame):
+        """ERE's canonical tape carries 9.56% as 0.0956. A rate test's
+        threshold and deduction are written in percent, so the same book
+        stated either way gives the same Gross and Net WAC."""
+        fractional = funded_frame.assign(
+            current_interest_rate=funded_frame.current_interest_rate / 100.0)
+        for params, metric_id in (({}, "rate_gross_wac"),
+                                  ({"deduction_percent": 3.75,
+                                    "deduction_basis": "other_confirmed"},
+                                   "rate_net_wac")):
+            as_percent = run(lib, funded_frame, metric_id, params)
+            as_fraction = run(lib, fractional, metric_id, params)
+            assert as_fraction.value == as_percent.value
+        gross = run(lib, fractional, "rate_gross_wac", {})
+        net = run(lib, fractional, "rate_net_wac",
+                  {"deduction_percent": 3.75, "deduction_basis": "other_confirmed"})
+        assert gross.value > 1  # 5.x%, not 0.05
+        assert net.value == round(gross.value - 3.75, 2)
+
+    def test_a_rate_near_the_net_wac_floor_is_not_rounded_across_it(
+            self, lib, funded_frame):
+        """At a 3.75% floor, a 3.70% Net WAC is a breach. Read as a fraction
+        and rounded to two places it would have been 0.04 — a pass."""
+        book = funded_frame.assign(current_interest_rate=0.0745)
+        net = run(lib, book, "rate_net_wac",
+                  {"deduction_percent": 3.75, "deduction_basis": "other_confirmed"})
+        assert net.value == 3.7
+        assert net.value < 3.75
+
     def test_variable_rate_share(self, lib, funded_frame):
         # Variable: L2, L4, L7 → 150+200+120 = 470k → 47%
         r = run(lib, funded_frame, "rate_type_share",

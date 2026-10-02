@@ -12,6 +12,8 @@ Conventions shared with the existing risk monitor:
 * numbers parse through :func:`analytics_lib.numeric.coerce_numeric`;
 * LTV series are normalised to percent when the median suggests a fraction
   (same rule as ``mi_agent_api.risk_limits._normalise_ltv``);
+* interest rates likewise (a median at or below 1 is a fraction), so a rate
+  test's threshold and deduction are always read in percent;
 * a zero or missing denominator yields NO value (never a silent zero);
 * a missing required column yields ``data_missing`` with the role and the
   candidate columns named.
@@ -101,6 +103,27 @@ def _normalise_ltv(series: pd.Series) -> pd.Series:
     if v.notna().any() and float(v.dropna().median()) <= 1.5:
         return v * 100.0
     return v
+
+
+def _normalise_rate(series: pd.Series) -> pd.Series:
+    """An interest rate in percent. Tapes carry it either way — 9.56 or
+    0.0956 — and a rate test's threshold and deduction are stated in percent
+    (``3.75`` means 3.75%), so a fraction is scaled up. No mortgage book has a
+    median rate at or below 1%, so the median tells the two apart."""
+    v = coerce_numeric(series)
+    if v.notna().any() and float(v.dropna().median()) <= 1.0:
+        return v * 100.0
+    return v
+
+
+def _basis_values(series: pd.Series, role: str) -> pd.Series:
+    """The numeric series a test reads for ``role``, in the unit its
+    thresholds are written in."""
+    if role.startswith("ltv_"):
+        return _normalise_ltv(series)
+    if role == "interest_rate":
+        return _normalise_rate(series)
+    return coerce_numeric(series)
 
 
 _BALANCE_ROLE_FOR_DENOMINATOR = {
@@ -319,7 +342,7 @@ def _eval_share_of_balance_numeric(df, lib, metric, params, external=None):
         return MetricComputation(
             value=None, unit=metric.unit, data_status=DATA_MISSING,
             total_loans=len(df), notes="No numeric threshold configured.")
-    series = _normalise_ltv(df[col]) if role.startswith("ltv_") else coerce_numeric(df[col])
+    series = _basis_values(df[col], role)
     comparison = str(_param(metric, params, "comparison") or "above")
     mask = (series < threshold) if comparison == "below" else (series > threshold)
     mask = mask.fillna(False)
@@ -443,7 +466,7 @@ def _eval_weighted_average(df, lib, metric, params, external=None):
     if col is None:
         return MetricComputation.missing(role, role_candidates(lib, role),
                                          unit=metric.unit, total_loans=len(df))
-    values = _normalise_ltv(df[col]) if role.startswith("ltv_") else coerce_numeric(df[col])
+    values = _basis_values(df[col], role)
     deduction = params.get("deduction_percent")
     if deduction is None and "deduction_percent" in (metric.parameters or {}):
         # A NET average with no confirmed deduction is not a net average. The
@@ -562,7 +585,7 @@ def _eval_field_extremum(df, lib, metric, params, *, take_max: bool,
     if col is None:
         return MetricComputation.missing(role, role_candidates(lib, role),
                                          unit=metric.unit, total_loans=len(df))
-    values = _normalise_ltv(df[col]) if role.startswith("ltv_") else coerce_numeric(df[col])
+    values = _basis_values(df[col], role)
     if not values.notna().any():
         return MetricComputation(
             value=None, unit=metric.unit, data_status=DATA_MISSING,
@@ -845,8 +868,7 @@ def _eval_filtered_share(df, lib, metric, params, external=None):
             mask &= _norm_text(df[col]).isin(
                 [str(v).strip().lower() for v in values])
         else:
-            series = (_normalise_ltv(df[col]) if role.startswith("ltv_")
-                      else coerce_numeric(df[col]))
+            series = _basis_values(df[col], role)
             if f.get("min") is not None:
                 mask &= (series >= float(f["min"])).fillna(False)
             if f.get("max") is not None:
