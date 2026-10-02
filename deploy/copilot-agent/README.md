@@ -23,6 +23,11 @@ python deploy/copilot-agent/package_agent.py
 
 # Release build — insists every token has already been substituted:
 python deploy/copilot-agent/package_agent.py --require-resolved
+
+# Copilot only — leave the notification bot out of the archive (the repository
+# manifest keeps it). Needs only the plugin's OAuth registration id:
+python deploy/copilot-agent/package_agent.py --copilot-only --require-resolved \
+    --oauth-config-id <registration id from the Teams developer portal>
 ```
 
 The build always fails if the declarative agent is missing, the bot is missing,

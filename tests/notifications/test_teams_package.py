@@ -138,6 +138,7 @@ def test_the_package_builds_and_carries_every_artefact(tmp_path):
 # Build-time substitution of the bot app id
 # --------------------------------------------------------------------------- #
 PILOT_BOT_ID = "3f6a1c2e-8b47-4d95-a10f-2c7e5b9d4408"
+PILOT_OAUTH_ID = "pilot-oauth-registration-id"
 
 
 def _packaged_manifest(zip_path) -> dict:
@@ -148,7 +149,8 @@ def _packaged_manifest(zip_path) -> dict:
 
 def test_the_bot_app_id_is_substituted_into_the_package(tmp_path):
     zip_path = package_agent.build(tmp_path, require_resolved=True,
-                                   bot_app_id=PILOT_BOT_ID)
+                                   bot_app_id=PILOT_BOT_ID,
+                                   oauth_config_id=PILOT_OAUTH_ID)
     packaged = _packaged_manifest(zip_path)
     assert packaged["bots"][0]["botId"] == PILOT_BOT_ID
 
@@ -158,7 +160,7 @@ def test_substitution_never_rewrites_the_repository_manifest(tmp_path):
     not leave the working copy dirty or commit a per-tenant value."""
     before = (AGENT_DIR / "manifest.json").read_text(encoding="utf-8")
     package_agent.build(tmp_path, require_resolved=True,
-                        bot_app_id=PILOT_BOT_ID)
+                        bot_app_id=PILOT_BOT_ID, oauth_config_id=PILOT_OAUTH_ID)
     after = (AGENT_DIR / "manifest.json").read_text(encoding="utf-8")
     assert before == after
     assert "${{TEAMS_BOT_APP_ID}}" in after
@@ -167,7 +169,8 @@ def test_substitution_never_rewrites_the_repository_manifest(tmp_path):
 def test_a_substituted_package_carries_no_unresolved_bot_token(tmp_path):
     import zipfile
     zip_path = package_agent.build(tmp_path, require_resolved=True,
-                                   bot_app_id=PILOT_BOT_ID)
+                                   bot_app_id=PILOT_BOT_ID,
+                                   oauth_config_id=PILOT_OAUTH_ID)
     with zipfile.ZipFile(zip_path) as archive:
         for name in ("manifest.json", "declarativeAgent.json",
                      "ai-plugin.json", "trakt-copilot-openapi.yaml"):
@@ -208,6 +211,74 @@ def test_the_bot_app_id_can_come_from_the_environment(monkeypatch):
 def test_no_id_anywhere_leaves_the_token_in_place(monkeypatch):
     monkeypatch.delenv(package_agent.BOT_APP_ID_ENV, raising=False)
     assert package_agent.resolve_bot_app_id(None) is None
+
+
+# --------------------------------------------------------------------------- #
+# A Copilot-only release, and the plugin OAuth registration id
+# --------------------------------------------------------------------------- #
+def _packaged_text(zip_path, name: str) -> str:
+    import zipfile
+    with zipfile.ZipFile(zip_path) as archive:
+        return archive.read(name).decode("utf-8")
+
+
+def test_a_copilot_only_package_carries_no_bot(tmp_path):
+    zip_path = package_agent.build(tmp_path, copilot_only=True)
+    packaged = _packaged_manifest(zip_path)
+    assert "bots" not in packaged
+    assert packaged["copilotAgents"]["declarativeAgents"][0]["file"] == \
+        "declarativeAgent.json"
+    assert "TEAMS_BOT_APP_ID" not in _packaged_text(zip_path, "manifest.json")
+
+
+def test_a_copilot_only_build_never_rewrites_the_repository_manifest(tmp_path):
+    before = (AGENT_DIR / "manifest.json").read_text(encoding="utf-8")
+    package_agent.build(tmp_path, copilot_only=True)
+    after = (AGENT_DIR / "manifest.json").read_text(encoding="utf-8")
+    assert before == after
+    assert '"bots"' in after
+
+
+def test_a_copilot_only_release_needs_only_the_oauth_id(tmp_path):
+    zip_path = package_agent.build(tmp_path, require_resolved=True,
+                                   copilot_only=True,
+                                   oauth_config_id=PILOT_OAUTH_ID)
+    plugin = json.loads(_packaged_text(zip_path, "ai-plugin.json"))
+    assert plugin["runtimes"][0]["auth"]["reference_id"] == PILOT_OAUTH_ID
+
+
+def test_a_release_build_refuses_an_unresolved_oauth_id(tmp_path):
+    """The bot token is resolved, the plugin's is not: the package would install
+    and then fail the first sign-in."""
+    with pytest.raises(SystemExit) as excinfo:
+        package_agent.build(tmp_path, require_resolved=True, copilot_only=True)
+    assert "OAUTH2_CONFIGURATION_ID" in str(excinfo.value)
+    assert "ai-plugin.json" in str(excinfo.value)
+
+
+def test_copilot_only_and_a_bot_id_contradict_each_other(tmp_path):
+    with pytest.raises(SystemExit):
+        package_agent.build(tmp_path, copilot_only=True,
+                            bot_app_id=PILOT_BOT_ID)
+
+
+def test_the_oauth_id_never_reaches_the_repository_copy(tmp_path):
+    package_agent.build(tmp_path, copilot_only=True,
+                        oauth_config_id=PILOT_OAUTH_ID)
+    plugin = (AGENT_DIR / "ai-plugin.json").read_text(encoding="utf-8")
+    assert "${{OAUTH2_CONFIGURATION_ID}}" in plugin
+    assert PILOT_OAUTH_ID not in plugin
+
+
+@pytest.mark.parametrize("bad", ['has space', 'has"quote', '${{TOKEN}}'])
+def test_an_oauth_id_that_is_unsafe_in_json_is_refused(bad):
+    with pytest.raises(SystemExit):
+        package_agent.resolve_oauth_config_id(bad)
+
+
+def test_the_oauth_id_can_come_from_the_environment(monkeypatch):
+    monkeypatch.setenv(package_agent.OAUTH_CONFIG_ID_ENV, PILOT_OAUTH_ID)
+    assert package_agent.resolve_oauth_config_id(None) == PILOT_OAUTH_ID
 
 
 # --------------------------------------------------------------------------- #
