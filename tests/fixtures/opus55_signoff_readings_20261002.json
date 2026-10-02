@@ -1,5 +1,165 @@
 {
  "intents": {
+  "forecast_scale_019": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "I read this as the monthly run-rate, not the annualised one.",
+     "options": [],
+     "slot": "measures"
+    }
+   ],
+   "capability": "forecast",
+   "change_form": null,
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "forecast_completion_rate",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "point_in_time",
+   "outputs": [],
+   "population": {
+    "base": "funded",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "range",
+    "grain": "weekly",
+    "labels": [
+     "8-week"
+    ],
+    "periods_ahead": null,
+    "periods_back": 8
+   }
+  },
+  "forecast_scale_020": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "Read as the run-rate measured over the last 12 weeks rather than the default 5-week window.",
+     "options": [],
+     "slot": "time"
+    }
+   ],
+   "capability": "forecast",
+   "change_form": null,
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "forecast_completion_rate",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "point_in_time",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "range",
+    "grain": "weekly",
+    "labels": [
+     "12-week"
+    ],
+    "periods_ahead": null,
+    "periods_back": 12
+   }
+  },
+  "hv_forecast_scale_007_1": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "No period stated; read at the latest forecast over its own window.",
+     "options": [],
+     "slot": "time"
+    }
+   ],
+   "capability": "forecast",
+   "change_form": null,
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "annualised_completion_run_rate",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "point_in_time",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "current",
+    "grain": null,
+    "labels": [],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
   "hv_funded_breakdown_1d_014_1": {
    "ambiguity": [
     {

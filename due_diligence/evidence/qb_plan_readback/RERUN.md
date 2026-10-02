@@ -728,3 +728,11 @@ intents added beside the baseline's.
                 served by claude-opus-5-5 (no retry, no fallback); output 386
                 tokens median (thinking at `low` adds next to nothing); model
                 time 5.5s median
+    2026-10-02  Owner: "Include the run-rate rule and deploy." A completion
+                run-rate named on the pipeline is the forecast's (design
+                §40.2): the yearly-basis variant and the 12-week run rate are
+                answered, not refused. Replay of the Opus 5.5 run's recorded
+                readings: 193 unchanged, eight change (named months 5, LTV
+                bands 1, run-rates 2). The recorded 2026-09-29 misread of the
+                Offer pull-through is now answered in £ per month — the cost,
+                accepted. Next: deploy, sign-off again on the candidate

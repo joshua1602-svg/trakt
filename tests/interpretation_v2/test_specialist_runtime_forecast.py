@@ -632,22 +632,24 @@ def test_the_answer_leads_with_the_scenario_asked_for(monkeypatch, funded_root):
 
 
 # --------------------------------------------------------------------------- #
-# A RUN-RATE READ "FOR THE PIPELINE" STAYS REFUSED BY POPULATION (2026-10-01)
+# A RUN-RATE READ "FOR THE PIPELINE" IS THE FORECAST'S (owner, 2026-10-02)
 # --------------------------------------------------------------------------- #
 
-def test_a_run_rate_read_over_the_pipeline_is_still_refused():
-    """Tried and withdrawn on 2026-10-01: treating "the pipeline's completion
-    run-rate" as the run-rate would have answered the recorded 2026-09-29
-    reading of "What is the offer to completion pull-through rate?" — the
-    run-rate over the pipeline, a misread — with £ per month. The population
-    refusal is what stopped that wrong answer, so it stays: a run-rate framed
-    over the pipeline is more often a conversion question misread than a
-    run-rate question."""
+def test_a_run_rate_read_over_the_pipeline_is_the_forecasts():
+    """Withdrawn on 2026-10-01, decided on 2026-10-02 (design §40.2): the
+    run-rate is defined on the pipeline's own completions, so "the pipeline's
+    completion run-rate" is the run-rate — and the model kept naming the
+    pipeline for it ("the 12-week run rate", "the run rate on a yearly
+    basis"), refused for a population nobody meant to change. The cost, named
+    when it was decided: a conversion question MISREAD as the run-rate over
+    the pipeline (the 2026-09-29 reading of the Offer pull-through) is now
+    answered in £ per month rather than refused; today's readings of that
+    question are stage_pull_through."""
     payload = {"schema_version": "candidate_intent/1.0", "capability": "forecast",
                "operation": "point_in_time", "population": {"base": "pipeline"},
                "measures": [{"concept": "forecast_completion_rate"}],
                "time": {"form": "current"}}
     plan = DeterministicCompiler(CompilerContext()).compile(
         parse_candidate_intent(payload)).plan.to_dict()
-    assert plan["population"]["base"] == "pipeline"
-    assert forecast_rt.check_eligibility(plan)[1] == forecast_rt.POPULATION_NOT_MEASURED
+    assert plan["population"]["base"] == "forecast"
+    assert forecast_rt.check_eligibility(plan)[0] is True

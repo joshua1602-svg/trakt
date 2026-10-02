@@ -62,13 +62,14 @@ __all__ = ["NORMAL_FORM_VERSION", "PAIR_IMPLYING_OPERATIONS",
            "CANONICAL_PAIR_FORM", "CANONICAL_PAIR_PERIODS_BACK", "BOUNDED",
            "DERIVED_POPULATION_OF", "DERIVED_POPULATION_SPELLINGS",
            "SINGLE_FIGURE_OPERATION", "GROUPED_FIGURE_OPERATION",
-           "GROUPED_SPELLINGS",
+           "GROUPED_SPELLINGS", "RUN_RATE_MEASURES",
            "LABELS_ARE_WORDING_ONLY", "identity_labels",
            "NormalisationResult", "canonical_intent"]
 
 #: The normal form's own version, separate from the intent schema version: the
 #: schema did not change, the canonicalisation of it is new. 1.2 (design §40):
-#: a grouped distribution is a breakdown (rule 7).
+#: a grouped distribution is a breakdown (rule 7); a completion run-rate on the
+#: pipeline base is the forecast's (rule 6).
 NORMAL_FORM_VERSION = "candidate_intent_normal_form/1.2"
 
 # --------------------------------------------------------------------------- #
@@ -149,7 +150,9 @@ BOUNDED: Mapping[str, str] = {
         "converts into, which is a different figure from the funded book "
         "projected forward. Rule 6 leaves it as stated, so the forecast runtime "
         "refuses it by population rather than answering it as the whole "
-        "forecast."),
+        "forecast. The one exception is the completion run-rate, which is "
+        "defined on the pipeline's own completions and is one figure either "
+        "way (RUN_RATE_MEASURES, design §40.2)."),
 }
 
 # --------------------------------------------------------------------------- #
@@ -178,6 +181,32 @@ DERIVED_POPULATION_OF: Mapping[str, str] = {"forecast": "forecast"}
 #: refused by the runtime that cannot execute them — see
 #: `BOUNDED["forecast_of_the_pipeline"]`.
 DERIVED_POPULATION_SPELLINGS: frozenset = frozenset({"funded"})
+
+#: THE COMPLETION RUN-RATE IS ONE FIGURE WHICHEVER POPULATION IS NAMED (owner,
+#: 2026-10-02: "Include the run-rate rule"; design §40.2). The run-rate is
+#: defined as the £ completing per month "from the pipeline's observed
+#: completions": the completions ARE the pipeline's flow into the funded book,
+#: so there is no pipeline-only run-rate distinct from the forecast's. A
+#: reading that names the pipeline for it names the same figure — and the
+#: model did, run after run: "the 12-week completion run rate" and "completion
+#: run rate on a yearly basis" arrived on the pipeline base and were refused
+#: for a population nobody meant to change, on Claude Opus 5 and 5.5 alike.
+#:
+#: So for an intent whose EVERY measure is a completion run-rate, `pipeline` is
+#: also a spelling of the derived population. Only these measures: the
+#: forecast funded balance on the pipeline base still asks what the pipeline
+#: alone converts into, a different figure, and stays refused
+#: (`BOUNDED["forecast_of_the_pipeline"]`). Structural slots only — the
+#: capability, the measure ids and the base.
+RUN_RATE_MEASURES: frozenset = frozenset({"forecast_completion_rate",
+                                          "annualised_completion_run_rate"})
+RUN_RATE_POPULATION_SPELLINGS: frozenset = frozenset({"pipeline"})
+
+
+def _every_measure_is_a_run_rate(intent: CandidateIntent) -> bool:
+    concepts = [measure.concept for output in intent.effective_outputs()
+                for measure in output.measures]
+    return bool(concepts) and all(c in RUN_RATE_MEASURES for c in concepts)
 
 
 # --------------------------------------------------------------------------- #
@@ -433,8 +462,11 @@ def canonical_intent(intent: CandidateIntent,
     # refuse. The model's original base still travels in `intent_claims`.
     derived = DERIVED_POPULATION_OF.get(intent.capability)
     population = intent.population
+    spellings = (DERIVED_POPULATION_SPELLINGS | RUN_RATE_POPULATION_SPELLINGS
+                 if _every_measure_is_a_run_rate(intent)
+                 else DERIVED_POPULATION_SPELLINGS)
     if (derived is not None and population.base != derived
-            and population.base in DERIVED_POPULATION_SPELLINGS):
+            and population.base in spellings):
         applied.append(
             f"derived_population: base {population.base!r} -> {derived!r} "
             f"(capability {intent.capability!r} outputs the {derived!r} "

@@ -37,6 +37,14 @@ _RUNTIMES = (("pipeline", pipeline_rt), ("stage_movement", stage_rt),
 
 #: Newly admitted to the governed path — the whole list, by bank number.
 ADMITTED = {
+    # The completion run-rate named on the pipeline is the forecast's (owner,
+    # 2026-10-02, design §40.2). 126, "the 12-week completion run rate", is
+    # read right. 134 is this run's MISREAD of "What is the offer to completion
+    # pull-through rate?" as the run-rate over the pipeline: admitted now, and
+    # answered with £ per month — the known cost of the decision, accepted with
+    # it. Today's readings of 134 are stage_pull_through (the 07:10 run below,
+    # and the Claude Opus 5.5 sign-off run, 2026-10-02).
+    126: "forecast", 134: "forecast",
     80: "pipeline",   # pipeline by stage for October and November (D7)
     81: "pipeline",   # October and November pipeline amount (D7)
     85: "forecast",   # the forecast funded balance (D6, the composer)
@@ -170,7 +178,10 @@ def test_todays_compiler_reproduces_the_recorded_plans(replay):
     # measure's owner, the pipeline, which implements the metric delta (§20.3).
     # 16 ("what is the smallest loan?"): the minimum balance counts only
     # balances above zero, a predicate on the plan (owner decision D14, §21.3).
+    # 126 and 134: a completion run-rate named on the pipeline is the
+    # forecast's (design §40.2; see ADMITTED for what 134 is).
     assert moved == {112: "forecast", 113: "forecast", 125: "forecast",
+                     126: "forecast", 134: "forecast",
                      43: "funded", 83: "pipeline", 16: "funded"}
     assert outcome_moved == {**RULE_7_MOVED, **D20_MOVED}
     for n in D20_MOVED:

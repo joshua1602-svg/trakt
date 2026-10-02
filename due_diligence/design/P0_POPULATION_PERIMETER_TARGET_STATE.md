@@ -2808,3 +2808,37 @@ recorded as an authorised migration. The model's view is unchanged by this
 (the compiler is not part of it): the candidate stays 2affd8d9. Next: deploy,
 and the sign-off set again on the candidate; promote only on 88/88 and no
 wrong answer.
+
+### 40.2 The completion run-rate on the pipeline base (owner decision, 2026-10-02)
+
+Owner, 2026-10-02: "Include the run-rate rule and deploy."
+
+The complete sign-off run lost one more must-answer variant: "Completion run
+rate on a yearly basis?" read as the annualised run-rate on the PIPELINE base
+and refused by population — the reading that also refuses "the 12-week
+completion run rate" on Claude Opus 5 and 5.5 alike, and C02 in the ask-back
+run. The run-rate is defined as the £ completing per month "from the
+pipeline's observed completions": the completions are the pipeline's flow into
+the funded book, so there is no pipeline-only run-rate distinct from the
+forecast's, and a reading that names the pipeline for it names the same figure.
+
+RULE. Normalisation 6: for an intent whose EVERY measure is a completion
+run-rate (`forecast_completion_rate`, `annualised_completion_run_rate`), the
+pipeline base is a spelling of the forecast population, as the funded base
+already is. Structural slots only. The forecast funded balance on the pipeline
+base — what the pipeline alone converts into, a different figure — stays
+refused.
+
+THE COST, ACCEPTED WITH IT. On 2026-10-01 this rule was tried and withdrawn:
+the population refusal was catching one recorded misread, the 2026-09-29
+reading of "What is the offer to completion pull-through rate?" as the
+run-rate over the pipeline. With the rule that reading is answered in £ per
+month. Today's readings of that question are `stage_pull_through` (the 07:10
+run of 2026-09-30, and the Claude Opus 5.5 sign-off run), and the definitions
+since fix 1 (§35) separate the two measures; a measure misread is not a
+population question, and the refusal was catching it by accident. The
+recorded replay pins both moves (126 read right, 134 the old misread).
+
+On what Claude Opus 5.5 recorded: 193 readings unchanged; the eight that change
+are the five named-month readings, the LTV bands, and the two run-rates
+(the 12-week run rate, nice to have, and the yearly-basis variant).

@@ -135,3 +135,39 @@ def test_the_recorded_ltv_bands_reading_is_a_breakdown(compiler):
     assert payload["operation"] == "distribution"
     _, plan = _plan(compiler, payload)
     assert plan["operation"] == "breakdown"
+
+
+# --------------------------------------------------------------------------- #
+# 3. the completion run-rate on the pipeline base (design §40.2)
+# --------------------------------------------------------------------------- #
+
+_RUN_RATE = {"schema_version": "candidate_intent/1.0", "capability": "forecast",
+             "operation": "point_in_time", "population": {"base": "pipeline"},
+             "measures": [{"concept": "forecast_completion_rate"}],
+             "time": {"form": "current"}}
+
+
+@pytest.mark.parametrize("concept", ["forecast_completion_rate",
+                                     "annualised_completion_run_rate"])
+def test_a_run_rate_named_on_the_pipeline_is_the_forecasts(compiler, concept):
+    """Defined on the pipeline's own completions: one figure either way."""
+    _, plan = _plan(compiler, dict(_RUN_RATE, measures=[{"concept": concept}]))
+    assert plan["population"]["base"] == "forecast"
+
+
+def test_the_forecast_balance_of_the_pipeline_alone_stays_refused(compiler):
+    """What the pipeline alone converts into is a different figure."""
+    result, plan = _plan(compiler, dict(
+        _RUN_RATE, measures=[{"concept": "forecast_funded_balance"}]))
+    assert plan is None or plan["population"]["base"] == "pipeline"
+
+
+@pytest.mark.parametrize("qid, base", [
+    ("forecast_scale_020", "forecast"),       # recorded on the pipeline
+    ("hv_forecast_scale_007_1", "forecast"),  # recorded on the pipeline
+    ("forecast_scale_019", "forecast"),       # recorded on the funded book
+])
+def test_the_recorded_run_rate_readings_land_on_the_forecast(compiler, qid, base):
+    payload = json.loads(_FIXTURE.read_text())["intents"][qid]
+    _, plan = _plan(compiler, payload)
+    assert plan["population"]["base"] == base
