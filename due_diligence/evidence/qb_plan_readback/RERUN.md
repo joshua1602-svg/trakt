@@ -672,3 +672,15 @@ intents added beside the baseline's.
                 reading now names the plan's geography (level and basis; the
                 model's view is unchanged). Cold forecast question 53s (was
                 146s); a cold first question 55s
+    2026-10-02  Built, not deployed: conversation phase 2 (design §39) —
+                follow-ups. A follow-up or a reply is made the complete
+                question it is by the conversation reader before anything
+                reads it; the signed-off interpreter reads only complete
+                questions (its view unchanged, b5459277…; phase 1's reply
+                prompt retired). The memory holds the last answered question
+                and an open ask-back; an answer replaces it, a decline keeps
+                it (D25). The 15 memory mechanics of the bank are enforced in
+                code. Next: deploy, then `run_production_bank.sh <principal>
+                conversations` (123 turns and 72 twins, ~195 questions;
+                conversation switched on for that run only), scored with
+                score_conversations.py

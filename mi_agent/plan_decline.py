@@ -99,6 +99,11 @@ _SPECIFIC: Mapping[str, str] = {
                                     "measured on the part of the book asked "
                                     "about",
     "NO_MEASURE": "it does not name a figure I can produce",
+    # A follow-up that refers to something earlier than the conversation
+    # holds (D24: the last answered question, and an ask-back since).
+    "CONVERSATION_NOT_HELD": "it refers to something I do not have in mind — "
+                             "I keep only the last question I answered and "
+                             "any detail I asked for since",
 }
 
 #: The reason families, by the leading word of the code: what kind of thing

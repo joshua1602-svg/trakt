@@ -55,3 +55,17 @@ def test_the_baseline_records_what_was_measured():
     assert baseline["results"]["must_answer"] == {"questions": 88, "answered": 88}
     assert baseline["results"]["wrong_answers"] == 0
     assert len(baseline["commit"]) == 40
+
+
+def test_the_conversation_readers_view_is_the_recorded_one():
+    """The reader (§39) is the one other model step. Its view is pinned the
+    same way: a change to it is measured by the conversation bank
+    (`run_production_bank.sh <principal> conversations`) before it is used."""
+    from mi_agent.interpretation_v2.conversation_reader import (
+        reader_view_fingerprint)
+    recorded = _baseline()["conversation_reader"]
+    assert reader_view_fingerprint() == recorded["fingerprint"], (
+        "The text the conversation reader is shown has changed. Re-run the "
+        "conversation bank on this change and record it in "
+        "config/mi/model_view_baseline.json only if it matches or beats the "
+        "results there.")

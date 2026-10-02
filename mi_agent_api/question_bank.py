@@ -188,39 +188,48 @@ def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
         outcome = "ANSWERED" if ok else "REFUSED"
         route = meta.get("route")
         view = meta.get("datasetContext")
-        handed = (res.get("conversation") or {}).get("continuation")
+        talk = res.get("conversation") or {}
+        handed = talk.get("continuation")
     except Exception as exc:  # noqa: BLE001 - an audit records, never stops
         outcome, answer, route, view = "ERROR", f"{type(exc).__name__}: {exc}", None, None
-        handed = None
+        handed, talk = None, {}
     served = _SERVING.get("response_served_from") or "-"
     rec = {"id": row.get("id"), "category": row.get("category"),
            "question": row["question"], "outcome": outcome, "route": route,
            "view": view, "seconds": round(time.monotonic() - t0, 1),
            "served": served, "serving_reason": _SERVING.get("reason") or "",
+           # The governed plan's identity: a follow-up and its stand-alone
+           # twin that compiled the same plan asked the same question (§34).
+           "plan_id": _SERVING.get("plan_id"),
            "timing": timing, "answer": answer}
     if continuation is not None or handed:
         # The token itself is not recorded: what the run needs is whether one
-        # was handed back, and the next turn holds it in memory.
+        # was handed back, what the message was read as, and the next turn
+        # holds the token in memory.
         rec["conversation"] = {"replied_with_continuation": continuation is not None,
-                               "continuation_issued": bool(handed)}
+                               "continuation_issued": bool(handed),
+                               "kind": talk.get("kind"),
+                               "read_as": talk.get("readAs")}
         rec["_continuation"] = handed
     return rec
 
 
 def conversation_rows(groups: str = "C") -> List[Dict[str, Any]]:
-    """The conversation bank's conversations in `groups`, as the turns a run
-    plays in order (§34). Phase 1 plays an ask-back and its reply: each turn
-    up to the first that carries an answer forward (phase 2's), which is
-    left out — it would be read on its own and is not yet built."""
+    """The conversation bank's conversations in `groups` (`all` for every
+    group), as the turns a run plays in order (§34, §39): every turn the
+    model reads. The `run: code` turns — the memory's mechanics — need no
+    model and are enforced on every build
+    (`test_conversation_bank_mechanics.py`)."""
     data = yaml.safe_load(CONVERSATION_BANK.read_text(encoding="utf-8")) or {}
     wanted = {g.strip().upper() for g in groups.split(",") if g.strip()}
     out: List[Dict[str, Any]] = []
     for conversation in data.get("conversations") or ():
-        if str(conversation.get("group") or "").upper() not in wanted:
+        group = str(conversation.get("group") or "").upper()
+        if "ALL" not in wanted and group not in wanted:
             continue
         for i, turn in enumerate(conversation.get("turns") or ()):
-            if turn.get("run") != "live" or turn.get("expect") == "carry":
-                break
+            if turn.get("run") != "live":
+                continue
             out.append({"id": f"{conversation['id']}_t{i}",
                         "conversation": conversation["id"], "turn": i,
                         "category": f"conversation_{conversation['group']}",
@@ -231,25 +240,37 @@ def conversation_rows(groups: str = "C") -> List[Dict[str, Any]]:
 
 def play_conversations(rows: List[Dict[str, Any]], *, portfolio: Optional[str],
                        lens: Optional[str], principal: str, stamp: str):
-    """Each conversation turn by turn, the continuation an ask-back handed back
-    sent with the reply, then each answered turn's stand-alone twin — so the
-    reply can be scored against the question it should equal (D25). Yields
-    each record as it is made."""
+    """Each conversation turn by turn, every message sent with the
+    continuation the agent's previous message handed back, then each turn's
+    stand-alone twin — so a follow-up or a reply can be scored against the
+    question it should equal (D25). A twin asked earlier in the run is not
+    asked again: it is a stand-alone question on the same book, and its
+    record is reused (marked). Yields each record as it is made."""
     held: Dict[str, Optional[str]] = {}
+    twins: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         cid = row["conversation"]
         rec = run_one(row, portfolio=portfolio, lens=lens, principal=principal,
                       continuation=held.get(cid) if row["turn"] else None,
                       conversation_id=f"{stamp}-{cid}")
         held[cid] = rec.pop("_continuation", None)
-        rec.update(expect=row["expect"], conversation_turn=row["turn"])
+        rec.update(expect=row["expect"], conversation_turn=row["turn"],
+                   conversation_id=cid)
         yield rec
         if row.get("twin"):
-            twin = run_one({"id": f"{row['id']}_twin", "category": "conversation_twin",
-                            "question": row["twin"]},
-                           portfolio=portfolio, lens=lens, principal=principal)
-            twin.pop("_continuation", None)
-            twin.update(twin_of=row["id"])
+            if row["twin"] in twins:
+                twin = dict(twins[row["twin"]], id=f"{row['id']}_twin",
+                            reused_from=twins[row["twin"]]["id"], seconds=0.0,
+                            timing={})
+            else:
+                twin = run_one({"id": f"{row['id']}_twin",
+                                "category": "conversation_twin",
+                                "question": row["twin"]},
+                               portfolio=portfolio, lens=lens, principal=principal)
+                twin.pop("_continuation", None)
+                twin.pop("conversation", None)
+                twins[row["twin"]] = twin
+            twin = dict(twin, twin_of=row["id"])
             yield twin
 
 
@@ -271,9 +292,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "the unspent held-out variants, in one run")
     ap.add_argument("--conversations", default="",
                     help="play the conversation bank's conversations in these "
-                         "groups (e.g. C), each reply sent with the continuation "
-                         "its ask-back handed back, then each answered turn's "
-                         "stand-alone twin (§34)")
+                         "groups (e.g. C, or all), each message sent with the "
+                         "continuation the previous one handed back, then each "
+                         "turn's stand-alone twin (§34, §39)")
     ap.add_argument("--holdout", choices=("all", "recent", "unspent"), default=None,
                     help="ask the held-out variants (all), or the recently "
                          "changed questions' variants each after its bank "

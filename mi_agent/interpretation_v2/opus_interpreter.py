@@ -393,30 +393,6 @@ def build_user_prompt(question: str) -> str:
             + f"\n\nRecord what this question means by calling {INTENT_TOOL_NAME}.")
 
 
-def build_reply_prompt(reply: str, pending: Any) -> str:
-    """THE USER MESSAGE FOR A REPLY TO THE AGENT'S OWN QUESTION (§34 phase 1).
-
-    The earlier question, what was asked about it, and the reply — so the
-    model records the whole question the reply completes. A reply that is a
-    complete question of its own is recorded alone (D24: a complete question
-    never inherits). Only a reply carries this; a stand-alone question's
-    message is `build_user_prompt`'s, unchanged, and the system blocks are
-    the same for both — the baseline's view (§37) is not touched.
-    """
-    lines = ["EARLIER QUESTION:", str(pending.question).strip(), ""]
-    for asked, replied in pending.turns:
-        lines += ["YOU ASKED:", str(asked).strip(),
-                  "THE USER REPLIED:", str(replied).strip(), ""]
-    lines += ["YOU ASKED FOR ONE MORE DETAIL:", str(pending.ask).strip(), "",
-              "THE USER REPLIED:", reply.strip(), "",
-              "Read the earlier question with the replies supplying what you "
-              "asked for, and record the whole question it now makes by "
-              f"calling {INTENT_TOOL_NAME}. If the latest reply is a complete "
-              "question of its own, record that question alone: nothing carries "
-              "over from the earlier one."]
-    return "\n".join(lines)
-
-
 def build_tool_schema() -> Dict[str, Any]:
     """The tool definition the model generates against."""
     return {
@@ -643,8 +619,8 @@ class OpusInterpreter:
         #: worse than showing the model nothing.
         self.vocabulary = vocabulary or load_governed_vocabulary()
 
-    def interpret(self, question: str, *, source_registry: Any = None,
-                  reply_to: Any = None) -> InterpretationOutcome:
+    def interpret(self, question: str, *, source_registry: Any = None
+                  ) -> InterpretationOutcome:
         """One question -> one intent.
 
         `source_registry` is THIS request's client's governed source portfolios.
@@ -655,10 +631,10 @@ class OpusInterpreter:
         """
         system = build_system_blocks(self.vocabulary,
                                      source_registry=source_registry)
-        # A reply to the agent's own question (§34 phase 1) is read with the
-        # question it answers; anything else is the stand-alone message.
-        user = (build_reply_prompt(question, reply_to) if reply_to is not None
-                else build_user_prompt(question))
+        # ONE KIND OF MESSAGE: a complete question. A follow-up or a reply
+        # is made one by the conversation reader before it gets here (§39),
+        # so every question is read through the signed-off view (§37).
+        user = build_user_prompt(question)
         response = self.client.emit_intent(
             system=system, user=user, tool_schema=build_tool_schema(),
             tool_name=INTENT_TOOL_NAME)

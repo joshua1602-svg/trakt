@@ -423,16 +423,11 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           # own. True: the governed decline (`plan_decline`), and legacy never
           # answers. Production asks through `respond`, which is D18.
           decline: bool = False,
-          # §34 PHASE 1 — A REPLY TO THE AGENT'S OWN QUESTION. `reply_to` is
-          # the pending ask a verified continuation carried
-          # (`conversation.read`); `conversation_lapsed` is why a returned one
-          # was not used; `conversation_book` and `conversation_chat` are what
-          # a new ask-back's token is bound to. All None: a stand-alone
-          # question, exactly as before.
-          reply_to: Any = None,
-          conversation_lapsed: Optional[str] = None,
-          conversation_book: Optional[str] = None,
-          conversation_chat: Optional[str] = None,
+          # THE CONVERSATION (§34, §38, §39): the `Turn` `read_turn` made of
+          # this message — `question` is then already the complete question
+          # it answers. None: a stand-alone question, exactly as before, and
+          # nothing is remembered.
+          conversation: Any = None,
           ) -> Optional[Dict[str, Any]]:
     """The new envelope to serve, or None meaning "legacy serves".
 
@@ -474,7 +469,6 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             funded_frame_resolver=funded_frame_resolver,
             client_id=client_id, output_root=output_root, tenant_id=tenant_id,
             authorised_portfolio_ids=tuple(authorised_portfolio_ids),
-            reply_to=reply_to,
             # `view` IS THE EXECUTED POPULATION, and it is load-bearing here
             # rather than decorative. It is the governed dataset identity the
             # caller resolved `frame` with — `mi_service` passes the same string
@@ -499,10 +493,8 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
                    else SERVED_DECLINED if declined is not None
                    else SERVED_LEGACY)
     result = _converse(payload if payload is not None else declined, body=body,
-                       question=question, context=context,
-                       answered=payload is not None, reason=reason,
-                       reply_to=reply_to, lapsed=conversation_lapsed,
-                       book=conversation_book, chat=conversation_chat)
+                       turn=conversation, answered=payload is not None,
+                       reason=reason)
 
     # RECORDING CANNOT COST THE ANSWER. `evidence.write` swallows its own
     # faults, but this tail is still guarded: a recorder that raises anyway —
@@ -539,53 +531,200 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
     return result
 
 
-def _converse(result: Optional[Dict[str, Any]], *, body: Dict[str, Any],
-              question: str, context: Any, answered: bool, reason: str,
-              reply_to: Any, lapsed: Optional[str], book: Optional[str],
-              chat: Optional[str]) -> Optional[Dict[str, Any]]:
-    """§34 PHASE 1 on the envelope the caller is handed. Never raises.
+# --------------------------------------------------------------------------- #
+# the conversation (§34, §38, §39)
+# --------------------------------------------------------------------------- #
 
-    - A reply read with the agent's own question says what it read (D24: the
-      answer states what it carried over).
-    - A returned question that could not be used says so, and the message
-      was read on its own (D24: expiry is stated, never silent).
-    - An ask-back carries a continuation the reply returns, when the
-      conversation is switched on, so the reply is read with it.
-    With none of these, the envelope is returned untouched."""
-    if result is None:
+#: An ask-back the conversation reader made (one more detail would settle a
+#: follow-up), and a follow-up that refers to something the conversation does
+#: not hold. Both are worded by `plan_decline`; neither carries a figure.
+CLARIFY_CONVERSATION = "CLARIFY_CONVERSATION"
+CONVERSATION_NOT_HELD = "CONVERSATION_NOT_HELD"
+
+_reader_factory: Optional[Any] = None
+_reader_cache: Optional[Any] = None
+
+
+def set_reader_factory(factory: Optional[Any]) -> None:
+    """Inject the conversation reader. For tests and offline replay only."""
+    global _reader_factory, _reader_cache
+    _reader_factory = factory
+    _reader_cache = None
+
+
+def _reader() -> Any:
+    global _reader_cache
+    if _reader_cache is None:
+        from mi_agent.interpretation_v2 import conversation_reader
+        _reader_cache = (_reader_factory or conversation_reader.default_reader)()
+    return _reader_cache
+
+
+class Turn:
+    """One message in a conversation, as the request answers it.
+
+    ``message`` is what the user typed; ``question`` the complete question
+    the request answers — the message itself unless the conversation reader
+    made it one; ``memory`` what the returned token held; ``lapsed`` why a
+    returned token could not be used, or why the message could not be read
+    with it; ``reading`` the reader's own reading, when it ran."""
+
+    def __init__(self, *, message: str, principal: str, book: str,
+                 chat: Optional[str], question: Optional[str] = None,
+                 memory: Any = None, lapsed: Optional[str] = None,
+                 reading: Any = None) -> None:
+        self.message = message
+        self.question = question if question is not None else message
+        self.principal = principal
+        self.book = book
+        self.chat = chat
+        self.memory = memory
+        self.lapsed = lapsed
+        self.reading = reading
+
+    @property
+    def kind(self) -> str:
+        """`reply` to an ask-back, `follow_up` to an answer, or `new`."""
+        if self.memory is None or self.lapsed:
+            return "new"
+        return "reply" if self.memory.pending is not None else "follow_up"
+
+    @property
+    def carried(self) -> bool:
+        """Whether anything from the conversation went into the question."""
+        from mi_agent.interpretation_v2 import conversation_reader as reader
+        return (self.reading is not None and self.reading.ok
+                and self.reading.outcome == reader.COMPLETE
+                and reader.carried(self.message, self.question))
+
+    @property
+    def immediate(self) -> bool:
+        """The reader settled the turn without a plan: an ask, or a cannot."""
+        from mi_agent.interpretation_v2 import conversation_reader as reader
+        return (self.reading is not None and self.reading.ok
+                and self.reading.outcome in (reader.ASK, reader.CANNOT))
+
+
+def read_turn(message: str, *, token: Optional[str], principal: str, book: str,
+              chat: Optional[str]) -> Optional[Turn]:
+    """What this message is in its conversation. None when the conversation
+    is switched off — the request is then exactly a stand-alone one. Never
+    raises: a message that cannot be read with its conversation is read on
+    its own, and the answer says so (D24)."""
+    from mi_agent import conversation as convo
+    if not convo.enabled():
         return None
+    turn = Turn(message=message, principal=principal, book=book, chat=chat)
+    returned = convo.read(token, principal=principal, book=book, chat=chat)
+    if returned is None:
+        return turn
+    if not returned.ok:
+        turn.lapsed = returned.lapsed
+        return turn
+    turn.memory = returned.memory
+    try:
+        from trakt_core import perf as _perf
+        with _perf.stage("governed.conversation_reader"):
+            reading = _reader().read(message, returned.memory)
+    except Exception as exc:                                         # noqa: BLE001
+        logger.warning("the conversation reader failed; the message is read "
+                       "on its own", exc_info=True)
+        from mi_agent.interpretation_v2.conversation_reader import Reading
+        reading = Reading(error=f"{type(exc).__name__}: {exc}"[:300])
+    turn.reading = reading
+    if not reading.ok:
+        turn.lapsed = convo.LAPSED_UNREAD
+    elif reading.question:
+        turn.question = reading.question
+    return turn
+
+
+def _next_memory(turn: Turn, *, answered: bool, reason: str,
+                 body: Mapping[str, Any]) -> Any:
+    """What the conversation holds after this turn (D24, D25): an answer
+    replaces the last answered question; an ask-back keeps it and opens an
+    ask; any other decline keeps it unchanged."""
+    from mi_agent import conversation as convo
+    from mi_agent import plan_decline
+    held = turn.memory if turn.memory is not None else None
+    last = held.last if held is not None else None
+    pending = held.pending if held is not None and turn.kind == "reply" else None
+    if answered:
+        return convo.Memory(last=turn.question)
+    asked = None
+    if reason == CLARIFY_NOT_SERVED:
+        # The interpreter could not answer the COMPLETE question without one
+        # more detail: the ask is about that question.
+        asked = convo.PendingAsk(
+            question=turn.question, ask=plan_decline.ask_detail(body),
+            turns=(tuple(pending.turns) + ((pending.ask, turn.message),)
+                   if pending is not None else ()))
+    elif reason == CLARIFY_CONVERSATION:
+        # The reader could not make the message complete: the ask is about
+        # the message, or still about the question already asked about.
+        asked = convo.PendingAsk(
+            question=pending.question if pending is not None else turn.message,
+            ask=turn.reading.ask,
+            turns=(tuple(pending.turns) + ((pending.ask, turn.message),)
+                   if pending is not None else ()))
+    return convo.Memory(last=last, pending=asked)
+
+
+def _converse(result: Optional[Dict[str, Any]], *, body: Dict[str, Any],
+              turn: Optional[Turn], answered: bool,
+              reason: str) -> Optional[Dict[str, Any]]:
+    """The conversation, on the envelope the caller is handed. Never raises.
+
+    - What carried over is stated: an answer to a follow-up or a reply says
+      the complete question it answered (D25).
+    - A returned memory that could not be used says so, and the message was
+      read on its own (D24: expiry is stated, never silent).
+    - The envelope carries the continuation the next message returns: the
+      question just answered, or the ask-back just made (D24).
+    With no turn — the conversation switched off — the envelope is returned
+    untouched."""
+    if result is None or turn is None:
+        return result
     try:
         from mi_agent import conversation as convo
-        from mi_agent import plan_decline
         notes: List[str] = []
-        if lapsed:
-            notes.append(convo.lapsed_notice(lapsed))
-        elif reply_to is not None and answered:
-            read = plan_decline.understood((body.get("compiler") or {}).get("plan"))
-            notes.append(f"With your reply, I read your earlier question as {read}."
-                         if read else "I read your reply with your earlier question.")
+        if turn.lapsed:
+            notes.append(convo.lapsed_notice(turn.lapsed))
+        elif turn.carried:
+            notes.append(
+                f"With your reply, I read your question as “{turn.question}”."
+                if turn.kind == "reply" else
+                f"Following on from your previous question, I read this as "
+                f"“{turn.question}”.")
+        memory = _next_memory(turn, answered=answered, reason=reason, body=body)
+        token = convo.issue(principal=turn.principal, book=turn.book,
+                            chat=turn.chat, memory=memory)
         tail = ""
-        token = None
-        if reason == CLARIFY_NOT_SERVED and not answered and convo.enabled():
-            ask = plan_decline.ask_detail(body)
-            pending = (convo.PendingAsk(
-                question=reply_to.question, ask=ask,
-                turns=tuple(reply_to.turns) + ((reply_to.ask, question),))
-                if reply_to is not None else convo.PendingAsk(question=question, ask=ask))
-            token = convo.issue_ask_back(principal=principal_of(context),
-                                         book=book or "", chat=chat, pending=pending)
-            if token:
-                result["conversation"] = {
-                    "kind": convo.KIND_ASK_BACK, "continuation": token,
-                    "expiresInSeconds": int(convo.memory_minutes() * 60)}
-                tail = " Reply with it and I will answer your question."
-            else:
+        if memory.pending is not None:
+            if len(memory.pending.turns) >= convo.max_asks():
                 tail = " " + convo.lapsed_notice(convo.LAPSED_TOO_MANY_ASKS)
+            elif token:
+                tail = " Reply with it and I will answer your question."
+        if token:
+            kept = convo.Memory(last=memory.last, pending=(
+                memory.pending if memory.pending is not None
+                and len(memory.pending.turns) < convo.max_asks() else None))
+            result["conversation"] = {
+                "kind": kept.kind, "continuation": token,
+                "expiresInSeconds": int(convo.memory_minutes() * 60),
+                **({"readAs": turn.question} if turn.carried else {})}
+        reading = turn.reading
         body["conversation"] = {
-            "reply_to": ({"question": reply_to.question, "ask": reply_to.ask,
-                          "turns": len(reply_to.turns)} if reply_to is not None
-                         else None),
-            "lapsed": lapsed, "continuation_issued": bool(token)}
+            "kind": turn.kind, "message": turn.message,
+            "read_as": turn.question if turn.carried else None,
+            "lapsed": turn.lapsed,
+            "reader": ({"outcome": reading.outcome, "error": reading.error,
+                        "model_id": reading.model_id,
+                        "model_ms": (reading.usage or {}).get("model_ms")}
+                       if reading is not None else None),
+            "continuation_issued": bool(token),
+            "holds": {"last": bool(memory.last),
+                      "ask": memory.pending is not None}}
         if notes or tail:
             for key in ("answer", "error"):
                 if isinstance(result.get(key), str):
@@ -595,6 +734,55 @@ def _converse(result: Optional[Dict[str, Any]], *, body: Dict[str, Any],
         logger.warning("the conversation step failed; the answer stands as it "
                        "was", exc_info=True)
         return result
+
+
+def converse_without_plan(turn: Turn, *, context: Any,
+                          client_id: Optional[str] = None,
+                          run_id: Optional[str] = None,
+                          view: Optional[str] = None,
+                          portfolio_id: Optional[str] = None
+                          ) -> Optional[Dict[str, Any]]:
+    """The answer when the conversation reader settled the turn itself: it
+    asks for the one detail that would make the message a question, or says
+    the message refers to something the conversation does not hold. A
+    governed decline — no plan, no figure — recorded like every other."""
+    if not handles(context):
+        return None
+    from mi_agent.interpretation_v2 import conversation_reader as reader
+    body = evidence.new_record(correlation_id=evidence.correlation_id(),
+                               question=turn.message, client_id=client_id,
+                               run_id=run_id, view=view,
+                               portfolio_id=portfolio_id)
+    if turn.reading.outcome == reader.ASK:
+        reason = CLARIFY_CONVERSATION
+        body["disposition"] = evidence.CLARIFY
+        body["interpretation"] = {"ambiguities": [
+            {"slot": "conversation", "note": turn.reading.ask, "blocking": True}]}
+    else:
+        reason = CONVERSATION_NOT_HELD
+        body["disposition"] = evidence.REFUSE
+    declined = _declined(body, question=turn.message, reason=reason, view=view)
+    last = turn.memory.last if turn.memory is not None else None
+    if reason == CONVERSATION_NOT_HELD and last:
+        for key in ("answer", "error"):
+            if isinstance(declined.get(key), str):
+                declined[key] += f" The last question I answered was “{last}”."
+    result = _converse(declined, body=body, turn=turn, answered=False,
+                       reason=reason)
+    try:
+        body["serving"] = {
+            "mode": serve_mode(), "principal_matched": True,
+            "principal_id": principal_of(context), "new_path_eligible": False,
+            "decision": SERVED_DECLINED, "reason": reason, "plan_id": None,
+            "response_served_from": SERVED_DECLINED,
+            "decline_message": (result or {}).get("answer"),
+            "legacy_result_available": False, "legacy_value": None,
+            "legacy_ok": False, "new_value": None}
+        evidence.write(body)
+    except Exception:                                                # noqa: BLE001
+        logger.warning("the conversation record could not be completed; the "
+                       "answer stands", exc_info=True)
+    return result
 
 
 def respond(**kwargs: Any) -> Optional[Dict[str, Any]]:
@@ -2202,7 +2390,6 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              output_root: Optional[str] = None,
              tenant_id: Optional[str] = None,
              authorised_portfolio_ids: Tuple[str, ...] = (),
-             reply_to: Any = None,
              ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One serving attempt. `(payload or None, reason)`; fills `body` as it goes."""
     from mi_agent.interpretation_v2.outcomes import (OUTCOME_CLARIFY, OUTCOME_PLAN,
@@ -2214,13 +2401,9 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # portfolio is refused, which is where every caller was until the production
     # seam started passing one.
     from trakt_core import perf as _perf
-    # A REPLY to the agent's own question is read with it (§34 phase 1);
-    # passed only then, so every stand-alone question compiles as before.
-    plan_inputs: Dict[str, Any] = {"source_registry": source_registry}
-    if reply_to is not None:
-        plan_inputs["reply_to"] = reply_to
     with _perf.stage("governed.interpret_and_compile"):
-        outcome, compiled = wiring.build_plan(question, **plan_inputs)
+        outcome, compiled = wiring.build_plan(question,
+                                              source_registry=source_registry)
     wiring.record_plan_stages(body, outcome, compiled)
 
     if not outcome.ok:

@@ -36,5 +36,11 @@
       "different_reading": 2
     },
     "median_seconds": 9.1
+  },
+  "conversation_reader": {
+    "what_this_is": "The conversation reader's view (design §39): everything it is shown for every message. It turns a follow-up or a reply into one complete question for the interpreter above, whose view is unchanged. Pinned like the interpreter's: a change to it fails test_the_models_view_is_the_baselines until the conversation bank is re-run on it and matches or beats the results recorded here.",
+    "fingerprint": "ea8ebe6e6a9509e1dbccb431bc625d40f8ead38324b8a731c9ebcb11ace31eb9",
+    "measured_by": null,
+    "results": null
   }
 }

@@ -2638,3 +2638,78 @@ the measures, population, filters and dimensions but not the plan's geography
 the level and the basis ("by NUTS3 region (the property's location)") and any
 places the plan is restricted to; every decline that states its reading says
 it too. An execution change: the model's view is the baseline's.
+
+## 39. Conversation, phase 2: follow-ups — one reader of complete questions (2026-10-02)
+
+Owner, 2026-10-02: "Let's add the phase 2 follow-ups and run the full 40
+conversation test bank."
+
+THE DESIGN. A follow-up ("And by broker?", "Just the Offers", "And 12?") is
+made the complete question it is BEFORE anything reads it, and the rest of the
+request is the request for that question. This is the standard design for
+conversational analytics — the latest message is rewritten into a
+self-contained question, then the single-question pipeline runs — and it is
+chosen over teaching the interpreter a second kind of message because:
+
+    THE SIGNED-OFF READER IS UNTOUCHED  The interpreter reads only complete
+               questions, through the baseline's view (§37: b5459277…,
+               unchanged). Phase 1's reply prompt is retired: there is one
+               way a question reaches it, the way the D13 sign-off measured.
+    A COMPLETE QUESTION NEVER INHERITS  (D24) The reader returns it word for
+               word, and it is then read exactly as if no conversation
+               existed.
+    WHAT CARRIED IS VISIBLE  The answer states the complete question it
+               answered, in the user's words: "Following on from your
+               previous question, I read this as “What is the pipeline amount
+               at Offer stage?”." (D25: the answer states what it carried.)
+    EVERY GATE RUNS AGAIN  The interpreter, the compiler, the perimeter, the
+               runtimes, on the complete question (§34). The dataset is re-read
+               from it too: the request is the one a user who typed it in full
+               would have made.
+
+THE READER. `mi_agent/interpretation_v2/conversation_reader.py`: one model
+call, own rules and tool, shown the last answered question, an ask-back still
+open, the latest message and the book's governed terms (names only — no data,
+no figure). It returns a complete question, or the one detail to ask for
+("which region do you mean?"), or that the message refers to something the
+conversation does not hold. Checked before use: a complete question may not
+hold a number the conversation did not (no invented period, amount or
+threshold — an ask may name a closed list's values as choices); anything
+malformed, or a reader that fails, is not used — the message is read on its
+own and the answer says so (D24). Its view is pinned like the interpreter's
+(config/mi/model_view_baseline.json `conversation_reader`, ea8ebe6e…) and is
+measured by the conversation bank.
+
+THE MEMORY (D24, D25). The token (version 2) holds the last ANSWERED question,
+as the complete question it answered, and an ask-back still open. An answer
+replaces the last question; an ask-back keeps it and opens an ask; any other
+decline keeps it unchanged (D25: a declined follow-up does not replace the
+memory). Every answer and ask-back hands back a continuation, issued at
+delivery (D24: idle is counted from delivery); bound to the user, the book and
+the chat; five minutes. A reply to an ask-back is read by the same reader
+(phase 1's flow, now one mechanism).
+
+WHERE. `mi_service._read_conversation`: after authorisation (the memory is
+bound to the authorised book) and before the dataset, the routing or the
+governed attempt read the question. When the reader settles the turn itself
+(an ask, or a reference it does not hold) that is the answer — a governed
+decline, recorded — and no plan runs. Switched off, or for a principal the
+governed path does not serve, nothing changes.
+
+COST. One more model call for a message that comes with a memory (a few
+seconds); a first question costs what it did.
+
+PROOF. `run_production_bank.sh <principal> conversations`: every turn of the 35
+conversations the model reads (123), each message with the continuation the
+previous one handed back, and each turn's stand-alone twin (72 distinct) —
+scored by `score_conversations.py` against D25: no wrong answer (every
+follow-up matches its twin or asks back) and every start-fresh and refuse turn
+passes. The 15 memory mechanics (expiry, change of book, cleared chat, edited,
+widened, borrowed or replayed memory, access on every turn) are enforced on
+every build (`test_conversation_bank_mechanics.py`, 100%). Group C re-proves
+phase 1 under the one mechanism.
+
+Not in phase 2: comparing across answers ("compare it with the one before")
+— phase 3, on answer composition; the dashboard sending the continuation back
+(the browser's own follow-up guessing, `lib/analysisContext.ts`, is replaced
+by it), which ships from main.

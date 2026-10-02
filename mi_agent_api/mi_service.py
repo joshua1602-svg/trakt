@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
@@ -114,13 +114,17 @@ class MiQueryRequest:
     client_id: Optional[str] = None
     #: Channel-neutral execution options (reserved; no analytical effect).
     options: Dict[str, Any] = field(default_factory=dict)
-    #: §34 PHASE 1. The continuation an ask-back handed the caller, returned
-    #: with the reply — UNTRUSTED, verified by `mi_agent.conversation.read`
-    #: against the trusted principal and the authorised book — and the
-    #: caller's chat id (a new one when the chat is cleared). Both None: a
-    #: stand-alone question.
+    #: §34, §38, §39. The continuation the agent's last answer or ask-back
+    #: handed the caller, returned with the next message — UNTRUSTED,
+    #: verified by `mi_agent.conversation.read` against the trusted principal
+    #: and the authorised book — and the caller's chat id (a new one when the
+    #: chat is cleared). Both None: a stand-alone question.
     continuation: Optional[str] = None
     conversation_id: Optional[str] = None
+    #: SET BY THIS SERVICE, NEVER BY A CALLER: what the conversation made of
+    #: this message (`plan_serving_canary.Turn`, §39). When it carried
+    #: anything, `question` above has been replaced by the complete question.
+    conversation_turn: Optional[Any] = None
 
     def effective_portfolio_id(self) -> Optional[str]:
         """The portfolio selector the analysis runs against.
@@ -975,6 +979,23 @@ def execute_governed_mi_query(
         capability_allowed=True, data_approved=True, fixture_source=approval.fixture,
         notes=(approval.reason,) if approval.fixture else ())
 
+    # ---- 2b. the conversation (§34, §38, §39) ---------------------------- #
+    #
+    # BEFORE ANYTHING READS THE QUESTION. A follow-up ("And by broker?") or a
+    # reply to the agent's own question is made the complete question it is
+    # here, after authorisation (the memory is bound to the authorised book)
+    # and before the dataset, the routing or the governed attempt read the
+    # question — so from here on the request is exactly the one a user who
+    # typed the complete question would have made. Switched off, or for a
+    # principal the governed path does not serve, nothing changes.
+    conversation_payload: Optional[Dict[str, Any]] = None
+    try:
+        request, view, conversation_payload = _read_conversation(
+            request, authorised, view, context)
+    except Exception:  # noqa: BLE001 - the message is then read on its own
+        logger.warning("the conversation could not be read; the message is "
+                       "read on its own", exc_info=True)
+
     # ---- 3. the analytical execution (unchanged) ------------------------- #
     #
     # NEVER RAISES INTO A REQUEST. This function's own docstring promises a
@@ -1002,8 +1023,9 @@ def execute_governed_mi_query(
         # and the frame is not resolved until inside; `_run_analysis` binds into
         # it as soon as the book is in hand, and this `with` tears it down.
         with _parser_mod.geography_context(None):
-            payload = _run_analysis(request, authorised, view, deps,
-                                    context=context)
+            payload = (conversation_payload if conversation_payload is not None
+                       else _run_analysis(request, authorised, view, deps,
+                                          context=context))
     except Exception as exc:  # noqa: BLE001 - surface a refusal, never a 500
         logger.exception("MI analysis failed for question=%r portfolio=%r",
                          request.question, authorised.portfolio_id)
@@ -1042,6 +1064,46 @@ def execute_governed_mi_query(
                      snapshot_id=snapshot.snapshot_id,
                      error_code=error.code if error else None))
     return _finish(result, request)
+
+
+def _read_conversation(request: MiQueryRequest, authorised: Any,
+                       view: str, context: ExecutionContext
+                       ) -> tuple:
+    """`(request, view, payload)` for this message in its conversation.
+
+    The memory a returned continuation carries is checked against the TRUSTED
+    principal and the AUTHORISED book (`conversation.read`), never against
+    anything the body says. When the conversation reader made the message a
+    complete question, the request carries that question and the dataset is
+    re-read from it; when the reader settled the turn itself (an ask, or a
+    reference the conversation does not hold), `payload` is that answer and
+    nothing else runs."""
+    from mi_agent import conversation as _conversation
+    from mi_agent import plan_serving_canary as _plan_serving
+    if not _conversation.enabled() or not _plan_serving.handles(context):
+        return request, view, None
+    client_id, run_id = split_portfolio(authorised.requested_portfolio_id)
+    book = _conversation.book_scope(client_id, authorised.portfolio_id,
+                                    request.source_portfolio_lens)
+    with _perf.stage("mi_query.conversation"):
+        turn = _plan_serving.read_turn(
+            request.question, token=request.continuation,
+            principal=_plan_serving.principal_of(context), book=book,
+            chat=request.conversation_id)
+    if turn is None:
+        return request, view, None
+    if turn.immediate:
+        payload = _plan_serving.converse_without_plan(
+            turn, context=context, client_id=client_id, run_id=run_id,
+            view=view, portfolio_id=authorised.portfolio_id)
+        return replace(request, conversation_turn=turn), view, payload
+    if turn.question != request.question:
+        try:
+            view = workspace_mod.resolve_dataset(turn.question)
+        except Exception:  # noqa: BLE001 - the same fallback as the first read
+            view = workspace_mod.DEFAULT_VIEW
+    return (replace(request, question=turn.question, conversation_turn=turn),
+            view, None)
 
 
 def _scope_ref(payload: Dict[str, Any]) -> Optional[ScopeRef]:
@@ -2192,24 +2254,13 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             source_registry = _source_registry(df, client_id)
         with _perf.stage("mi_query.governed_inputs.pipeline"):
             pipeline_inputs = _pipeline_inputs(ds, client_id, run_id)
-        # §34 PHASE 1 — A REPLY TO THE AGENT'S OWN QUESTION. The returned
-        # continuation is checked against the TRUSTED principal and the
-        # AUTHORISED book here; switched off, or with none returned, nothing
-        # below differs from a stand-alone question.
-        from mi_agent import conversation as _conversation
-        book = _conversation.book_scope(client_id, authorised.portfolio_id,
-                                        req.source_portfolio_lens)
-        returned = _conversation.read(
-            req.continuation, principal=_plan_serving.principal_of(context),
-            book=book, chat=req.conversation_id)
         # `respond`, not `serve`: for this principal the answer is the
         # governed answer or the governed decline, never the legacy path's
-        # (owner decision D18).
+        # (owner decision D18). `req.question` is the complete question; the
+        # conversation it came from (§39) states what carried over and hands
+        # back the next memory.
         return _plan_serving.respond(
-            reply_to=(returned.pending if returned and returned.ok else None),
-            conversation_lapsed=(returned.lapsed if returned and not returned.ok
-                                 else None),
-            conversation_book=book, conversation_chat=req.conversation_id,
+            conversation=req.conversation_turn,
             question=req.question, context=context, client_id=client_id,
             run_id=run_id, legacy_result=legacy_envelope, frame=df,
             semantics=semantics, view=view,

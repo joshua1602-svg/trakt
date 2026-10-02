@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from mi_agent.interpretation_v2 import opus_interpreter
+from mi_agent.interpretation_v2 import conversation_reader, opus_interpreter
 from mi_agent.interpretation_v2.vocabulary import load_governed_vocabulary
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -53,12 +53,22 @@ def _questions(node):
             yield from _questions(item)
 
 
+def _shown(vocabulary) -> str:
+    """Everything a model is shown that is the same for every question: the
+    interpreter's view and, since §39, the conversation reader's."""
+    blocks = (opus_interpreter.build_system_blocks(vocabulary)
+              + conversation_reader.build_system_blocks(vocabulary))
+    return ("\n".join(block["text"] for block in blocks)
+            + "\n" + json.dumps(opus_interpreter.build_tool_schema(),
+                                ensure_ascii=False)
+            + "\n" + json.dumps(conversation_reader.build_tool_schema(),
+                                ensure_ascii=False)
+            + "\n" + conversation_reader.build_user_prompt("", None))
+
+
 @pytest.fixture(scope="module")
 def models_view() -> str:
-    vocabulary = load_governed_vocabulary()
-    blocks = opus_interpreter.build_system_blocks(vocabulary)
-    text = "\n".join(block["text"] for block in blocks)
-    return _norm(text + "\n" + json.dumps(opus_interpreter.build_tool_schema()))
+    return _norm(_shown(load_governed_vocabulary()))
 
 
 def test_the_banks_are_found():
@@ -97,10 +107,7 @@ def models_clauses():
     whatever a bank asks, and a question that IS a concept's name is not
     quoted by naming it."""
     vocabulary = load_governed_vocabulary()
-    blocks = opus_interpreter.build_system_blocks(vocabulary)
-    raw = ("\n".join(block["text"] for block in blocks)
-           + json.dumps(opus_interpreter.build_tool_schema(), ensure_ascii=False))
-    raw = raw.replace("\\'", "'")
+    raw = _shown(vocabulary).replace("\\'", "'")
     names = sorted({_norm(n) for c in vocabulary.concepts.values()
                     for n in (c.label, c.concept_id, *c.aliases) if _norm(n)},
                    key=len, reverse=True)

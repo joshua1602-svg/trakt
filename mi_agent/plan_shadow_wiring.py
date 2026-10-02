@@ -177,8 +177,7 @@ def _compiler(source_registry: Any = None) -> Any:
     return _compiler_cache
 
 
-def build_plan(question: str, *, source_registry: Any = None,
-               reply_to: Any = None) -> Tuple[Any, Any]:
+def build_plan(question: str, *, source_registry: Any = None) -> Tuple[Any, Any]:
     """`question -> (InterpretationOutcome, CompileResult)`. One attempt.
 
     Exactly the sequence `run_benchmark` uses, and exactly one interpretation per
@@ -197,16 +196,9 @@ def build_plan(question: str, *, source_registry: Any = None,
     # model that cannot see a client's governed books can only guess at one or
     # refuse. It is passed per call and never held: `_interpreter()` is cached
     # across requests and across clients, and the registry must not be.
-    # A REPLY to the agent's own question carries that question (§34 phase
-    # 1); only then is it passed, so an interpreter that predates the
-    # conversation — and every stand-alone question — is called as before.
-    if reply_to is None:
-        outcome = _interpreter().interpret(question,
-                                           source_registry=source_registry)
-    else:
-        outcome = _interpreter().interpret(question,
-                                           source_registry=source_registry,
-                                           reply_to=reply_to)
+    # A follow-up or a reply arrives here already made a complete question
+    # (the conversation reader, §39): there is one way to read a question.
+    outcome = _interpreter().interpret(question, source_registry=source_registry)
     compiled = (compiler.compile(outcome.intent) if outcome.ok
                 else refuse(outcome.reason, compiler_version=compiler.version))
     return outcome, compiled

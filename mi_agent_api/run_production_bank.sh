@@ -15,6 +15,7 @@
 #     bash mi_agent_api/run_production_bank.sh <principal object id> twins
 #     bash mi_agent_api/run_production_bank.sh <principal object id> signoff
 #     bash mi_agent_api/run_production_bank.sh <principal object id> askback
+#     bash mi_agent_api/run_production_bank.sh <principal object id> conversations
 #
 # `variants-recent` asks the held-out variants of the questions changed for
 # since 2026-09-29, each after the bank question it varies (~42 questions), so
@@ -32,6 +33,13 @@
 # ask-back handed back, then the reply's stand-alone twin (~18 questions). The
 # conversation is switched on for that run's process only — no user's service
 # changes.
+# `conversations` plays the WHOLE conversation bank (§34, §39): every turn of
+# the 35 conversations the model reads (123), each message sent with the
+# continuation the previous one handed back, then each turn's stand-alone twin
+# (72 distinct; one asked earlier in the run is reused) — ~195 questions and
+# ~90 conversation readings. Scored with
+#     python due_diligence/evidence/qb_plan_readback/score_conversations.py <it>.jsonl
+# The conversation is switched on for that run's process only.
 #
 # The second argument is REQUIRED: the named bank questions (a spot check of
 # particular changes), or `all` for the whole bank. The whole bank is never the
@@ -52,14 +60,15 @@ set -euo pipefail
 PRINCIPAL="${1:-}"
 SELECTION="${2:-}"
 if [[ -z "${PRINCIPAL}" || -z "${SELECTION}" || $# -gt 2 ]]; then
-  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...|all|variants-recent|variants|twins|signoff|askback>" >&2
+  echo "usage: bash mi_agent_api/run_production_bank.sh <principal object id> <id,id,...|all|variants-recent|variants|twins|signoff|askback|conversations>" >&2
   echo "  <id,id,...>      only the named bank questions, comma-separated, no spaces" >&2
   echo "  all              the whole bank (~135 model interpretations)" >&2
   echo "  variants-recent  the recently changed questions and their held-out variants (~42)" >&2
   echo "  variants         all 105 held-out variants (compare with an 'all' run)" >&2
   echo "  twins            the conversation bank's new stand-alone twins (~27)" >&2
   echo "  signoff          the whole bank, then the unspent held-out variants (~216)" >&2
-  echo "  askback          the ask-back conversations, replies and their twins (~18)" >&2
+  echo "  askback          the ask-back conversations, replies and their twins (~22)" >&2
+  echo "  conversations    the whole conversation bank and its twins (~195)" >&2
   echo "Nothing was asked." >&2
   exit 2
 fi
@@ -75,6 +84,7 @@ case "${SELECTION}" in
   twins) TWINS="1" ;;
   signoff) SIGNOFF="1" ;;
   askback) CONVERSATIONS="C" ;;
+  conversations) CONVERSATIONS="all" ;;
   *) IDS="${SELECTION}" ;;
 esac
 CATEGORIES="funded_kpi,funded_breakdown_1d,pipeline,pipeline_evolution,forecast,forecast_scale"
@@ -134,6 +144,17 @@ try:
           f"({'the signed-off baseline' if view == base else 'CHANGED since the signed-off baseline ' + str(base)[:12]})")
 except Exception as exc:  # noqa: BLE001 - a preflight note, never a refusal
     print(f"model view: not read ({type(exc).__name__})")
+if conversations:
+    try:
+        from mi_agent.interpretation_v2.conversation_reader import (
+            reader_view_fingerprint)
+        view = reader_view_fingerprint()
+        base = (json.loads(Path("config/mi/model_view_baseline.json").read_text())
+                .get("conversation_reader") or {}).get("fingerprint")
+        print(f"conversation reader view: {view[:12]} "
+              f"({'the recorded one' if view == base else 'CHANGED since the recorded ' + str(base)[:12]})")
+    except Exception as exc:  # noqa: BLE001 - a preflight note, never a refusal
+        print(f"conversation reader view: not read ({type(exc).__name__})")
 def _v(text):
     return tuple(int(x) for x in str(text).split("."))
 if _v(VOCABULARY_VERSION) < _v(vocabulary):
@@ -160,7 +181,7 @@ from mi_agent_api.question_bank import (DEFAULT_BANKS, conversation_rows,
 rows = load_bank(DEFAULT_BANKS)
 if conversations:
     turns = conversation_rows(conversations)
-    twins_asked = sum(1 for t in turns if t.get("twin"))
+    twins_asked = len({t["twin"] for t in turns if t.get("twin")})
     print(f"questions selected: {len(turns) + twins_asked} (conversations "
           f"{conversations}: {len(turns)} turns and {twins_asked} stand-alone twins)")
 elif twins:
@@ -200,7 +221,7 @@ KIND="qb_plan_rerun"
 [[ -n "${HOLDOUT}" ]] && KIND="qb_variants_${HOLDOUT}"
 [[ -n "${TWINS}" ]] && KIND="qb_twins"
 [[ -n "${SIGNOFF}" ]] && KIND="qb_signoff"
-[[ -n "${CONVERSATIONS}" ]] && KIND="qb_conversations_${CONVERSATIONS}"
+[[ -n "${CONVERSATIONS}" ]] && KIND="qb_conversations_${SELECTION}"
 LOG="/home/${KIND}_${STAMP}.log"
 OUT="/home/${KIND}_${STAMP}.jsonl"
 START="$(date -u +%Y-%m-%dT%H:%M:%S)"

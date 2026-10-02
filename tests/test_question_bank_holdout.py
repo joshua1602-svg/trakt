@@ -117,15 +117,18 @@ def test_the_production_script_offers_the_signoff():
     assert 'KIND="qb_signoff"' in text
 
 
-def test_the_ask_back_conversations_are_played_up_to_their_reply():
-    """§34 phase 1: group C, each ask-back and its reply; a turn that carries
-    an answer forward (phase 2) is not played."""
-    rows = qb.conversation_rows("C")
+def test_every_turn_the_model_reads_is_played():
+    """§39: every live turn of every conversation, in order; the memory's
+    mechanics (`run: code`) are enforced in code, not played."""
     data = yaml.safe_load(qb.CONVERSATION_BANK.read_text())
-    groups = [c for c in data["conversations"] if c["group"] == "C"]
-    assert len(rows) == 2 * len(groups)
-    assert {r["expect"] for r in rows} == {"ask_back", "fill"}
-    assert all(r["twin"] for r in rows if r["expect"] == "fill")
+    live = [(c["id"], i) for c in data["conversations"]
+            for i, t in enumerate(c["turns"]) if t.get("run") == "live"]
+    rows = qb.conversation_rows("all")
+    assert [(r["conversation"], r["turn"]) for r in rows] == live
+    assert len(rows) == 123
+    group_c = qb.conversation_rows("C")
+    assert {r["category"] for r in group_c} == {"conversation_C"}
+    assert {"ask_back", "fill", "carry"} <= {r["expect"] for r in group_c}
 
 
 def test_a_reply_is_sent_with_the_continuation_its_ask_back_handed_back(monkeypatch):
@@ -150,7 +153,29 @@ def test_a_reply_is_sent_with_the_continuation_its_ask_back_handed_back(monkeypa
     assert [r.get("twin_of") for r in records] == [None, None, reply["id"]]
 
 
+def test_a_twin_asked_earlier_in_the_run_is_reused(monkeypatch):
+    asked = []
+
+    def _run_one(row, *, continuation=None, conversation_id=None, **_):
+        asked.append(row["question"])
+        return {"id": row["id"], "category": row["category"],
+                "question": row["question"], "outcome": "ANSWERED",
+                "route": None, "view": None, "seconds": 1.0, "served": "NEW",
+                "serving_reason": "", "timing": {}, "answer": "x",
+                "_continuation": "tok"}
+    monkeypatch.setattr(qb, "run_one", _run_one)
+    rows = [{"id": f"c{i}_t1", "conversation": f"c{i}", "turn": 1,
+             "category": "conversation_A", "question": f"m{i}", "expect": "carry",
+             "twin": "Show WA LTV by region."} for i in (1, 2)]
+    records = list(qb.play_conversations(rows, portfolio=None, lens=None,
+                                         principal="p", stamp="S"))
+    assert asked.count("Show WA LTV by region.") == 1
+    assert records[3]["reused_from"] == "c1_t1_twin"
+    assert records[3]["twin_of"] == "c2_t1"
+
+
 def test_the_production_script_offers_the_ask_back_conversations():
     text = _SCRIPT.read_text()
     assert 'askback) CONVERSATIONS="C"' in text
+    assert 'conversations) CONVERSATIONS="all"' in text
     assert 'echo "--conversations ${CONVERSATIONS}"' in text
