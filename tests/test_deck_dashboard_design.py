@@ -346,8 +346,10 @@ def test_a_series_that_can_go_negative_keeps_its_own_axis():
 def test_the_deck_finds_the_prior_run_the_way_the_snapshot_route_does(tmp_path):
     """On a book delivered as runs the deck found NO prior period, so every
     movement the dashboard prints under a KPI was blank in the pack."""
-    sys.path.insert(0, str(_ROOT / "tests"))
-    import test_deck_generation_route as T
+    # Through the ``tests`` package, never by putting tests/ on sys.path: that
+    # left tests/operations_control shadowing the real package for every test
+    # collected after this one.
+    from tests import test_deck_generation_route as T
     from mi_agent_pptx.mi_api import _prior_from_runs
 
     root = T._write_runs(tmp_path / "runs")

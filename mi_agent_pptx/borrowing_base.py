@@ -72,11 +72,25 @@ def _num(value: Any) -> Optional[float]:
 
 
 def money(value: Any) -> Optional[str]:
-    """A governed money figure in the currency in force, or ``None``.
+    """A governed money FIGURE in the currency in force — "£89.9MM" — or
+    ``None``.
 
-    ``None`` rather than a dash, so the caller decides what an absent value
-    says — a tile says why it is missing, a table cell says nothing.
+    The pack's figure notation (``metric_resolver.compact_currency``), the one
+    every other tile, table and strapline uses; this page printed the prose
+    form, "£89.9m", beside a KPI page reading "£104.8MM". ``None`` rather than
+    a dash, so the caller decides what an absent value says — a tile says why
+    it is missing, a table cell says nothing.
     """
+    v = _num(value)
+    if v is None:
+        return None
+    from .metric_resolver import compact_currency
+    return compact_currency(v)
+
+
+def prose_money(value: Any) -> Optional[str]:
+    """The same amount in the pack's PROSE notation — "£89.9m" — for a figure
+    that sits inside a sentence, as the executive summary writes them."""
     v = _num(value)
     if v is None:
         return None
@@ -232,7 +246,7 @@ def alerts(snap: Mapping[str, Any]) -> List[Dict[str, str]]:
                     "figures are shown as diagnostics and are NOT a governed "
                     "borrowing base."})
     if over_drawn(snap):
-        deficiency = money(snap.get("borrowingBaseDeficiency"))
+        deficiency = prose_money(snap.get("borrowingBaseDeficiency"))
         out.append({"tone": "breach", "text":
                     f"Borrowing-base deficiency {deficiency} — drawings exceed "
                     f"the available borrowing base."})
@@ -257,7 +271,7 @@ def concentration_note(snap: Mapping[str, Any]) -> str:
         headroom_pct = pct(snap.get("nearestConcentrationHeadroomPct"), 2)
         if headroom_pct:
             line += f" · {headroom_pct} headroom"
-        amount = money(snap.get("nearestConcentrationHeadroomAmount"))
+        amount = prose_money(snap.get("nearestConcentrationHeadroomAmount"))
         if amount:
             line += f" ({amount})"
         breached = _num(snap.get("breachedConcentrationCount")) or 0

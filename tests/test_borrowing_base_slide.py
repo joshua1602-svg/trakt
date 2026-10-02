@@ -460,3 +460,39 @@ def test_the_page_sits_before_the_limits_it_is_tested_against():
                          .read_text(encoding="utf-8"))
     ids = [s["id"] for s in cfg["slides"]]
     assert ids.index("borrowing_base") < ids.index("concentration") < ids.index("risk")
+
+
+# --------------------------------------------------------------------------- #
+# Money reads the way the rest of the pack writes it.
+# --------------------------------------------------------------------------- #
+
+def test_figures_use_the_packs_figure_notation():
+    """Tiles, table cells and the strapline read "£89.9MM", as the KPI page
+    does — this page used to print the prose form "£89.9m" beside it."""
+    from mi_agent_pptx.metric_resolver import compact_currency
+    assert BB.money(89_900_000.0) == compact_currency(89_900_000.0) == "£89.9MM"
+    assert BB.tiles(snap())[0]["value"] == "£90.0MM"
+    assert "commitment £120.0MM" in BB.headline(snap())
+    assert BB.split(snap())[0]["balance"] == "£90.0MM"
+    assert "Financing Portfolio £100.0MM" in BB.population_line(snap())
+
+
+def test_a_figure_inside_a_sentence_keeps_the_prose_notation():
+    """As the executive summary writes them: "+£3.7m" in a sentence."""
+    alerts = BB.alerts(snap(borrowingBaseHeadroom=-2_500_000.0,
+                            borrowingBaseDeficiency=2_500_000.0))
+    assert any("deficiency £2.5m" in a["text"] for a in alerts)
+    note = BB.concentration_note(snap(nearestConcentrationLimit="London",
+                                      nearestConcentrationHeadroomPct=4.2,
+                                      nearestConcentrationHeadroomAmount=3_800_000.0))
+    assert "(£3.8m)" in note
+
+
+def test_both_notations_follow_the_governed_currency():
+    from mi_agent_api import currency
+    token = currency._CURRENCY_CODE.set("EUR")
+    try:
+        assert BB.money(89_900_000.0) == "€89.9MM"
+        assert BB.prose_money(2_500_000.0) == "€2.5m"
+    finally:
+        currency._CURRENCY_CODE.reset(token)
