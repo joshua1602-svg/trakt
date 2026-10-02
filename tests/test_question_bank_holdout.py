@@ -115,3 +115,42 @@ def test_the_production_script_offers_the_signoff():
     assert 'signoff) SIGNOFF="1"' in text
     assert 'echo "--signoff --categories ${CATEGORIES}"' in text
     assert 'KIND="qb_signoff"' in text
+
+
+def test_the_ask_back_conversations_are_played_up_to_their_reply():
+    """§34 phase 1: group C, each ask-back and its reply; a turn that carries
+    an answer forward (phase 2) is not played."""
+    rows = qb.conversation_rows("C")
+    data = yaml.safe_load(qb.CONVERSATION_BANK.read_text())
+    groups = [c for c in data["conversations"] if c["group"] == "C"]
+    assert len(rows) == 2 * len(groups)
+    assert {r["expect"] for r in rows} == {"ask_back", "fill"}
+    assert all(r["twin"] for r in rows if r["expect"] == "fill")
+
+
+def test_a_reply_is_sent_with_the_continuation_its_ask_back_handed_back(monkeypatch):
+    sent = []
+
+    def _run_one(row, *, continuation=None, conversation_id=None, **_):
+        sent.append((row["id"], continuation, conversation_id))
+        handed = "tok-" + row["id"] if row.get("expect") == "ask_back" else None
+        return {"id": row["id"], "category": row["category"],
+                "question": row["question"], "outcome": "REFUSED",
+                "route": None, "view": None, "seconds": 0.0, "served": "DECLINED",
+                "serving_reason": "", "timing": {}, "answer": "",
+                "_continuation": handed}
+    monkeypatch.setattr(qb, "run_one", _run_one)
+    rows = qb.conversation_rows("C")[:2]
+    records = list(qb.play_conversations(rows, portfolio=None, lens=None,
+                                         principal="p", stamp="S"))
+    ask, reply = rows
+    assert sent[0] == (ask["id"], None, f"S-{ask['conversation']}")
+    assert sent[1] == (reply["id"], f"tok-{ask['id']}", f"S-{ask['conversation']}")
+    assert sent[2][0] == f"{reply['id']}_twin" and sent[2][1] is None
+    assert [r.get("twin_of") for r in records] == [None, None, reply["id"]]
+
+
+def test_the_production_script_offers_the_ask_back_conversations():
+    text = _SCRIPT.read_text()
+    assert 'askback) CONVERSATIONS="C"' in text
+    assert 'echo "--conversations ${CONVERSATIONS}"' in text

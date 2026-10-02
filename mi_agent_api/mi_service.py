@@ -114,6 +114,13 @@ class MiQueryRequest:
     client_id: Optional[str] = None
     #: Channel-neutral execution options (reserved; no analytical effect).
     options: Dict[str, Any] = field(default_factory=dict)
+    #: §34 PHASE 1. The continuation an ask-back handed the caller, returned
+    #: with the reply — UNTRUSTED, verified by `mi_agent.conversation.read`
+    #: against the trusted principal and the authorised book — and the
+    #: caller's chat id (a new one when the chat is cleared). Both None: a
+    #: stand-alone question.
+    continuation: Optional[str] = None
+    conversation_id: Optional[str] = None
 
     def effective_portfolio_id(self) -> Optional[str]:
         """The portfolio selector the analysis runs against.
@@ -2185,10 +2192,24 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             source_registry = _source_registry(df, client_id)
         with _perf.stage("mi_query.governed_inputs.pipeline"):
             pipeline_inputs = _pipeline_inputs(ds, client_id, run_id)
+        # §34 PHASE 1 — A REPLY TO THE AGENT'S OWN QUESTION. The returned
+        # continuation is checked against the TRUSTED principal and the
+        # AUTHORISED book here; switched off, or with none returned, nothing
+        # below differs from a stand-alone question.
+        from mi_agent import conversation as _conversation
+        book = _conversation.book_scope(client_id, authorised.portfolio_id,
+                                        req.source_portfolio_lens)
+        returned = _conversation.read(
+            req.continuation, principal=_plan_serving.principal_of(context),
+            book=book, chat=req.conversation_id)
         # `respond`, not `serve`: for this principal the answer is the
         # governed answer or the governed decline, never the legacy path's
         # (owner decision D18).
         return _plan_serving.respond(
+            reply_to=(returned.pending if returned and returned.ok else None),
+            conversation_lapsed=(returned.lapsed if returned and not returned.ok
+                                 else None),
+            conversation_book=book, conversation_chat=req.conversation_id,
             question=req.question, context=context, client_id=client_id,
             run_id=run_id, legacy_result=legacy_envelope, frame=df,
             semantics=semantics, view=view,

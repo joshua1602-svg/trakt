@@ -92,14 +92,16 @@ def _capture_serving() -> None:
 
 
 def _ask(question: str, *, portfolio: Optional[str], lens: Optional[str],
-         principal: str):
+         principal: str, continuation: Optional[str] = None,
+         conversation_id: Optional[str] = None):
     from mi_agent_api.dependencies import default_tenant_id
     from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
     from trakt_core.context import ExecutionContext
     ctx = ExecutionContext.for_internal(default_tenant_id(), actor_id=principal)
     return execute_governed_mi_query(
         MiQueryRequest(question=question, portfolio_id=portfolio,
-                       source_portfolio_lens=lens), ctx)
+                       source_portfolio_lens=lens, continuation=continuation,
+                       conversation_id=conversation_id), ctx)
 
 
 def holdout_rows(mode: str) -> List[Dict[str, Any]]:
@@ -151,7 +153,9 @@ def twin_rows() -> List[Dict[str, Any]]:
 
 
 def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
-            lens: Optional[str], principal: str = "question-bank") -> Dict[str, Any]:
+            lens: Optional[str], principal: str = "question-bank",
+            continuation: Optional[str] = None,
+            conversation_id: Optional[str] = None) -> Dict[str, Any]:
     from trakt_core import perf as _perf
     from mi_agent_api import request_scope as _request_scope
 
@@ -168,7 +172,8 @@ def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
         with _perf.collect(route="question_bank") as collector, \
                 _request_scope.scope():
             result = _ask(row["question"], portfolio=portfolio, lens=lens,
-                          principal=principal)
+                          principal=principal, continuation=continuation,
+                          conversation_id=conversation_id)
             if collector is not None:
                 snap = collector.snapshot()
                 timing = {"total_ms": snap["total_ms"], "stages": snap["stages"],
@@ -183,14 +188,69 @@ def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
         outcome = "ANSWERED" if ok else "REFUSED"
         route = meta.get("route")
         view = meta.get("datasetContext")
+        handed = (res.get("conversation") or {}).get("continuation")
     except Exception as exc:  # noqa: BLE001 - an audit records, never stops
         outcome, answer, route, view = "ERROR", f"{type(exc).__name__}: {exc}", None, None
+        handed = None
     served = _SERVING.get("response_served_from") or "-"
-    return {"id": row.get("id"), "category": row.get("category"),
-            "question": row["question"], "outcome": outcome, "route": route,
-            "view": view, "seconds": round(time.monotonic() - t0, 1),
-            "served": served, "serving_reason": _SERVING.get("reason") or "",
-            "timing": timing, "answer": answer}
+    rec = {"id": row.get("id"), "category": row.get("category"),
+           "question": row["question"], "outcome": outcome, "route": route,
+           "view": view, "seconds": round(time.monotonic() - t0, 1),
+           "served": served, "serving_reason": _SERVING.get("reason") or "",
+           "timing": timing, "answer": answer}
+    if continuation is not None or handed:
+        # The token itself is not recorded: what the run needs is whether one
+        # was handed back, and the next turn holds it in memory.
+        rec["conversation"] = {"replied_with_continuation": continuation is not None,
+                               "continuation_issued": bool(handed)}
+        rec["_continuation"] = handed
+    return rec
+
+
+def conversation_rows(groups: str = "C") -> List[Dict[str, Any]]:
+    """The conversation bank's conversations in `groups`, as the turns a run
+    plays in order (§34). Phase 1 plays an ask-back and its reply: each turn
+    up to the first that carries an answer forward (phase 2's), which is
+    left out — it would be read on its own and is not yet built."""
+    data = yaml.safe_load(CONVERSATION_BANK.read_text(encoding="utf-8")) or {}
+    wanted = {g.strip().upper() for g in groups.split(",") if g.strip()}
+    out: List[Dict[str, Any]] = []
+    for conversation in data.get("conversations") or ():
+        if str(conversation.get("group") or "").upper() not in wanted:
+            continue
+        for i, turn in enumerate(conversation.get("turns") or ()):
+            if turn.get("run") != "live" or turn.get("expect") == "carry":
+                break
+            out.append({"id": f"{conversation['id']}_t{i}",
+                        "conversation": conversation["id"], "turn": i,
+                        "category": f"conversation_{conversation['group']}",
+                        "question": turn["question"], "expect": turn["expect"],
+                        "twin": (turn.get("twin") or {}).get("question")})
+    return out
+
+
+def play_conversations(rows: List[Dict[str, Any]], *, portfolio: Optional[str],
+                       lens: Optional[str], principal: str, stamp: str):
+    """Each conversation turn by turn, the continuation an ask-back handed back
+    sent with the reply, then each answered turn's stand-alone twin — so the
+    reply can be scored against the question it should equal (D25). Yields
+    each record as it is made."""
+    held: Dict[str, Optional[str]] = {}
+    for row in rows:
+        cid = row["conversation"]
+        rec = run_one(row, portfolio=portfolio, lens=lens, principal=principal,
+                      continuation=held.get(cid) if row["turn"] else None,
+                      conversation_id=f"{stamp}-{cid}")
+        held[cid] = rec.pop("_continuation", None)
+        rec.update(expect=row["expect"], conversation_turn=row["turn"])
+        yield rec
+        if row.get("twin"):
+            twin = run_one({"id": f"{row['id']}_twin", "category": "conversation_twin",
+                            "question": row["twin"]},
+                           portfolio=portfolio, lens=lens, principal=principal)
+            twin.pop("_continuation", None)
+            twin.update(twin_of=row["id"])
+            yield twin
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -209,6 +269,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--signoff", action="store_true",
                     help="the D13 sign-off: the bank (by --categories), then "
                          "the unspent held-out variants, in one run")
+    ap.add_argument("--conversations", default="",
+                    help="play the conversation bank's conversations in these "
+                         "groups (e.g. C), each reply sent with the continuation "
+                         "its ask-back handed back, then each answered turn's "
+                         "stand-alone twin (§34)")
     ap.add_argument("--holdout", choices=("all", "recent", "unspent"), default=None,
                     help="ask the held-out variants (all), or the recently "
                          "changed questions' variants each after its bank "
@@ -230,7 +295,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         os.environ.get("MI_AGENT_PLAN_SERVE_PRINCIPALS", "").split(",")}
     print(f"MI_AGENT_PLAN_SERVE={mode}; principal {args.principal!r} "
           f"{'IS' if listed else 'is NOT'} on the allow-list", flush=True)
-    if args.twins:
+    if args.conversations:
+        rows = conversation_rows(args.conversations)
+        _switch_conversation_on_for_this_run()
+    elif args.twins:
         rows = twin_rows()
     elif args.signoff:
         cats = {c.strip() for c in args.categories.split(",") if c.strip()}
@@ -255,10 +323,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     routes: Counter = Counter()
     served: Counter = Counter()
     stage_ms: Dict[str, List[float]] = defaultdict(list)
+    records = (play_conversations(rows, portfolio=args.portfolio, lens=args.lens,
+                                  principal=args.principal,
+                                  stamp=time.strftime("%Y%m%dT%H%M%S"))
+               if args.conversations else
+               (run_one(row, portfolio=args.portfolio, lens=args.lens,
+                        principal=args.principal) for row in rows))
     with args.out.open("w", encoding="utf-8") as fh:
-        for row in rows:
-            rec = run_one(row, portfolio=args.portfolio, lens=args.lens,
-                          principal=args.principal)
+        for rec in records:
+            rec.pop("_continuation", None)
             fh.write(json.dumps(rec, default=str) + "\n")
             fh.flush()
             tally[rec["category"]][rec["outcome"]] += 1
@@ -268,7 +341,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             snippet = " ".join(rec["answer"].split())[:110]
             print(f"{rec['outcome']:<8} {rec['id']:<22} {rec['served']:<6} "
                   f"{str(rec['route'] or '-'):<26} "
-                  f"{rec['seconds']:>5}s  {row['question'][:60]!r}\n"
+                  f"{rec['seconds']:>5}s  {rec['question'][:60]!r}\n"
                   f"{'':8} -> {snippet}", flush=True)
             stages = (rec.get("timing") or {}).get("stages") or {}
             for name, ms in stages.items():
@@ -294,6 +367,21 @@ def main(argv: Optional[List[str]] = None) -> int:
                   f"{max(values) / 1000:>7.1f}  {len(values):>3}")
     print(f"\nfull answers: {args.out.resolve()}")
     return 0
+
+
+def _switch_conversation_on_for_this_run() -> None:
+    """The conversation is switched on in THIS process only, with a key made
+    for the run, unless the deployment already has it on: a run measures the
+    conversation without changing what any user of the service is served."""
+    import os
+    import secrets
+    from mi_agent import conversation as convo
+    if convo.enabled():
+        print("conversation: on (the deployment's own setting)", flush=True)
+        return
+    os.environ[convo.SWITCH_ENV] = "on"
+    os.environ[convo.KEY_ENV] = secrets.token_urlsafe(48)
+    print("conversation: switched on for this run only", flush=True)
 
 
 def _heaviest(stages: Dict[str, Any], limit: int = 4) -> str:

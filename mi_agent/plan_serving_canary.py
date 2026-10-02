@@ -423,6 +423,16 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           # own. True: the governed decline (`plan_decline`), and legacy never
           # answers. Production asks through `respond`, which is D18.
           decline: bool = False,
+          # §34 PHASE 1 — A REPLY TO THE AGENT'S OWN QUESTION. `reply_to` is
+          # the pending ask a verified continuation carried
+          # (`conversation.read`); `conversation_lapsed` is why a returned one
+          # was not used; `conversation_book` and `conversation_chat` are what
+          # a new ask-back's token is bound to. All None: a stand-alone
+          # question, exactly as before.
+          reply_to: Any = None,
+          conversation_lapsed: Optional[str] = None,
+          conversation_book: Optional[str] = None,
+          conversation_chat: Optional[str] = None,
           ) -> Optional[Dict[str, Any]]:
     """The new envelope to serve, or None meaning "legacy serves".
 
@@ -464,6 +474,7 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             funded_frame_resolver=funded_frame_resolver,
             client_id=client_id, output_root=output_root, tenant_id=tenant_id,
             authorised_portfolio_ids=tuple(authorised_portfolio_ids),
+            reply_to=reply_to,
             # `view` IS THE EXECUTED POPULATION, and it is load-bearing here
             # rather than decorative. It is the governed dataset identity the
             # caller resolved `frame` with — `mi_service` passes the same string
@@ -487,6 +498,11 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
     served_from = (SERVED_NEW if payload is not None
                    else SERVED_DECLINED if declined is not None
                    else SERVED_LEGACY)
+    result = _converse(payload if payload is not None else declined, body=body,
+                       question=question, context=context,
+                       answered=payload is not None, reason=reason,
+                       reply_to=reply_to, lapsed=conversation_lapsed,
+                       book=conversation_book, chat=conversation_chat)
 
     # RECORDING CANNOT COST THE ANSWER. `evidence.write` swallows its own
     # faults, but this tail is still guarded: a recorder that raises anyway —
@@ -520,7 +536,65 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
     except Exception:                                                # noqa: BLE001
         logger.warning("the serving record could not be completed; the answer "
                        "stands", exc_info=True)
-    return payload if payload is not None else declined
+    return result
+
+
+def _converse(result: Optional[Dict[str, Any]], *, body: Dict[str, Any],
+              question: str, context: Any, answered: bool, reason: str,
+              reply_to: Any, lapsed: Optional[str], book: Optional[str],
+              chat: Optional[str]) -> Optional[Dict[str, Any]]:
+    """§34 PHASE 1 on the envelope the caller is handed. Never raises.
+
+    - A reply read with the agent's own question says what it read (D24: the
+      answer states what it carried over).
+    - A returned question that could not be used says so, and the message
+      was read on its own (D24: expiry is stated, never silent).
+    - An ask-back carries a continuation the reply returns, when the
+      conversation is switched on, so the reply is read with it.
+    With none of these, the envelope is returned untouched."""
+    if result is None:
+        return None
+    try:
+        from mi_agent import conversation as convo
+        from mi_agent import plan_decline
+        notes: List[str] = []
+        if lapsed:
+            notes.append(convo.lapsed_notice(lapsed))
+        elif reply_to is not None and answered:
+            read = plan_decline.understood((body.get("compiler") or {}).get("plan"))
+            notes.append(f"With your reply, I read your earlier question as {read}."
+                         if read else "I read your reply with your earlier question.")
+        tail = ""
+        token = None
+        if reason == CLARIFY_NOT_SERVED and not answered and convo.enabled():
+            ask = plan_decline.ask_detail(body)
+            pending = (convo.PendingAsk(
+                question=reply_to.question, ask=ask,
+                turns=tuple(reply_to.turns) + ((reply_to.ask, question),))
+                if reply_to is not None else convo.PendingAsk(question=question, ask=ask))
+            token = convo.issue_ask_back(principal=principal_of(context),
+                                         book=book or "", chat=chat, pending=pending)
+            if token:
+                result["conversation"] = {
+                    "kind": convo.KIND_ASK_BACK, "continuation": token,
+                    "expiresInSeconds": int(convo.memory_minutes() * 60)}
+                tail = " Reply with it and I will answer your question."
+            else:
+                tail = " " + convo.lapsed_notice(convo.LAPSED_TOO_MANY_ASKS)
+        body["conversation"] = {
+            "reply_to": ({"question": reply_to.question, "ask": reply_to.ask,
+                          "turns": len(reply_to.turns)} if reply_to is not None
+                         else None),
+            "lapsed": lapsed, "continuation_issued": bool(token)}
+        if notes or tail:
+            for key in ("answer", "error"):
+                if isinstance(result.get(key), str):
+                    result[key] = (" ".join(notes + [result[key]]) + tail).strip()
+        return result
+    except Exception:                                                # noqa: BLE001
+        logger.warning("the conversation step failed; the answer stands as it "
+                       "was", exc_info=True)
+        return result
 
 
 def respond(**kwargs: Any) -> Optional[Dict[str, Any]]:
@@ -2128,6 +2202,7 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              output_root: Optional[str] = None,
              tenant_id: Optional[str] = None,
              authorised_portfolio_ids: Tuple[str, ...] = (),
+             reply_to: Any = None,
              ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One serving attempt. `(payload or None, reason)`; fills `body` as it goes."""
     from mi_agent.interpretation_v2.outcomes import (OUTCOME_CLARIFY, OUTCOME_PLAN,
@@ -2139,9 +2214,13 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # portfolio is refused, which is where every caller was until the production
     # seam started passing one.
     from trakt_core import perf as _perf
+    # A REPLY to the agent's own question is read with it (§34 phase 1);
+    # passed only then, so every stand-alone question compiles as before.
+    plan_inputs: Dict[str, Any] = {"source_registry": source_registry}
+    if reply_to is not None:
+        plan_inputs["reply_to"] = reply_to
     with _perf.stage("governed.interpret_and_compile"):
-        outcome, compiled = wiring.build_plan(question,
-                                              source_registry=source_registry)
+        outcome, compiled = wiring.build_plan(question, **plan_inputs)
     wiring.record_plan_stages(body, outcome, compiled)
 
     if not outcome.ok:

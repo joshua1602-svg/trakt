@@ -636,3 +636,10 @@ intents added beside the baseline's.
                 §37). Every run log now prints the view it measured. The
                 pipeline-to-YAML move is not done: it adds no answer and
                 would be measured against this baseline first
+    2026-10-02  Built, not deployed: conversation phase 1 (design §38) — the
+                reply to an ask-back, read with the question it answers; a
+                signed continuation (user, book, chat, 5 minutes); its own
+                switch, off; the stand-alone model view is the baseline's.
+                Ask-backs now always say what they need. Next: deploy, then
+                `run_production_bank.sh <principal> askback` (~18 questions;
+                the conversation is switched on for that run only)

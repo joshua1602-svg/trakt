@@ -430,6 +430,12 @@ class QueryRequest(BaseModel):
     # id ("direct_001" / "acquired_001"). Acts as the default scope; a portfolio
     # named in the question overrides it. Realised as a provenance filter.
     sourcePortfolioLens: Optional[str] = None
+    # §34 PHASE 1. The continuation an ask-back returned, sent back with the
+    # reply, and the chat it belongs to (the client starts a new id when the
+    # chat is cleared). Untrusted: verified by the service, ignored when the
+    # conversation is switched off.
+    continuation: Optional[str] = Field(None, max_length=16384)
+    conversationId: Optional[str] = Field(None, max_length=128)
 
 
 @app.get("/")
@@ -2030,6 +2036,8 @@ def query(req: QueryRequest, request: Request) -> Any:
             dataset_context=req.datasetContext,
             context=req.context,
             source_portfolio_lens=req.sourcePortfolioLens,
+            continuation=req.continuation,
+            conversation_id=req.conversationId,
         ),
         context,
     )

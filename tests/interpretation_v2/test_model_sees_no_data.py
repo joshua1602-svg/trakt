@@ -189,9 +189,15 @@ def test_a_dataframe_can_never_reach_the_interpreter(vocabulary):
     # `source_registry` is the ONE addition, it is KEYWORD-ONLY, and it takes a
     # governed portfolio registry — configuration naming this client's books.
     # Positional data is still impossible, which is what this test is for.
-    assert list(signature.parameters) == ["self", "question", "source_registry"]
-    assert (signature.parameters["source_registry"].kind
-            is inspect.Parameter.KEYWORD_ONLY)
+    # `reply_to` (§34 phase 1, 2026-10-02) is the second: KEYWORD-ONLY, and it
+    # carries TEXT — the user's own earlier question and the agent's own ask
+    # (`conversation.PendingAsk`), never a figure, a row or a frame.
+    assert list(signature.parameters) == ["self", "question", "source_registry",
+                                          "reply_to"]
+    for name in ("source_registry", "reply_to"):
+        assert signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
+    from mi_agent.conversation import PendingAsk
+    assert {f for f in PendingAsk.__dataclass_fields__} == {"question", "ask", "turns"}
 
     frame = pd.DataFrame({"current_outstanding_balance": [1_000_000.0]})
     client = ScriptedClient(intent_payload())

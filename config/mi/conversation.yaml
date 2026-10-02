@@ -1,0 +1,11 @@
+# The conversation owner's settings (P0 design §34, owner decision D24).
+#
+# memory_minutes: how long the agent remembers its last turn, counted from the
+#   DELIVERY of its last answer or question — not from when the question was
+#   asked, since a cold first answer can take minutes. D24, owner 2026-10-01:
+#   "set to 5 minutes".
+# max_asks: how many ask-backs in a row one question may take before the next
+#   reply is read on its own; a question that needs more detail than that
+#   should be asked again in full.
+memory_minutes: 5
+max_asks: 3

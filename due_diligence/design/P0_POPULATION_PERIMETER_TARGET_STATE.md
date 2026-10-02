@@ -2563,3 +2563,51 @@ The conversation work (§34) is built to this rule: a stand-alone question's
 view stays the baseline's byte for byte; only a reply to the agent's own
 question carries the earlier turn, in a framing of its own that is measured
 by the conversation bank before it is switched on.
+
+## 38. Conversation, phase 1: the reply to an ask-back (2026-10-02)
+
+Built to §34 and the rule of §37, behind its own switch, off by default.
+
+    THE FLOW   A question the governed path cannot answer without one more
+               detail is asked back, and the ask-back now always says what it
+               needs (`plan_decline.ask_detail`: the model's note, else the
+               readings it saw, else the compiler's own detail — the sign-off
+               run had an ask-back that said only "I need one more detail").
+               Switched on, the ask-back carries a continuation; the reply
+               returns it; the reply is read WITH the question it answers and
+               answered as that complete question, and the answer says so
+               ("With your reply, I read your earlier question as …").
+    MEMORY     `mi_agent/conversation.py`: a signed token (HMAC-SHA256), not a
+               server store — the API runs as two workers with none. It holds
+               the user's own question and the agent's own ask, never a figure.
+               Bound to the user (the trusted principal), the book (client,
+               portfolio, lens) and the chat (a new id when the chat is
+               cleared), for `memory_minutes` (config/mi/conversation.yaml: 5,
+               D24) from its issue — the delivery of the ask-back. Anything
+               else is refused (another user, book or chat; edited; expired)
+               and the reply is read on its own with the lapse stated (D24).
+               At most `max_asks` (3) ask-backs about one question.
+    THE MODEL  A reply's user message is `build_reply_prompt`: the earlier
+               question, the asks and replies, and the instruction that a reply
+               which is a complete question is recorded alone (D24). A stand-
+               alone question's message and the system blocks are unchanged —
+               the baseline fingerprint (§37) holds.
+    API        POST /mi/query takes `continuation` and `conversationId`; an
+               ask-back's envelope carries `conversation: {kind, continuation,
+               expiresInSeconds}`. Untrusted input, checked by the service
+               against the authenticated principal and the authorised book.
+    SWITCH     `MI_AGENT_CONVERSATION=on` and `MI_AGENT_CONVERSATION_KEY` (at
+               least 32 characters); without both nothing is issued or read.
+               It stays off in production until the dashboard sends the
+               continuation back; the bank runner's `askback` selection
+               switches it on in its own process with a one-off key, so the
+               phase is measured live without changing any user's service.
+    PROOF      `run_production_bank.sh <principal> askback`: the six ask-back
+               conversations (group C), each reply sent with its continuation,
+               then each reply's stand-alone twin. Pass mark (D25): every
+               ask-back asks, and every reply matches its twin or asks back.
+
+Not in phase 1: an answer carried forward to a follow-up ("And 12?") — phase
+2; a cleared chat's token presented again with the OLD chat id cannot be told
+from a live one without a server store — it is bound to its user and expires
+in five minutes.

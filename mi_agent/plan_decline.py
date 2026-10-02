@@ -236,6 +236,27 @@ def _first_blocking(body: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
     return None
 
 
+def ask_detail(body: Mapping[str, Any]) -> str:
+    """WHAT AN ASK-BACK NEEDS, in words: the model's own note on the slot it
+    could not choose; else the readings it saw; else the compiler's own
+    detail; else the slot named. An ask-back that said only "I need one more
+    detail" (the sign-off run, 2026-10-01) left the reader nothing to reply
+    with."""
+    blocking = _first_blocking(body) or {}
+    note = str(blocking.get("note") or "").strip()
+    if note:
+        return note
+    slot = _value(str(blocking.get("slot") or "").strip())
+    options = [_value(o) for o in (blocking.get("options") or ()) if str(o).strip()]
+    if options:
+        return f"which {slot or 'reading'} is meant: {', '.join(options)}"
+    for r in ((body.get("compiler") or {}).get("reasons") or ()):
+        detail = str((r or {}).get("detail") or "").strip() if isinstance(r, Mapping) else ""
+        if detail:
+            return detail
+    return f"which {slot} is meant" if slot else ""
+
+
 def message(body: Mapping[str, Any], reason: str) -> str:
     """The decline, as the reader is told it. Never carries a figure."""
     compiler = body.get("compiler") or {}
@@ -248,7 +269,9 @@ def message(body: Mapping[str, Any], reason: str) -> str:
                 "question, so I have not answered it. " + _NOTHING_GUESSED
                 + " Please try again.")
     if what == CLARIFY:
-        note = str((_first_blocking(body) or {}).get("note") or "").strip()
+        note = ask_detail(body)
+        if note and note[-1] not in ".?!":
+            note += "."
         return ("I need one more detail before I can answer"
                 + (f": {note}" if note else ".") + " " + _NOTHING_GUESSED)
     if code.startswith("REFUSE"):
