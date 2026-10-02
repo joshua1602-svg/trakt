@@ -715,3 +715,16 @@ intents added beside the baseline's.
                 distribution is a breakdown. Replay of the 201 recorded
                 readings: 195 identical plans, exactly the six change. Next:
                 deploy, sign-off again on the candidate
+    2026-10-02  The 12:13 run COMPLETE (216, files re-sent): of the 46 the
+                first read missed, 39 identical to Claude Opus 5, the three
+                October/November variants (fixed in 114d8d9b), and one must-
+                answer variant lost — "Completion run rate on a yearly basis?"
+                read as the annualised run rate "for the pipeline" and
+                declined (the run-rate population reading of §31/§35; the
+                12-week run rate declined the same way on both models). Whole
+                run: must-answer 88/88 answered; held-out must 70 identical, 3
+                different (October/November), 2 lost (LTV bands, fixed; yearly
+                run rate, open); no errors; every reading one model call, all
+                served by claude-opus-5-5 (no retry, no fallback); output 386
+                tokens median (thinking at `low` adds next to nothing); model
+                time 5.5s median
