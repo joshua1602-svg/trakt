@@ -3831,18 +3831,23 @@ class DeckBuilder:
             # The status is a BADGE, as on the dashboard: a bordered pill in the
             # status colour, so pass / warning / breach is read at a glance
             # rather than found in a line of small type.
-            badge_y = Emu(int(y) + int(Inches(0.29)))
             word = r["status"].upper()
+            # A DENSE TABLE tightens the badge line so it ends inside its own
+            # row: at 0.29in down and 0.21in tall it ran into the next row's
+            # test name as soon as five tests shared the band.
+            compact = row_span < 0.56
+            badge_y = Emu(int(y) + int(Inches(0.24 if compact else 0.29)))
+            badge_h = Inches(0.18 if compact else 0.21)
             # 7.5pt is the pack's legibility floor (the QA harness enforces it).
             badge_w = Inches(0.18 + 0.082 * len(word))
-            self._panel(s, Inches(7.5), badge_y, badge_w, Inches(0.21),
+            self._panel(s, Inches(7.5), badge_y, badge_w, badge_h,
                         fill=self.theme.bg_panel_alt, line=status_colour, lw=0.75)
-            self._text(s, Inches(7.5), badge_y, badge_w, Inches(0.21), word,
+            self._text(s, Inches(7.5), badge_y, badge_w, badge_h, word,
                        size=7.5, bold=True, color=status_colour,
                        align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
             if note:
                 self._text(s, Emu(int(Inches(7.58)) + int(badge_w)), badge_y,
-                           Inches(4.2), Inches(0.2), note, size=7.5,
+                           Inches(4.2), badge_h, note, size=7.5,
                            color=status_colour, anchor=MSO_ANCHOR.MIDDLE)
             if detail:
                 # Only where the evaluator produced them. A deployment that

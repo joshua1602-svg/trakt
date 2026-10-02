@@ -289,6 +289,24 @@ why packs are shorter: **15 / 20 / 21 / 20 / 15** slides across the five sample 
   a threaded wait-for-status test run while both trees' suites shared four cores. It
   passes alone on this branch, and nothing on the OCC path reads the fields this change
   adds. The 112 shared failures are all on main today and none touches the deck.
+- **After the capability port (§6, second follow-up)** — the whole repository's default
+  collection (about 15,800 tests, beyond `tests/` alone) run on unmodified main and on
+  this branch together, failure IDs diffed:
+
+  | | main | this branch |
+  |---|---|---|
+  | passed | 14,448 | 14,824 (+376: the ported and new tests) |
+  | failed | 195 | 197 |
+
+  Of the extra failures: the OCC restart timing test again (passes alone), and two
+  deck tests that pass alone but failed after other tests left a six-test
+  concentration configuration in the shared store. One was a **real layout bug**: on a
+  dense table the status badge ran into the next row's test name. Reproduced, fixed
+  (the badge line tightens when rows are close) and re-checked. The other was main's
+  omission test not yet knowing the ported `superseded` category. Two genuine
+  regressions found earlier in the run — a second movement endpoint and changed Copilot
+  truncation wording — were fixed by keeping main's behaviour. Frontend: typecheck clean,
+  630 tests pass. All five books regenerate clean through the real route.
 - **One regression caught during visual QA and fixed:** the new dark cards swallowed the
   waterfall opening bar (drawn in a surface colour); it now uses `navy-500`.
 

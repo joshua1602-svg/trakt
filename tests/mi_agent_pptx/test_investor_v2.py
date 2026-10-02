@@ -277,7 +277,9 @@ def test_every_omission_carries_a_reason(mixed_run):
     assert omitted
     for o in omitted:
         assert o.reason and o.slide_id and o.title
-        assert o.category in ("condition", "no data")
+        # "superseded": a page whose question another page in the pack already
+        # answers (Risk Limits, where approved concentration tests exist).
+        assert o.category in ("condition", "no data", "superseded")
 
 
 def test_forecast_fact_is_false_without_a_pipeline_contribution(mixed_run):
