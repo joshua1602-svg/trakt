@@ -29,7 +29,7 @@ PKG = _REPO_ROOT / "deploy" / "copilot-agent"
 # The generic surface: ONE MI action + ONE generic artifact action. Artifact
 # types are NOT enumerated as manifest functions/paths any more.
 EXPECTED_OPERATIONS = {
-    ("post", "/v1/copilot/mi/query"): "askTraktMi",
+    ("get", "/v1/copilot/mi/query"): "askTraktMi",
     ("get", "/v1/copilot/artifacts/latest"): "getArtifact",
 }
 
@@ -144,7 +144,14 @@ def test_openapi_operation_ids_match_the_implemented_routes():
             if method in ("head", "options"):
                 continue
             implemented[(method, path)] = op.get("operationId")
-    assert implemented == EXPECTED_OPERATIONS
+    # Everything the package calls is implemented as declared. The server also
+    # keeps the POST form of the question for scripted callers; the package
+    # never uses it (Copilot confirms every non-GET call), so it is the only
+    # route allowed beyond the plugin surface.
+    assert {k: v for k, v in implemented.items()
+            if k in EXPECTED_OPERATIONS} == EXPECTED_OPERATIONS
+    assert set(implemented) - set(EXPECTED_OPERATIONS) == {
+        ("post", "/v1/copilot/mi/query")}
 
 
 def test_plugin_functions_match_openapi_operation_ids():

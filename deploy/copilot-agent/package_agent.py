@@ -2,7 +2,8 @@
 """package_agent.py — build the sideloadable Trakt Copilot agent package.
 
 Zips the declarative-agent artefacts in this directory (Teams app manifest,
-declarative agent, API plugin, OpenAPI spec) plus generated placeholder icons
+declarative agent, API plugin, OpenAPI spec) plus the icons (``color.png`` /
+``outline.png`` here, drawn by ``make_icons.py``; solid placeholders otherwise)
 into ``dist/trakt-copilot-agent.zip``, ready for upload to Microsoft 365 admin
 center / Teams "Upload a custom app".
 
@@ -17,6 +18,10 @@ Before packaging, edit:
 
 Usage:
     python deploy/copilot-agent/package_agent.py [--out DIST_DIR]
+
+    # Copilot only (no Teams notification bot) — the first client release:
+    python deploy/copilot-agent/package_agent.py --copilot-only \\
+        --oauth-config-id <registration id> --require-resolved
 
 No third-party dependencies: icons are written as minimal solid-colour PNGs via
 zlib/struct so the package passes manifest validation without shipping binary
@@ -71,7 +76,8 @@ def _png(width: int, height: int, rgba: tuple[int, int, int, int]) -> bytes:
 _PLACEHOLDER = "${{TEAMS_BOT_APP_ID}}"
 
 
-def _validate_manifest(manifest: dict, *, require_resolved: bool = False) -> None:
+def _validate_manifest(manifest: dict, *, require_resolved: bool = False,
+                       copilot_only: bool = False) -> None:
     """Check the capabilities this package is required to carry.
 
     The declarative agent and the bot are separate capabilities of ONE app.
@@ -83,6 +89,11 @@ def _validate_manifest(manifest: dict, *, require_resolved: bool = False) -> Non
         raise SystemExit(
             "manifest.json no longer declares a declarative agent: the "
             "existing Copilot capability must be preserved")
+
+    if copilot_only:
+        # The bot has been deliberately left out of this package; there is
+        # nothing further to assert about it.
+        return
 
     bots = manifest.get("bots") or []
     if not bots:
@@ -120,6 +131,15 @@ _GUID_RE = re.compile(
 #: command line (and therefore in a build log).
 BOT_APP_ID_ENV = "TEAMS_BOT_APP_ID"
 
+#: The Copilot plugin's OAuth registration id — issued by the Teams developer
+#: portal (Tools → OAuth client registration) and referenced from
+#: ``ai-plugin.json``. Like the bot id it belongs to a deployment, so it is
+#: substituted on the way into the archive and the repository copy keeps the
+#: token.
+_OAUTH_PLACEHOLDER = "${{OAUTH2_CONFIGURATION_ID}}"
+OAUTH_CONFIG_ID_ENV = "OAUTH2_CONFIGURATION_ID"
+_OAUTH_ID_RE = re.compile(r"^[^\s\"\\${}]+$")
+
 
 def resolve_bot_app_id(explicit: str | None = None) -> str | None:
     """The bot app id to substitute, from the flag or the environment.
@@ -137,42 +157,90 @@ def resolve_bot_app_id(explicit: str | None = None) -> str | None:
     return value
 
 
-def substitute(text: str, bot_app_id: str | None) -> str:
-    """Replace the bot app id token in a package file's TEXT.
+def resolve_oauth_config_id(explicit: str | None = None) -> str | None:
+    """The plugin OAuth registration id to substitute, or ``None``.
+
+    The portal's id is an opaque string, so it is only checked for being safe to
+    place inside a JSON string, not for a particular shape.
+    """
+    value = (explicit or os.environ.get(OAUTH_CONFIG_ID_ENV) or "").strip()
+    if not value:
+        return None
+    if not _OAUTH_ID_RE.match(value):
+        raise SystemExit(
+            "the OAuth registration id must be the single value shown in the "
+            "Teams developer portal, with no spaces or quotes")
+    return value
+
+
+def substitute(text: str, bot_app_id: str | None,
+               oauth_config_id: str | None = None) -> str:
+    """Replace the per-deployment tokens in a package file's TEXT.
 
     Substitution happens on the way into the archive; the repository copy is
     never rewritten. That is the point — the id belongs to a deployment, not to
     the source tree, and a build must not leave the working copy dirty.
     """
-    if not bot_app_id:
-        return text
-    return text.replace(_PLACEHOLDER, bot_app_id)
+    if bot_app_id:
+        text = text.replace(_PLACEHOLDER, bot_app_id)
+    if oauth_config_id:
+        text = text.replace(_OAUTH_PLACEHOLDER, oauth_config_id)
+    return text
 
 
 def build(out_dir: Path, *, require_resolved: bool = False,
-          bot_app_id: str | None = None) -> Path:
-    """Build the package, substituting per-deployment tokens on the way in."""
+          bot_app_id: str | None = None, oauth_config_id: str | None = None,
+          copilot_only: bool = False) -> Path:
+    """Build the package, substituting per-deployment tokens on the way in.
+
+    ``copilot_only`` leaves the Teams notification bot out of the ARCHIVE. The
+    repository manifest keeps it, so the bot ships later by building without the
+    flag; nothing about the source tree changes.
+    """
+    if copilot_only and bot_app_id:
+        raise SystemExit("--copilot-only leaves the bot out, so --bot-app-id "
+                         "has nothing to apply to")
     rendered: dict[str, str] = {}
     for name in PACKAGE_FILES:
         path = HERE / name
         if not path.exists():
             raise SystemExit(f"missing package file: {path}")
-        text = substitute(path.read_text(encoding="utf-8"), bot_app_id)
-        rendered[name] = text
+        text = substitute(path.read_text(encoding="utf-8"), bot_app_id,
+                          oauth_config_id)
         if name.endswith(".json"):
             data = json.loads(text)  # bad JSON → fail fast
             if name == "manifest.json":
+                if copilot_only:
+                    data.pop("bots", None)
+                    text = json.dumps(data, indent=2) + "\n"
                 # Validated AFTER substitution, so --require-resolved checks
                 # what will actually ship rather than what is in the repository.
-                _validate_manifest(data, require_resolved=require_resolved)
+                _validate_manifest(data, require_resolved=require_resolved,
+                                   copilot_only=copilot_only)
+        rendered[name] = text
+
+    if require_resolved:
+        # EVERY file, not only the manifest: an unresolved plugin OAuth id
+        # installs cleanly and then fails the first sign-in.
+        for name, text in rendered.items():
+            leftover = re.findall(r"\$\{\{[A-Z0-9_]+\}\}", text)
+            if leftover:
+                raise SystemExit(
+                    f"{leftover[0]} is unresolved in {name}. Supply it (see "
+                    f"--help) before building a release package.")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_path = out_dir / "trakt-copilot-agent.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for name in PACKAGE_FILES:
             zf.writestr(name, rendered[name])
-        zf.writestr("color.png", _png(192, 192, (*ACCENT_RGB, 255)))
-        zf.writestr("outline.png", _png(32, 32, (255, 255, 255, 255)))
+        for icon, placeholder in (
+                ("color.png", _png(192, 192, (*ACCENT_RGB, 255))),
+                ("outline.png", _png(32, 32, (255, 255, 255, 255)))):
+            # The committed icons (see make_icons.py) when present; the
+            # generated solid squares only as a fallback for a bare checkout.
+            real = HERE / icon
+            zf.writestr(icon, real.read_bytes() if real.exists() else placeholder)
     return zip_path
 
 
@@ -189,10 +257,22 @@ def main(argv: list[str] | None = None) -> int:
                          f"substituted into the packaged manifest. Falls back "
                          f"to ${BOT_APP_ID_ENV}. The repository copy of "
                          f"manifest.json is never rewritten.")
+    ap.add_argument("--oauth-config-id", default=None,
+                    help=f"The Copilot plugin's OAuth registration id from the "
+                         f"Teams developer portal, substituted into "
+                         f"ai-plugin.json. Falls back to ${OAUTH_CONFIG_ID_ENV}.")
+    ap.add_argument("--copilot-only", action="store_true",
+                    help="leave the Teams notification bot out of the package "
+                         "(the repository manifest is not changed)")
     args = ap.parse_args(argv)
-    bot_app_id = resolve_bot_app_id(args.bot_app_id)
+    if args.copilot_only and args.bot_app_id:
+        raise SystemExit("--copilot-only leaves the bot out, so --bot-app-id "
+                         "has nothing to apply to")
+    bot_app_id = None if args.copilot_only else resolve_bot_app_id(args.bot_app_id)
+    oauth_config_id = resolve_oauth_config_id(args.oauth_config_id)
     zip_path = build(Path(args.out), require_resolved=args.require_resolved,
-                     bot_app_id=bot_app_id)
+                     bot_app_id=bot_app_id, oauth_config_id=oauth_config_id,
+                     copilot_only=args.copilot_only)
     print(f"wrote {zip_path}")
     if bot_app_id:
         # The bot app id is public (it ships inside the manifest), so echoing it

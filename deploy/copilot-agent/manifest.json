@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
   "manifestVersion": "1.19",
-  "version": "3.0.0",
+  "version": "3.0.2",
   "id": "89c9db43-8ae0-45f6-800f-df9e8fb20dda",
   "developer": {
     "name": "Trakt",
-    "websiteUrl": "https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net",
-    "privacyUrl": "https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net",
-    "termsOfUseUrl": "https://trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net"
+    "websiteUrl": "https://www.traktinfra.io/",
+    "privacyUrl": "https://www.traktinfra.io/",
+    "termsOfUseUrl": "https://www.traktinfra.io/"
   },
   "name": {
     "short": "Trakt",
@@ -43,6 +43,6 @@
     }
   ],
   "validDomains": [
-    "trakt-mi-api-copilot-test-cbazffbzdxf8h8cr.westeurope-01.azurewebsites.net"
+    "trakt-mi-api.azurewebsites.net"
   ]
 }

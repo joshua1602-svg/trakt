@@ -99,6 +99,11 @@
     "value": "https://trakt-mi-api.azurewebsites.net"
   },
   {
+    "_comment": "Where a Copilot answer's 'Open in Trakt Workspace' link lands: the production user workspace. Unset, no link is produced (classification still runs).",
+    "name": "TRAKT_COPILOT_WORKSPACE_BASE_URL",
+    "value": "https://app.traktinfra.io"
+  },
+  {
     "_comment": "Entra directory GUIDs the DASHBOARD accepts tokens from, comma-separated. REQUIRED for 'both'/'bearer' unless config/organisations.yaml lists them: with no directory on the allow-list every bearer request answers 503, whatever the audience says.",
     "name": "TRAKT_MI_ENTRA_TENANT_ID",
     "value": "<home-directory-guid>,<external-org-directory-guid>"

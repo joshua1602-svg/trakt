@@ -23,6 +23,11 @@ python deploy/copilot-agent/package_agent.py
 
 # Release build — insists every token has already been substituted:
 python deploy/copilot-agent/package_agent.py --require-resolved
+
+# Copilot only — leave the notification bot out of the archive (the repository
+# manifest keeps it). Needs only the plugin's OAuth registration id:
+python deploy/copilot-agent/package_agent.py --copilot-only --require-resolved \
+    --oauth-config-id <registration id from the Teams developer portal>
 ```
 
 The build always fails if the declarative agent is missing, the bot is missing,
@@ -132,3 +137,70 @@ Teams channels, group chats, email, SMS, self-service subscriptions,
 interactive mitigation actions, Graph-based mass installation, editing a
 delivered card on correction (a clearly labelled correction message is sent
 instead), and any message type beyond the two required ones.
+
+---
+
+## Production prerequisites (learned on the first client go-live)
+
+These are **Azure / Entra settings that live outside the repository**. A new
+environment, or a rebuilt `trakt-mi-api`, needs every one of them or Copilot
+fails in ways that look like application errors.
+
+1. **Exempt the Copilot paths from App Service platform authentication.**
+   `trakt-mi-api` runs Easy Auth with *Require authentication → HTTP 401*. That
+   layer rejects Copilot's call before Trakt sees it (an **empty-body 401** with
+   `WWW-Authenticate: Bearer realm=…` and no application log line), because
+   Copilot's token is for the Trakt Copilot API app, not the dashboard app. The
+   Copilot routes validate their own bearer token, so only these paths are
+   exempted and everything else stays protected:
+
+   ```bash
+   SUB=$(az account show --query id -o tsv)
+   URL="/subscriptions/$SUB/resourceGroups/<rg>/providers/Microsoft.Web/sites/trakt-mi-api/config/authsettingsV2?api-version=2022-03-01"
+   az rest --method get --url "$URL" > auth-backup.json          # keep this
+   jq '{properties: .properties} | .properties.globalValidation.excludedPaths =
+       ["/v1/copilot/mi/query","/v1/copilot/artifacts/latest","/v1/copilot/artifacts/download"]' \
+       auth-backup.json > auth-new.json
+   az rest --method put --url "$URL" --body @auth-new.json
+   ```
+
+   Saving restarts the app. **Verify:** an unauthenticated
+   `curl -i -X POST https://<host>/v1/copilot/mi/query …` must answer with
+   `Server: uvicorn` and a **JSON** 401 (`A bearer token is required.`). An empty
+   401 means the platform layer is still blocking it. Never switch platform
+   authentication off or to "allow anonymous": the dashboard relies on it.
+
+2. **App settings** on `trakt-mi-api` (see `deploy/trakt-mi-api/app_settings.example.json`):
+   `TRAKT_COPILOT_AUTH_MODE=entra`, `TRAKT_COPILOT_ENTRA_AUDIENCE` (the bare app
+   id **and** `api://<app-id>`), `TRAKT_COPILOT_REQUIRED_SCOPE=Trakt.Copilot`,
+   `TRAKT_COPILOT_DOWNLOAD_SIGNING_KEY` (generate a fresh one),
+   `TRAKT_COPILOT_PUBLIC_BASE_URL`, `TRAKT_COPILOT_WORKSPACE_BASE_URL`, and the
+   client's directory in `TRAKT_COPILOT_ENTRA_TENANT_ID` (shared with the
+   dashboard allow-list). **Never** set `TRAKT_COPILOT_AUTH_MODE=disabled` in
+   production; to switch Copilot off quickly, clear
+   `TRAKT_COPILOT_ENTRA_AUDIENCE` (the routes answer 503; the dashboard is
+   unaffected).
+
+3. **Teams developer portal → OAuth client registration**: client id = the
+   Trakt Copilot API app, scope `api://<app-id>/Trakt.Copilot`,
+   authorization/token/refresh endpoints on `/common/oauth2/v2.0/…`, PKCE off,
+   *request body parameters*. Add the redirect URL the portal shows to the
+   Entra app. The registration id goes in at **build** time
+   (`package_agent.py --oauth-config-id`), never into the repository.
+
+4. **Consent.** The `Trakt.Copilot` scope is *admins only*. The first sign-in in a
+   tenant must be approved by an administrator ("consent on behalf of the
+   organisation"). Note the portal does not offer an app's own API under
+   *API permissions → My APIs*, so a static consent link may not cover it.
+
+5. **Publishing.** An organisation catalogue that already holds a version will
+   not accept a changed package under the same version: bump `version` (manifest,
+   OpenAPI `info.version` and header default, `copilot_package.py`) every time.
+   Installation by admin may be unavailable for an agent-only app; users add it
+   from the agent store ("Built by your org").
+
+**Diagnosing a Copilot failure:** open `trakt-mi-api → Monitoring → Log stream`
+and ask the question. No `POST /v1/copilot/mi/query` line means the call never
+reached Trakt (platform authentication, or the Teams OAuth sign-in); a line with
+401/403/503 means Trakt answered, and the status says why. In Copilot, `-developer on`
+shows the raw request and response of each plugin call.

@@ -186,6 +186,65 @@ def test_mi_unauthenticated_request_refused(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# askTraktMi as a read-only GET (the form the Copilot package calls: Copilot
+# confirms every non-GET plugin call, and a question changes nothing)
+# --------------------------------------------------------------------------- #
+QUESTION = "What is the total current balance?"
+
+
+def test_get_form_answers_exactly_as_the_post_form(live_dataset):
+    posted = client.post("/v1/copilot/mi/query", json={"question": QUESTION})
+    got = client.get("/v1/copilot/mi/query", params={"question": QUESTION})
+    assert got.status_code == 200
+    a, b = posted.json(), got.json()
+    assert b["ok"] is True, b
+    # The request ids / timings differ per call; the analytical answer must not.
+    for key in ("answer", "dataSourceKind", "classification", "selectedClient",
+                "reportingDate", "supportingValues"):
+        assert a[key] == b[key], key
+
+
+def test_get_form_is_never_cacheable(live_dataset):
+    r = client.get("/v1/copilot/mi/query", params={"question": QUESTION})
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_get_form_error_responses_are_never_cacheable(synthetic_dataset,
+                                                      monkeypatch):
+    # Production refuses the synthetic fallback: a controlled error, which must
+    # carry the same no-store header as a successful answer.
+    monkeypatch.setenv("TRAKT_RUNTIME_MODE", "production")
+    data_source.reset_cache()
+    r = client.get("/v1/copilot/mi/query", params={"question": QUESTION})
+    assert r.status_code == 503
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_get_form_requires_a_question(copilot_auth_off):
+    assert client.get("/v1/copilot/mi/query").status_code == 422
+    assert client.get("/v1/copilot/mi/query",
+                      params={"question": ""}).status_code == 422
+    assert client.get("/v1/copilot/mi/query",
+                      params={"question": "x" * 2001}).status_code == 422
+
+
+def test_get_form_is_refused_without_a_token(monkeypatch):
+    for var in ("TRAKT_COPILOT_AUTH_MODE", "TRAKT_COPILOT_ENTRA_TENANT_ID",
+                "TRAKT_COPILOT_ENTRA_AUDIENCE"):
+        monkeypatch.delenv(var, raising=False)
+    assert client.get("/v1/copilot/mi/query",
+                      params={"question": QUESTION}).status_code == 503
+    monkeypatch.setenv("TRAKT_COPILOT_ENTRA_TENANT_ID",
+                       "00000000-0000-0000-0000-000000000000")
+    monkeypatch.setenv("TRAKT_COPILOT_ENTRA_AUDIENCE", "api://trakt-test")
+    assert client.get("/v1/copilot/mi/query",
+                      params={"question": QUESTION}).status_code == 401
+    assert client.get("/v1/copilot/mi/query", params={"question": QUESTION},
+                      headers={"Authorization": "Bearer not-a-jwt"}
+                      ).status_code == 401
+
+
+# --------------------------------------------------------------------------- #
 # getArtifact — investor_deck (behaviour-preserving migration) + unknown type
 # --------------------------------------------------------------------------- #
 def _get_artifact(artifact_type: str):
