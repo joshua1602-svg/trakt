@@ -146,6 +146,12 @@ _MIGRATION_SUBJECT = "change_form"
 #: be recorded, and re-compiling the RECORDED payload with its base set to
 #: `forecast` must give the same plan — proving the base is the only thing that
 #: moved.
+#: Design §40: a distribution of one figure over groupings is a breakdown
+#: (normalisation 7). "Plot portfolio balance across LTV buckets and
+#: borrower-age buckets" was recorded as a two-way `distribution`; it is the
+#: two-way breakdown, and only that note may move it.
+_MIGRATED_BY_GROUPED_DISTRIBUTION = frozenset({"Q12C"})
+
 _MIGRATED_BY_DERIVED_POPULATION = frozenset({"Q23C", "Q24B", "NL2A", "NL4A",
                                              "NL4C"})
 
@@ -210,6 +216,19 @@ def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
                 migrated[question_id] = (was[0], now[0])
             continue
 
+        if question_id in _MIGRATED_BY_GROUPED_DISTRIBUTION:
+            applied = (plan.provenance.compiler_bindings["normalisation"]
+                       ["applied"] if plan is not None else ())
+            if (was[0] != "PLAN" or now[0] != "PLAN"
+                    or plan.to_dict()["operation"] != "breakdown"
+                    or not any(a.startswith("grouped_figure: operation "
+                                            "'distribution'") for a in applied)):
+                unexpected.append((question_id, "moved, but not only by "
+                                                "rule 7", was, now))
+            else:
+                migrated[question_id] = (was[0], now[0])
+            continue
+
         if question_id in _MIGRATED_BY_OVER_TIME:
             period = plan.to_dict()["period"] if plan is not None else {}
             if (was[0] != OUTCOME_CLARIFY or now[0] != "PLAN"
@@ -243,7 +262,8 @@ def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
 
     assert unexpected == [], f"UNEXPECTED_MOVES: {unexpected}"
     authorised = (set(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS)
-                  | _MIGRATED_BY_DERIVED_POPULATION | _MIGRATED_BY_OVER_TIME)
+                  | _MIGRATED_BY_DERIVED_POPULATION | _MIGRATED_BY_OVER_TIME
+                  | _MIGRATED_BY_GROUPED_DISTRIBUTION)
     assert set(migrated) == authorised, (
         f"expected {sorted(authorised)}, migrated {sorted(migrated)}")
 

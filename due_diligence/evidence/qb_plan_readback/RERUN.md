@@ -700,3 +700,18 @@ intents added beside the baseline's.
     2026-10-02  11:55 UTC e9602062 deployed (run 37003419282, success):
                 Claude Opus 5.5 as the candidate model view (§40). Next:
                 `run_production_bank.sh <principal> signoff` on it
+    2026-10-02  12:13:49 UTC SIGN-OFF RUN on the Claude Opus 5.5 candidate
+                (e9602062), read while running (170 of 216) and read back
+                (run 37008933483, 201 readings): must-answer 88/88 answered,
+                86 identically; median 8.7s (baseline 8.9s). NOT PROMOTABLE:
+                "Compare October and November pipeline amount" and "Show
+                pipeline growth from October to November" answered for August
+                and September (relative_pair labelled ["October",
+                "November"]; three held-out variants the same — five readings,
+                wrong); "How is the balance spread across LTV bands?" declined
+                (distribution over the band). Fixed as contract rules (design
+                §40.1): the compiler binds named months a relative form's
+                labels name, by the governed label reader; a grouped
+                distribution is a breakdown. Replay of the 201 recorded
+                readings: 195 identical plans, exactly the six change. Next:
+                deploy, sign-off again on the candidate

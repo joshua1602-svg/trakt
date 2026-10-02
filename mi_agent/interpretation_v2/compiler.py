@@ -133,6 +133,41 @@ _DEFAULT_GEOGRAPHY_BASIS = "reporting_taxonomy"
 #: architecture exists to stop.
 _BASIS_REQUIRED_LEVELS = frozenset({"nuts3", "itl3"})
 
+#: NAMED PERIODS ARE NOT A RELATIVE PERIOD (design §40). The Claude Opus 5.5
+#: sign-off run read "Compare October and November pipeline amount" as
+#: `relative_pair` with labels ["October", "November"]: the form said "the
+#: latest month and the one before", the labels named two months, and the
+#: runtime resolved the form — August and September — so the answer was for
+#: months nobody asked about, silently. Five readings of the run did it.
+#:
+#: The labels are the reading's own slot content, not the question: they are
+#: read here by the one governed label reader the runtimes share
+#: (`mi_agent.period_labels`, no regular expressions), exactly as an explicit
+#: period's labels are read when it is served. When EVERY label names a month,
+#: the reading is those months — `explicit_period` with the same labels — and
+#: the plan says so in its notes. When only SOME do, the form and the labels
+#: disagree, and the plan is refused as ambiguous rather than guessed.
+_RELATIVE_FORMS = frozenset({"relative_pair", "previous_reporting_period"})
+
+
+def _months_named(labels: Sequence[str]) -> List[str]:
+    from mi_agent.period_labels import parse_anchor
+    return [str(l) for l in labels or () if parse_anchor(l) is not None]
+
+
+def _named_periods(intent: CandidateIntent) -> Tuple[CandidateIntent, str]:
+    """`(intent, note)`: a relative form whose every label names a month,
+    read as those months; otherwise the intent unchanged and no note."""
+    time = intent.time
+    if (time.form not in _RELATIVE_FORMS or not time.labels
+            or len(_months_named(time.labels)) != len(time.labels)):
+        return intent, ""
+    named = replace(time, form="explicit_period", periods_back=None)
+    return (replace(intent, time=named),
+            f"named periods: {time.form} -> explicit_period (the labels "
+            f"{list(time.labels)} name months, which a relative form cannot)")
+
+
 #: Semantic time form -> the governed period contract that resolves it, and
 #: whether this package can consider it settled without touching a book.
 _PERIOD_CONTRACT: Mapping[str, Tuple[str, bool]] = {
@@ -404,6 +439,9 @@ class DeterministicCompiler:
         intent = normalisation.intent
         notes.extend(f"normalised [{NORMAL_FORM_VERSION}]: {applied}"
                      for applied in normalisation.applied)
+        intent, named_note = _named_periods(intent)
+        if named_note:
+            notes.append(named_note)
 
         # A. VALIDATE ------------------------------------------------------- #
         reasons.extend(self._validate(intent))
@@ -732,6 +770,15 @@ class DeterministicCompiler:
             reasons.append(CompileReason(
                 PERIOD_UNRESOLVED, "time.labels",
                 "an explicit period was claimed but no period was named"))
+        # A relative form whose labels name SOME months (all of them is
+        # `_named_periods`'): the form and the labels disagree about which
+        # periods are meant, and choosing would be a guess (§40).
+        named = _months_named(time.labels)
+        if time.form in _RELATIVE_FORMS and named:
+            reasons.append(CompileReason(
+                AMBIGUOUS_PERIOD, "time.labels",
+                f"a {time.form} names the months {named} beside relative "
+                f"periods; which periods are meant is not stated"))
         # D20 (owner decision 2026-09-30): a SERIES stating no span, grain or
         # count — "over time", "the trend" — is every reporting date the owner
         # holds, at the owner's own cadence; the answer states the first and

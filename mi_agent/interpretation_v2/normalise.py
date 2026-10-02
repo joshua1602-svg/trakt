@@ -62,12 +62,14 @@ __all__ = ["NORMAL_FORM_VERSION", "PAIR_IMPLYING_OPERATIONS",
            "CANONICAL_PAIR_FORM", "CANONICAL_PAIR_PERIODS_BACK", "BOUNDED",
            "DERIVED_POPULATION_OF", "DERIVED_POPULATION_SPELLINGS",
            "SINGLE_FIGURE_OPERATION", "GROUPED_FIGURE_OPERATION",
+           "GROUPED_SPELLINGS",
            "LABELS_ARE_WORDING_ONLY", "identity_labels",
            "NormalisationResult", "canonical_intent"]
 
 #: The normal form's own version, separate from the intent schema version: the
-#: schema did not change, the canonicalisation of it is new.
-NORMAL_FORM_VERSION = "candidate_intent_normal_form/1.1"
+#: schema did not change, the canonicalisation of it is new. 1.2 (design §40):
+#: a grouped distribution is a breakdown (rule 7).
+NORMAL_FORM_VERSION = "candidate_intent_normal_form/1.2"
 
 # --------------------------------------------------------------------------- #
 # 1. period labels
@@ -202,8 +204,15 @@ DERIVED_POPULATION_SPELLINGS: frozenset = frozenset({"funded"})
 #: that member's row. A ranking is not inferred: "which stage completes first"
 #: needs an order the reading did not state, and inventing one would be adding
 #: meaning.
+#:
+#: A GROUPED DISTRIBUTION IS THE SAME REQUEST (design §40). "How is the
+#: balance spread across LTV bands?" arrived as `distribution` of the balance
+#: over the LTV band — one figure per band, which is a breakdown — and was
+#: refused by a runtime that serves the breakdown. A distribution with no
+#: grouping (the spread of one figure's own values) is not touched.
 SINGLE_FIGURE_OPERATION = "point_in_time"
 GROUPED_FIGURE_OPERATION = "breakdown"
+GROUPED_SPELLINGS: frozenset = frozenset({SINGLE_FIGURE_OPERATION, "distribution"})
 
 
 def _every_output_groups(intent: CandidateIntent) -> bool:
@@ -437,12 +446,12 @@ def canonical_intent(intent: CandidateIntent,
     # LAST, because rules 3-4 can set the capability, and whether the owner
     # produces a breakdown is this rule's condition. STRUCTURED SLOTS ONLY: the
     # operation, the groupings and the capability's own operation set.
-    if (intent.operation == SINGLE_FIGURE_OPERATION
+    if (intent.operation in GROUPED_SPELLINGS
             and _every_output_groups(intent)):
         supported = (capability_operations or {}).get(intent.capability)
         if supported is None or GROUPED_FIGURE_OPERATION in supported:
             applied.append(
-                f"grouped_figure: operation {SINGLE_FIGURE_OPERATION!r} -> "
+                f"grouped_figure: operation {intent.operation!r} -> "
                 f"{GROUPED_FIGURE_OPERATION!r} (every output is grouped, so "
                 f"the answer is one figure per member)")
             intent = replace(intent, operation=GROUPED_FIGURE_OPERATION)

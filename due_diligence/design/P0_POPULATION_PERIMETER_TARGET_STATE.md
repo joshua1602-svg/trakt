@@ -2759,3 +2759,52 @@ does the candidate become the baseline. Otherwise it is withdrawn and the
 interpreter stays on Claude Opus 5, which is supported. The conversation bank
 (§39) is then run on Claude Opus 5.5 — not first on Claude Opus 5, whose
 readings would all need repeating.
+
+### 40.1 The sign-off run on the candidate, and two contract gaps it found (2026-10-02)
+
+12:13 UTC on e9602062 (RERUN.md). Read while still running: the 135 bank
+questions and the first 35 held-out variants, with the read-back (run
+37008933483) giving every reading the run recorded. Against the Claude Opus 5
+baseline:
+
+    MUST ANSWER        88/88 answered, 86 identically
+    SPEED              median 8.7s a question (baseline 8.9s); the model step
+                       5.5s (5.7s) — effort `low` costs no time
+    WRONG              "Compare October and November pipeline amount" and
+                       "Show pipeline growth from October to November" answered
+                       for August and September (£949.8m to £969.8m, where the
+                       named months are £261.8m to £373.8m); three held-out
+                       variants of them the same — five readings
+    LOST               "How is the balance spread across LTV bands?" declined
+    FINE / NICE        two fine-to-decline questions now asked back rather than
+                       answered; one nice-to-have asked back rather than declined
+
+Not promotable as it stood. Both faults are contract gaps the new model's
+readings walked through, not model faults to tune around, and both are closed
+for any wording and any model:
+
+    NAMED PERIODS      The readings were `relative_pair` with labels ["October",
+               "November"]: a relative form whose labels name months. The
+               runtime resolved the form and ignored the labels. The compiler
+               now reads the labels with the governed label reader the runtimes
+               share (`mi_agent.period_labels`, no regular expressions — the
+               labels are the reading's slot content, never the question): when
+               every label names a month the plan binds the named months
+               (`explicit_period`), noted in its provenance; when only some do,
+               it is refused as ambiguous rather than guessed. Not in
+               normalisation, which by rule derives nothing from wording.
+    GROUPED DISTRIBUTION  `distribution` of one figure over a grouping is one
+               figure per member — a breakdown (normalisation 7, as a grouped
+               `point_in_time` already was). An ungrouped distribution is not
+               touched.
+
+Proved offline on what Claude Opus 5.5 actually recorded: of the 201 readings
+the read-back holds, 195 compile to byte-identical plans and exactly the six
+above change — the five to the named months (the plans the Claude Opus 5
+baseline answered with £261.8m to £373.8m) and the LTV bands to the breakdown.
+One historical reading moves too (Q12C, "balance across LTV buckets and
+borrower-age buckets", a two-way distribution, now the two-way breakdown),
+recorded as an authorised migration. The model's view is unchanged by this
+(the compiler is not part of it): the candidate stays 2affd8d9. Next: deploy,
+and the sign-off set again on the candidate; promote only on 88/88 and no
+wrong answer.

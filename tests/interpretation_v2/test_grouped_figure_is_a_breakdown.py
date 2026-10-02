@@ -99,8 +99,17 @@ def test_a_capability_that_makes_no_breakdown_keeps_its_refusal():
     assert _normalise(intent).intent.operation == "point_in_time"
 
 
-@pytest.mark.parametrize("operation", ["breakdown", "rank", "distribution",
-                                       "compare"])
+def test_a_grouped_distribution_is_a_breakdown_too():
+    """Design §40: "how is the balance spread across LTV bands" — a
+    distribution of one figure over a grouping is one figure per member."""
+    result = _normalise(_intent(operation="distribution",
+                                dimensions=["property_region"]))
+    assert result.intent.operation == "breakdown"
+    assert any("grouped_figure: operation 'distribution'" in a
+               for a in result.applied)
+
+
+@pytest.mark.parametrize("operation", ["breakdown", "rank", "compare"])
 def test_no_other_operation_is_rewritten(operation):
     result = _normalise(_intent(operation=operation,
                                 dimensions=["property_region"]))
