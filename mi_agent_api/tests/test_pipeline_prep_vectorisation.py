@@ -33,6 +33,12 @@ from mi_agent_api.pipeline_prep import (
 
 STAGE_PROBS = {"KFI": 0.20, "APPLICATION": 0.50, "OFFER": 0.80, "COMPLETED": 1.0}
 HISTORICAL = {"KFI": 0.31, "OFFER": 0.77}
+#: Validity windows the history MEASURED for the weighted stages (D21: a stage
+#: with no measured window is undetermined, so the rate tiers are reached only
+#: through one). No run-off hazards, so the run-off tier is not reached.
+MEASURED_WINDOWS = {"available": False, "stages": {
+    "APPLICATION": {"windowDays": 28, "windowBasis": "measured"},
+    "OFFER": {"windowDays": 126, "windowBasis": "measured"}}}
 
 
 class TestProbabilityHierarchy(unittest.TestCase):
@@ -49,11 +55,13 @@ class TestProbabilityHierarchy(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def _run(self, stages, explicit=None, historical=HISTORICAL, configured=STAGE_PROBS):
+    def _run(self, stages, explicit=None, historical=HISTORICAL, configured=STAGE_PROBS,
+             runoff=MEASURED_WINDOWS):
         out = pd.DataFrame({"pipeline_stage": stages})
         if explicit is not None:
             out["completion_probability"] = explicit
-        _derive_probabilities_and_amounts(out, configured, historical, [])
+        _derive_probabilities_and_amounts(out, configured, historical, [],
+                                          runoff=runoff)
         return out["completion_probability"], out["completion_probability_source"]
 
     def test_row_level_wins_over_every_other_tier(self):
@@ -71,10 +79,19 @@ class TestProbabilityHierarchy(unittest.TestCase):
         self.assertEqual(src.iloc[0], "historical_stage_rate")
         self.assertEqual(prob.iloc[0], 0.31)
 
-    def test_configured_used_when_no_historical_rate(self):
+    def test_no_measured_rate_is_undetermined_not_configured(self):
+        """D21: a weighted stage the history cannot rate carries no
+        probability — the configured 0.50 never stands in."""
         prob, src = self._run(["APPLICATION"])
-        self.assertEqual(src.iloc[0], "configured_stage_rate")
-        self.assertEqual(prob.iloc[0], 0.50)
+        self.assertEqual(src.iloc[0], "insufficient_history_application")
+        self.assertTrue(pd.isna(prob.iloc[0]))
+
+    def test_no_measured_window_is_undetermined(self):
+        """D21: whether a case has lapsed needs its stage's measured window;
+        without one it is neither weighted nor lapsed, whatever the rate."""
+        prob, src = self._run(["OFFER"], runoff={"available": False, "stages": {}})
+        self.assertEqual(src.iloc[0], "insufficient_history_offer_window")
+        self.assertTrue(pd.isna(prob.iloc[0]))
 
     def test_unknown_stage_is_missing_stage(self):
         for token in ("UNKNOWN", "", "nan", "None"):
@@ -126,7 +143,8 @@ class TestForecastStages(unittest.TestCase):
     def test_a_kfi_is_not_forecast(self):
         out = pd.DataFrame({"pipeline_stage": ["KFI", "OFFER", "WITHDRAWN"],
                             "current_outstanding_balance": [100.0, 200.0, 300.0]})
-        _derive_probabilities_and_amounts(out, STAGE_PROBS, HISTORICAL, [])
+        _derive_probabilities_and_amounts(out, STAGE_PROBS, HISTORICAL, [],
+                                          runoff=MEASURED_WINDOWS)
         src = list(out["completion_probability_source"])
         self.assertEqual(src, ["not_forecast_kfi", "historical_stage_rate",
                                "excluded_withdrawn"])

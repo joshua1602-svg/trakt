@@ -50,6 +50,7 @@ from . import platform_snapshots_blob as platform_blob_mod
 from . import pipeline_contract as pipeline_mod
 from . import pipeline_history
 from . import forecast_bridge as forecast_mod
+from . import forecast_view as forecast_view_mod
 from . import workspace as workspace_mod
 from . import evolution as evolution_mod
 from . import chat_routing as chat_routing_mod
@@ -429,6 +430,12 @@ class QueryRequest(BaseModel):
     # id ("direct_001" / "acquired_001"). Acts as the default scope; a portfolio
     # named in the question overrides it. Realised as a provenance filter.
     sourcePortfolioLens: Optional[str] = None
+    # §34, §38, §39. The continuation the agent's last answer or ask-back
+    # handed back, sent with the next message, and the chat it belongs to (the
+    # client starts a new id when the chat is cleared). Untrusted: verified by
+    # the service, ignored when the conversation is switched off.
+    continuation: Optional[str] = Field(None, max_length=16384)
+    conversationId: Optional[str] = Field(None, max_length=128)
 
 
 @app.get("/")
@@ -953,26 +960,13 @@ def forecast_snapshot(portfolioId: Optional[str] = None,
                            client_id, run_id, exc)
             pipeline_df = pipeline_report = pipeline_snap = None
 
-    envelope = forecast_mod.compute_forecast_bridge(
+    # THE TAB'S FIGURES, from the one function the agent's forecast runtime
+    # also calls (P0 design §16.2): bridge, breakdowns, basis and lineage.
+    envelope = forecast_view_mod.compose_forecast_view(
         client_id=client_id, run_id=run_id, funded_reporting_date=funded_reporting_date,
         funded_df=funded_df, pipeline_df=pipeline_df,
         pipeline_report=pipeline_report, pipeline_snapshot=pipeline_snap,
         pipeline_source=source)
-    # Forecast-by-dimension breakdowns (funded actual + weighted pipeline), derived
-    # by aggregate composition — never a row merge.
-    envelope["forecastBreakdowns"] = workspace_mod.forecast_breakdowns(funded_df, pipeline_df)
-    basis = (pipeline_report or {}).get("completion_probability_basis")
-    evidence = pipeline_history.historical_model_evidence(
-        (pipeline_report or {}).get("historical_completion_model"), basis)
-    envelope["historicalModelEvidence"] = evidence
-    envelope["completionProbabilityBasis"] = basis
-    envelope["lineage"] = workspace_mod.lineage_for(
-        "forecast", funded_reporting_date=funded_reporting_date,
-        pipeline_as_of_date=(source or {}).get("pipeline_as_of_date"),
-        pipeline_source_folder_date=(source or {}).get("pipeline_source_folder_date"),
-        current_pipeline_snapshot_date=(source or {}).get("current_pipeline_snapshot_date"),
-        current_pipeline_source_file=(source or {}).get("current_pipeline_source_file"),
-        completion_probability_basis=basis, historical_model_evidence=evidence)
     # Both anchors + non-blocking timing disclosure (funded actuals vs latest
     # pipeline). The forecast bridge composes funded actuals with the LATEST
     # pipeline; when the pipeline extract is later than the funded cut we disclose
@@ -2124,6 +2118,8 @@ def query(req: QueryRequest, request: Request) -> Any:
             dataset_context=req.datasetContext,
             context=req.context,
             source_portfolio_lens=req.sourcePortfolioLens,
+            continuation=req.continuation,
+            conversation_id=req.conversationId,
         ),
         context,
     )

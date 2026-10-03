@@ -1,0 +1,271 @@
+# CONVERSATION BANK, HELD-OUT SET (P0 design §39.1, D24, D25). Written
+# 2026-10-02, before any run of it, and kept apart from
+# conversation_bank_20261001.yaml, which the reader's rules were drawn from
+# (the 14:49 run, §39.1). No rule or definition is changed against a row of
+# this file: it shows whether the reader's reading conventions hold for
+# wording they were not drawn from. A finding fixed against it spends it, as
+# for every bank.
+#
+# 21 conversations, 24 follow-ups, group H. The same patterns as the first
+# set — a grouping switched (with "and", "what about", or alone), a grouping
+# added in words, a figure or statistic swapped, a value narrowed to and then
+# taken back, a window changed and then taken back, a governed phrase kept in
+# the user's words, a ranking, a scenario, a date, a complete question that
+# must not carry, a judgement or a borrower's identity declined, and a
+# reference that cannot be told — in other words and on other groupings.
+#
+# Scored exactly as the first set (stand-alone twins; score_conversations.py),
+# and reported as its own group. The pass mark is the first set's (D25): no
+# wrong answer; the fresh and decline turns here pass as E and F turns must.
+#
+# Labels: as conversation_bank_20261001.yaml.
+version: 1
+client: ERE
+memory_minutes: 5
+conversations:
+
+- id: cv_H01
+  group: H
+  area: funded
+  turns:
+  - {question: "Show loan count by LTV bucket.", expect: answer, run: live, bank_id: funded_breakdown_1d_015}
+  - question: "And by borrower age bucket?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show loan count by borrower age bucket.", bank_id: funded_breakdown_1d_018}
+
+- id: cv_H02
+  group: H
+  area: pipeline
+  turns:
+  - {question: "Show pipeline amount by product.", expect: answer, run: live, bank_id: pipeline_020}
+  - question: "What about by region?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "What is the pipeline amount by region?", bank_id: pipeline_008}
+
+- id: cv_H03
+  group: H
+  area: funded
+  turns:
+  - {question: "Which region has the largest funded balance?", expect: answer, run: live}
+  - question: "And which broker?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Which broker has the largest funded balance?"}
+
+- id: cv_H04
+  group: H
+  area: funded
+  turns:
+  - {question: "Show balance by region.", expect: answer, run: live, bank_id: funded_breakdown_1d_001}
+  - question: "Split that further by LTV bucket."
+    expect: carry
+    run: live
+    change: breakdown
+    note: "Says in words that a grouping is added: both groupings are kept."
+    twin: {question: "Show balance by region and LTV bucket."}
+
+- id: cv_H05
+  group: H
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount by stage?", expect: answer, run: live, bank_id: pipeline_005}
+  - question: "Weighted amount instead?"
+    expect: carry
+    run: live
+    change: measure
+    twin: {question: "Show pipeline weighted expected amount by stage.", bank_id: pipeline_018}
+
+- id: cv_H06
+  group: H
+  area: forecast
+  turns:
+  - {question: "What is the current completion run rate?", expect: answer, run: live, bank_id: forecast_scale_006}
+  - question: "Over 4 weeks?"
+    expect: carry
+    run: live
+    change: window
+    twin: {question: "What is the 4-week completion run rate?"}
+  - question: "Go back to the normal window."
+    expect: carry
+    run: live
+    change: widen_back
+    twin: {question: "What is the current completion run rate?", bank_id: forecast_scale_006}
+
+- id: cv_H07
+  group: H
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline case count by stage?", expect: answer, run: live, bank_id: pipeline_006}
+  - question: "Only Offers."
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "How many pipeline cases are at Offer stage?"}
+  - question: "All stages again."
+    expect: carry
+    run: live
+    change: widen_back
+    twin: {question: "What is the pipeline case count by stage?", bank_id: pipeline_006}
+
+- id: cv_H08
+  group: H
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount by broker?", expect: answer, run: live, bank_id: pipeline_007}
+  - question: "How has that moved over time?"
+    expect: carry
+    run: live
+    change: date_series
+    note: "'Over time' is a governed phrase (D20): kept in the user's words, not asked about."
+    twin: {question: "Show pipeline by broker over time.", bank_id: pipeline_evolution_010}
+
+- id: cv_H09
+  group: H
+  area: pipeline
+  turns:
+  - {question: "What is the weighted expected funded amount?", expect: answer, run: live, bank_id: pipeline_003}
+  - question: "By the month each case should complete?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "What is the weighted expected funded amount by expected completion month?"}
+
+- id: cv_H10
+  group: H
+  area: funded
+  turns:
+  - {question: "Show loan count by region.", expect: answer, run: live, bank_id: funded_breakdown_1d_004}
+  - question: "Only the South West."
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "How many funded loans are in the South West?"}
+
+- id: cv_H11
+  group: H
+  area: funded
+  turns:
+  - {question: "Show WA LTV by broker.", expect: answer, run: live, bank_id: funded_breakdown_1d_012}
+  - question: "Which is highest?"
+    expect: carry
+    run: live
+    change: ranking
+    twin: {question: "Which broker has the highest WA LTV?"}
+
+- id: cv_H12
+  group: H
+  area: forecast
+  turns:
+  - {question: "What is the downside forecast?", expect: answer, run: live, bank_id: forecast_scale_010}
+  - question: "And the base case?"
+    expect: carry
+    run: live
+    change: scenario
+    twin: {question: "What is the base forecast?", bank_id: forecast_scale_011}
+
+- id: cv_H13
+  group: H
+  area: funded
+  turns:
+  - {question: "What is the average loan balance?", expect: answer, run: live, bank_id: funded_kpi_013}
+  - question: "And the largest?"
+    expect: carry
+    run: live
+    change: statistic
+    twin: {question: "What is the largest loan?", bank_id: funded_kpi_015}
+
+- id: cv_H14
+  group: H
+  area: pipeline
+  turns:
+  - {question: "Show pipeline amount by LTV bucket.", expect: answer, run: live, bank_id: pipeline_021}
+  - question: "How many cases in each?"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "What is the pipeline case count by LTV bucket?"}
+
+- id: cv_H15
+  group: H
+  area: funded
+  turns:
+  - {question: "What is the funded balance?", expect: answer, run: live, bank_id: funded_kpi_001}
+  - question: "And a month earlier?"
+    expect: carry
+    run: live
+    change: date
+    twin: {question: "What was the funded balance last month?"}
+
+- id: cv_H16
+  group: H
+  area: funded
+  turns:
+  - {question: "Show WA interest rate by region.", expect: answer, run: live, bank_id: funded_breakdown_1d_007}
+  - question: "Average borrower age instead."
+    expect: carry
+    run: live
+    change: measure
+    twin: {question: "Show average borrower age by region.", bank_id: funded_breakdown_1d_008}
+
+- id: cv_H17
+  group: H
+  area: switch
+  turns:
+  - {question: "Show balance by broker.", expect: answer, run: live, bank_id: funded_breakdown_1d_009}
+  - question: "What is the pipeline amount by stage?"
+    expect: fresh
+    run: live
+    note: "A complete question: inherits neither the funded book nor the broker grouping."
+    twin: {question: "What is the pipeline amount by stage?", bank_id: pipeline_005}
+
+- id: cv_H18
+  group: H
+  area: switch
+  turns:
+  - {question: "What is the forecast funded balance?", expect: answer, run: live, bank_id: forecast_001}
+  - question: "How many funded loans are there?"
+    expect: fresh
+    run: live
+    note: "A complete question: nothing of the forecast carries into it."
+    twin: {question: "How many funded loans are there?", bank_id: funded_kpi_004}
+  - question: "Per region, please."
+    expect: carry
+    run: live
+    change: breakdown
+    note: "Read against the complete question just answered, not the forecast before it."
+    twin: {question: "Show loan count by region.", bank_id: funded_breakdown_1d_004}
+
+- id: cv_H19
+  group: H
+  area: refuse
+  turns:
+  - {question: "What is the largest loan?", expect: answer, run: live, bank_id: funded_kpi_015}
+  - question: "Who is the borrower?"
+    expect: decline
+    run: live
+    note: "No borrower is identified and no row is shown: declined in words."
+
+- id: cv_H20
+  group: H
+  area: unclear
+  turns:
+  - {question: "Show balance by product type.", expect: answer, run: live, bank_id: funded_breakdown_1d_021}
+  - question: "What about the other two?"
+    expect: ask_back
+    run: live
+    note: "Nothing in the previous answer is 'the other two': which is meant cannot be told, so it is asked."
+
+- id: cv_H21
+  group: H
+  area: refuse
+  turns:
+  - {question: "What is the pipeline amount?", expect: answer, run: live, bank_id: pipeline_001}
+  - question: "Is that enough?"
+    expect: decline
+    run: live
+    note: "No governed benchmark for 'enough': declined in words, never a judgement or a figure invented."

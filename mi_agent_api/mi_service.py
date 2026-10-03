@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
@@ -66,16 +66,18 @@ from . import chat_routing as chat_routing_mod
 from . import currency as currency_mod
 from . import workspace as workspace_mod
 from .adapters import adapt_workflow_result
-from .dependencies import CapabilityDependencies, build_dependencies
+from .dependencies import (DEFAULT_CLIENT_ID, CapabilityDependencies,
+                           build_dependencies)
 
 logger = logging.getLogger("mi_agent_api.mi_service")
 
 #: Stable capability identifier. Part of the external contract.
 CAPABILITY = "mi.question.answer"
 
-#: Retained for callers that still import it. The tenant now comes from the
-#: ExecutionContext; this is only the historical portfolio-selector fallback.
-DEFAULT_CLIENT_ID = "client_001"
+#: `DEFAULT_CLIENT_ID` (imported above) is retained for callers that still
+#: import it from here. The tenant comes from the ExecutionContext; this is the
+#: portfolio-selector fallback, now defined once in `dependencies` beside the
+#: served tenant it belongs to (owner decision D19).
 
 
 # --------------------------------------------------------------------------- #
@@ -112,6 +114,17 @@ class MiQueryRequest:
     client_id: Optional[str] = None
     #: Channel-neutral execution options (reserved; no analytical effect).
     options: Dict[str, Any] = field(default_factory=dict)
+    #: §34, §38, §39. The continuation the agent's last answer or ask-back
+    #: handed the caller, returned with the next message — UNTRUSTED,
+    #: verified by `mi_agent.conversation.read` against the trusted principal
+    #: and the authorised book — and the caller's chat id (a new one when the
+    #: chat is cleared). Both None: a stand-alone question.
+    continuation: Optional[str] = None
+    conversation_id: Optional[str] = None
+    #: SET BY THIS SERVICE, NEVER BY A CALLER: what the conversation made of
+    #: this message (`plan_serving_canary.Turn`, §39). When it carried
+    #: anything, `question` above has been replaced by the complete question.
+    conversation_turn: Optional[Any] = None
 
     def effective_portfolio_id(self) -> Optional[str]:
         """The portfolio selector the analysis runs against.
@@ -257,6 +270,12 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
     if governed is not None:
         envelope["metadata"]["semanticCoverage"] = governed
         return
+    # A GOVERNED DECLINE (D18) answered nothing, so there is no coverage to
+    # measure, and the legacy sentence reader below is the old system it
+    # replaces. Absent, which reads as "not measured".
+    if str((envelope.get("metadata") or {}).get("parserMode") or "") \
+            == _GOVERNED_DECLINED_MODE:
+        return
     if semantics is None:
         return
     try:
@@ -276,6 +295,8 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
 
 #: The parser mode the slice 1 governed-plan serving path stamps on its answer.
 _GOVERNED_PLAN_MODE = "governed_plan"
+#: ... and on its decline (`mi_agent.plan_decline.DECLINED_MODE`, D18).
+_GOVERNED_DECLINED_MODE = "governed_plan_declined"
 
 
 def _values_agree(requested: Any, executed: Any) -> bool:
@@ -333,6 +354,41 @@ def _predicate_proved(requested: Mapping[str, Any],
     return False
 
 
+def _composed_plan_coverage(block: Mapping[str, Any]) -> Dict[str, Any]:
+    """A COMPOSED answer (several figures of one population, P1) is proved as
+    the conjunction of its parts: every part's own ledger, exactly as it would
+    be read had that figure been asked alone, and one entry per figure the plan
+    asked for, resolved only by a part that states that figure and is itself
+    fully accounted for. A figure no part carries is UNACCOUNTED and refuses."""
+    entries: List[Dict[str, Any]] = []
+    proved_figures = set()
+    for part in block.get("composed") or ():
+        if not isinstance(part, Mapping):
+            continue
+        ledger = _governed_plan_coverage(
+            {"metadata": {"parserMode": _GOVERNED_PLAN_MODE,
+                          "governedPlan": dict(part)}}) or {
+            "concepts": [], "unaccounted": [{"kind": "governed_plan:part"}]}
+        for entry in ledger.get("concepts") or ():
+            if entry not in entries:
+                entries.append(entry)
+        figure = str((part.get("requested") or {}).get("measure_concept") or "")
+        if figure and not ledger.get("unaccounted"):
+            proved_figures.add(figure)
+    for figure in ((block.get("requested") or {}).get("measure_concepts") or ()):
+        entries.append({
+            "kind": "governed_plan:figure", "field": "measure",
+            "value": str(figure), "term": str(figure),
+            "owner": "governed_plan + composed parts",
+            "disposition": (_coverage_resolved()
+                            if str(figure) in proved_figures
+                            else _coverage_missing()),
+        })
+    return {"version": 1, "concepts": entries,
+            "unaccounted": [e for e in entries
+                            if e["disposition"] == _coverage_missing()]}
+
+
 def _execution_receipts(executed: Mapping[str, Any]) -> List[Dict[str, Any]]:
     """Every deterministic receipt this answer rests on, as a list.
 
@@ -362,6 +418,26 @@ def _execution_receipts(executed: Mapping[str, Any]) -> List[Dict[str, Any]]:
     return [dict(executed)]
 
 
+def _geography_coverage(requested: Mapping[str, Any],
+                        receipts: Sequence[Mapping[str, Any]],
+                        owner: str) -> Optional[Dict[str, Any]]:
+    """A GEOGRAPHY GROUPING IS AN AXIS TOO. It travels on its own slot, not
+    among the dimensions, so it is proved here, on every receipt: "balance by
+    region" answered as a total, or by another geography, is unaccounted. (A
+    geography RESTRICTION is a predicate, and is proved with the others.)"""
+    geography = requested.get("geography") or {}
+    if not (isinstance(geography, Mapping) and geography.get("group_by")):
+        return None
+    axis = str(geography.get("canonical_field") or "")
+    grouped = bool(axis) and bool(receipts) and all(
+        axis in {str(k) for k in (receipt.get("group_field_keys") or ())}
+        for receipt in receipts)
+    return {"kind": "governed_plan:geography", "field": axis or "geography",
+            "value": axis, "term": "region", "owner": owner,
+            "disposition": (_coverage_resolved() if grouped
+                            else _coverage_missing())}
+
+
 def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The coverage ledger for a governed-plan answer, or None if this is legacy.
 
@@ -379,6 +455,8 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
     block = meta.get("governedPlan")
     if not isinstance(block, Mapping):
         return None
+    if isinstance(block.get("composed"), Sequence):
+        return _composed_plan_coverage(block)
     requested = block.get("requested") or {}
     executed = block.get("executed") or {}
     receipts = _execution_receipts(executed)
@@ -462,6 +540,31 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
                 "disposition": (_coverage_resolved() if grouped
                                 else _coverage_missing()),
             })
+        entry = _geography_coverage(requested, [executed],
+                                    "governed_plan + specialist execution receipt")
+        if entry:
+            entries.append(entry)
+        # A THRESHOLD IS PART OF WHAT WAS ASKED. "When do we reach £250m?"
+        # answered for £75m is a substitution no predicate or axis shows, and
+        # it is the defect the milestone rule was moved to its owner to end. So
+        # the executed side must state the same concept, comparator and value.
+        wanted_target = requested.get("target")
+        if isinstance(wanted_target, Mapping) and wanted_target:
+            got = executed.get("target")
+            same = isinstance(got, Mapping) and all(
+                str(got.get(key)) == str(wanted_target.get(key))
+                for key in ("concept", "comparator")) and \
+                _same_threshold(got.get("value"), wanted_target.get("value"),
+                                executed)
+            entries.append({
+                "kind": "governed_plan:target", "field": "target",
+                "value": (f"{wanted_target.get('comparator')} "
+                          f"{wanted_target.get('value')}"),
+                "term": f"the {wanted_target.get('value')} threshold",
+                "owner": "governed_plan + specialist execution receipt",
+                "disposition": (_coverage_resolved() if same
+                                else _coverage_missing()),
+            })
         return {"version": 1, "concepts": entries,
                 "unaccounted": [e for e in entries
                                 if e["disposition"] == _coverage_missing()]}
@@ -477,9 +580,34 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
             "disposition": (_coverage_resolved() if grouped
                             else _coverage_missing()),
         })
+    entry = _geography_coverage(requested, receipts,
+                                "governed_plan + execution_receipt")
+    if entry:
+        entries.append(entry)
     return {"version": 1, "concepts": entries,
             "unaccounted": [e for e in entries
                             if e["disposition"] == _coverage_missing()]}
+
+
+def _same_threshold(got: Any, wanted: Any, executed: Mapping[str, Any]) -> bool:
+    """The executed threshold is the one asked for.
+
+    A NAMED threshold ("scale", D9) is accounted for only when the receipt
+    names the same word AND states the portfolio threshold it resolved to; an
+    amount must be the same amount.
+    """
+    if isinstance(wanted, str):
+        scale = executed.get("scale") or {}
+        return str(got) == wanted and scale.get("named") == wanted \
+            and _same_number(scale.get("threshold"), executed.get("threshold_applied"))
+    return _same_number(got, wanted)
+
+
+def _same_number(left: Any, right: Any) -> bool:
+    try:
+        return float(left) == float(right)
+    except (TypeError, ValueError):
+        return False
 
 
 def _coverage_resolved() -> str:
@@ -851,6 +979,23 @@ def execute_governed_mi_query(
         capability_allowed=True, data_approved=True, fixture_source=approval.fixture,
         notes=(approval.reason,) if approval.fixture else ())
 
+    # ---- 2b. the conversation (§34, §38, §39) ---------------------------- #
+    #
+    # BEFORE ANYTHING READS THE QUESTION. A follow-up ("And by broker?") or a
+    # reply to the agent's own question is made the complete question it is
+    # here, after authorisation (the memory is bound to the authorised book)
+    # and before the dataset, the routing or the governed attempt read the
+    # question — so from here on the request is exactly the one a user who
+    # typed the complete question would have made. Switched off, or for a
+    # principal the governed path does not serve, nothing changes.
+    conversation_payload: Optional[Dict[str, Any]] = None
+    try:
+        request, view, conversation_payload = _read_conversation(
+            request, authorised, view, context)
+    except Exception:  # noqa: BLE001 - the message is then read on its own
+        logger.warning("the conversation could not be read; the message is "
+                       "read on its own", exc_info=True)
+
     # ---- 3. the analytical execution (unchanged) ------------------------- #
     #
     # NEVER RAISES INTO A REQUEST. This function's own docstring promises a
@@ -878,8 +1023,9 @@ def execute_governed_mi_query(
         # and the frame is not resolved until inside; `_run_analysis` binds into
         # it as soon as the book is in hand, and this `with` tears it down.
         with _parser_mod.geography_context(None):
-            payload = _run_analysis(request, authorised, view, deps,
-                                    context=context)
+            payload = (conversation_payload if conversation_payload is not None
+                       else _run_analysis(request, authorised, view, deps,
+                                          context=context))
     except Exception as exc:  # noqa: BLE001 - surface a refusal, never a 500
         logger.exception("MI analysis failed for question=%r portfolio=%r",
                          request.question, authorised.portfolio_id)
@@ -918,6 +1064,46 @@ def execute_governed_mi_query(
                      snapshot_id=snapshot.snapshot_id,
                      error_code=error.code if error else None))
     return _finish(result, request)
+
+
+def _read_conversation(request: MiQueryRequest, authorised: Any,
+                       view: str, context: ExecutionContext
+                       ) -> tuple:
+    """`(request, view, payload)` for this message in its conversation.
+
+    The memory a returned continuation carries is checked against the TRUSTED
+    principal and the AUTHORISED book (`conversation.read`), never against
+    anything the body says. When the conversation reader made the message a
+    complete question, the request carries that question and the dataset is
+    re-read from it; when the reader settled the turn itself (an ask, or a
+    reference the conversation does not hold), `payload` is that answer and
+    nothing else runs."""
+    from mi_agent import conversation as _conversation
+    from mi_agent import plan_serving_canary as _plan_serving
+    if not _conversation.enabled() or not _plan_serving.handles(context):
+        return request, view, None
+    client_id, run_id = split_portfolio(authorised.requested_portfolio_id)
+    book = _conversation.book_scope(client_id, authorised.portfolio_id,
+                                    request.source_portfolio_lens)
+    with _perf.stage("mi_query.conversation"):
+        turn = _plan_serving.read_turn(
+            request.question, token=request.continuation,
+            principal=_plan_serving.principal_of(context), book=book,
+            chat=request.conversation_id)
+    if turn is None:
+        return request, view, None
+    if turn.immediate:
+        payload = _plan_serving.converse_without_plan(
+            turn, context=context, client_id=client_id, run_id=run_id,
+            view=view, portfolio_id=authorised.portfolio_id)
+        return replace(request, conversation_turn=turn), view, payload
+    if turn.question != request.question:
+        try:
+            view = workspace_mod.resolve_dataset(turn.question)
+        except Exception:  # noqa: BLE001 - the same fallback as the first read
+            view = workspace_mod.DEFAULT_VIEW
+    return (replace(request, question=turn.question, conversation_turn=turn),
+            view, None)
 
 
 def _scope_ref(payload: Dict[str, Any]) -> Optional[ScopeRef]:
@@ -1113,6 +1299,18 @@ def _model_availability(concept_merge: Any) -> Dict[str, Any]:
     }
 
 
+#: `plan_decline.kind` -> the stable error code the operator's record carries.
+_DECLINE_CODES: Dict[str, str] = {
+    "model_unavailable": ErrorCode.SEMANTIC_MODEL_UNAVAILABLE,
+    "clarify": ErrorCode.AMBIGUOUS_QUESTION,
+    "unsupported": ErrorCode.UNSUPPORTED_QUESTION,
+    # Not STORAGE_UNAVAILABLE: that is an HTTP 503, and an MI verdict carries
+    # its outcome inside the envelope at HTTP 200 (`trakt_core.errors`).
+    "unavailable": ErrorCode.CALCULATION_FAILED,
+    "failed": ErrorCode.CALCULATION_FAILED,
+}
+
+
 def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     """Map an engine-reported failure onto a stable code.
 
@@ -1121,6 +1319,15 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     previous free-text ``error`` string could not express.
     """
     meta = payload.get("metadata") or {}
+    # THE GOVERNED PATH'S OWN DECLINE (D18) says what kind it is. A question
+    # understood and not answerable yet is UNSUPPORTED, one missing a detail is
+    # AMBIGUOUS, a language step that did not complete is the model being
+    # unavailable — and data that could not be read, or a figure that broke
+    # while being produced, is CALCULATION_FAILED.
+    decline = meta.get("governedDecline")
+    if isinstance(decline, Mapping):
+        return _DECLINE_CODES.get(str(decline.get("kind") or ""),
+                                  ErrorCode.UNSUPPORTED_QUESTION)
     # THE MODEL NEVER RAN, so nothing downstream of it can be the reason. Read
     # before every capability code: an unavailable dependency is not a decision
     # the estate took about the question, and marking it `CALCULATION_FAILED,
@@ -1972,6 +2179,156 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         geography = _parser_mod.bind_geography(
             _resolve_geography(client_id, portfolio_id, df))
 
+
+    # THE GOVERNED SERVING ATTEMPT, DEFINED ONCE AND OFFERED ON BOTH PATHS.
+    #
+    # WHY THIS IS NOT WHERE IT WAS. The canary used to be called at ONE site, at
+    # the foot of the point-in-time branch. The legacy chat router returns before
+    # that site, so every question it claimed — the trend, evolution and
+    # period-comparison shapes, which is to say precisely the temporal ones —
+    # never reached the governed path at all, whatever the flag said. Measured
+    # live on 9ab14b34: S2-P1, S2-P4 and S2-P5 produced no evidence record,
+    # because `serve` was never called for them.
+    #
+    # So the attempt is offered on both branches, and the decision of what it may
+    # claim is unchanged: `handles` still reads the principal and nothing else,
+    # and the GovernedQueryPlan and its perimeter still decide eligibility. No
+    # raw text chooses a path here, the legacy router is not told about slice 2,
+    # and nothing is disabled — a request the governed path declines is answered
+    # by exactly the envelope that branch had already built.
+    #
+    # THE GOVERNED ATTEMPT RUNS FIRST, ONCE (owner decision 2026-09-30, P0
+    # design §23). It needs nothing the legacy path computes — not the legacy
+    # parse, not the routed envelope — so for an allow-listed principal it is
+    # made before either, and a question it answers never pays for the legacy
+    # parse's model call or the legacy computation. A question it declines is
+    # answered by exactly the legacy path it always was: `serve` returns None on
+    # any failure, and the legacy path runs from the parse on. The fallback is
+    # still incapable of failing; what changed is that it is only computed when
+    # it is used. The legacy value is therefore not on the evidence record of a
+    # governed answer (`legacy_result_available: false`).
+    def _pipeline_inputs(ds_mod, cid: Optional[str], rid: Optional[str]
+                         ) -> Dict[str, Any]:
+        """What the Pipeline owners need, from the module that already finds it.
+
+        Nothing is discovered or loaded here and no new loader exists: this is
+        `datasets`' own `_resolve_pipeline_source`, `_pipeline_discovery_root`
+        and `_pipeline_history` — the same three the accepted pipeline routes
+        use — handed to the canary the way the funded frame and the funded
+        snapshot catalogue already are. Every fault degrades to None, and a
+        pipeline plan with no source refuses rather than being answered from
+        anything else.
+        """
+        # THE HISTORY AS A PROVIDER, not the model: it is built from every
+        # weekly extract, and only a pipeline, stage-movement or forecast plan
+        # reads it — the canary resolves it in that branch (`_history`), so a
+        # funded question no longer lists the extracts and copies the model.
+        found: Dict[str, Any] = {"pipeline_source": None, "pipeline_root": None,
+                                 "pipeline_client_id": cid,
+                                 "pipeline_history": (
+                                     lambda: ds_mod._pipeline_history(cid))}
+        try:
+            found["pipeline_source"] = ds_mod._resolve_pipeline_source(cid, rid)
+            found["pipeline_root"] = ds_mod._pipeline_discovery_root()
+        except Exception:  # noqa: BLE001 - the canary never costs an answer
+            logger.warning("pipeline inputs could not be resolved for the "
+                           "governed attempt", exc_info=True)
+        return found
+
+    def _governed_serving_attempt(legacy_envelope: Optional[Dict[str, Any]]
+                                  ) -> Optional[Dict[str, Any]]:
+        from mi_agent import plan_serving_canary as _plan_serving
+        if not _plan_serving.handles(context):
+            return None
+        # THE GOVERNED CATALOGUE, PASSED IN — the same shape as `frame` and
+        # `semantics`. A temporal plan resolves its snapshots against the
+        # catalogue production already owns (`datasets.snapshot_index`, the one
+        # `/mi/snapshots` and the dropdowns are built from), scoped to THIS
+        # client; `build_store` returns None on any fault, and None means the
+        # temporal path is unavailable and the legacy envelope serves. A slice 1
+        # request never reads any of this.
+        from mi_agent_api import governed_snapshot_store as _snapshot_store
+        with _perf.stage("mi_query.governed_inputs.snapshot_store"):
+            snapshot_store = _snapshot_store.build_store(ds, client_id)
+        with _perf.stage("mi_query.governed_inputs.source_registry"):
+            source_registry = _source_registry(df, client_id)
+        with _perf.stage("mi_query.governed_inputs.pipeline"):
+            pipeline_inputs = _pipeline_inputs(ds, client_id, run_id)
+        # `respond`, not `serve`: for this principal the answer is the
+        # governed answer or the governed decline, never the legacy path's
+        # (owner decision D18). `req.question` is the complete question; the
+        # conversation it came from (§39) states what carried over and hands
+        # back the next memory.
+        return _plan_serving.respond(
+            conversation=req.conversation_turn,
+            question=req.question, context=context, client_id=client_id,
+            run_id=run_id, legacy_result=legacy_envelope, frame=df,
+            semantics=semantics, view=view,
+            portfolio_id=authorised.portfolio_id,
+            render_portfolio_id=portfolio_id, as_of=req.as_of_date,
+            snapshot_store=snapshot_store,
+            snapshot_client_id=client_id,
+            snapshot_route=_snapshot_store.FUNDED_ROUTE,
+            source_registry=source_registry,
+            # THE CHANGE-INTELLIGENCE OWNERS' INPUTS. The governed source root is
+            # `ds._onboarding_output_root()` — the same one this function already
+            # passes to `chat_routing.try_route`, so a plan-served material
+            # summary and a legacy-routed one read the same snapshots from the
+            # same place. The tenant comes from the AUTHORISATION, never from
+            # request data, which is the rule `_run_analysis` states for
+            # `context.tenant_id` and `authorise_portfolio_access` enforces.
+            #
+            # `authorised_portfolio_ids` is deliberately NOT supplied, exactly as
+            # the legacy period-change route does not supply it: it is a
+            # caller-side NARROWING of an already-authorised scope, and the
+            # tenancy boundary here is `client_id`, which
+            # `authorise_portfolio_access` has already proved and which is the
+            # only book `build_snapshots` will read.
+            output_root=ds._onboarding_output_root(),
+            tenant_id=authorised.tenant_id,
+            # THE GOVERNED FUNDED FRAME RESOLVER the legacy analytical route is
+            # handed as `base_frame_resolver`, so the governed forecast composer
+            # reads the funded book exactly as the legacy composed answer does
+            # (D6). `_routed_frame` is defined below this function and resolved
+            # when the attempt RUNS, which is after it exists on both paths.
+            funded_frame_resolver=_routed_frame,
+            # THE PIPELINE OWNERS' INPUTS, resolved by the dataset module that
+            # already owns discovery. A pipeline PLAN is served from these
+            # regardless of which view the legacy router picked, which is what
+            # makes the plan — and not the sentence — decide the dataset.
+            **pipeline_inputs)
+
+    # The funded frame for a routed intent, and for the governed forecast
+    # composer (D6), defined before the governed attempt that is handed it.
+    def _routed_frame(cli: str, rid: Optional[str]):
+        """The funded frame for a routed intent, resolved by exactly the same
+        governed resolver the point-in-time path uses. With no run selected
+        this is the ACTIVE governed dataset — a point-in-time question (e.g.
+        regional concentration) must never require a run id."""
+        pid = f"{cli}/{rid}" if rid else (cli or None)
+        frame, err = ds._resolve_query_frame("funded", pid)
+        return None if err else frame
+
+    # GOVERNED FIRST — see the helper above. One attempt per request.
+    #
+    # AND GOVERNED ONLY (owner decision D18, 2026-09-30: "Do not use the old
+    # system"). For a principal the governed path serves, what comes back is
+    # its answer or its decline, and the legacy parse below is never reached:
+    # a question it understood and declined was, until this, answered by the
+    # legacy path — and the 15:53 check measured that answering a different
+    # question ("overdue" dropped, the whole pipeline given).
+    from mi_agent import plan_serving_canary as _plan_serving
+    _canary = _plan_serving.handles(context)
+    if _canary:
+        with _perf.stage("mi_query.governed_attempt"):
+            served = _governed_serving_attempt(None)
+        if served is not None:
+            return _governed_context(served, req=req, client_id=client_id,
+                                     run_id=run_id, geography=geography,
+                                     view=view, run_required=bool(run_id),
+                                     semantics=semantics, frame=df)
+
+    # ---- the legacy path, from its parse on ------------------------------- #
     try:
         with _perf.stage("mi_query.parse"):
             parsed = ParsedQuestion.parse(
@@ -1997,108 +2354,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         return _error_envelope("The MI Agent could not interpret this question.",
                                req=req, view=view)
 
-    # THE GOVERNED SERVING ATTEMPT, DEFINED ONCE AND OFFERED ON BOTH PATHS.
-    #
-    # WHY THIS IS NOT WHERE IT WAS. The canary used to be called at ONE site, at
-    # the foot of the point-in-time branch. The legacy chat router returns before
-    # that site, so every question it claimed — the trend, evolution and
-    # period-comparison shapes, which is to say precisely the temporal ones —
-    # never reached the governed path at all, whatever the flag said. Measured
-    # live on 9ab14b34: S2-P1, S2-P4 and S2-P5 produced no evidence record,
-    # because `serve` was never called for them.
-    #
-    # So the attempt is offered on both branches, and the decision of what it may
-    # claim is unchanged: `handles` still reads the principal and nothing else,
-    # and the GovernedQueryPlan and its perimeter still decide eligibility. No
-    # raw text chooses a path here, the legacy router is not told about slice 2,
-    # and nothing is disabled — a request the governed path declines is answered
-    # by exactly the envelope that branch had already built.
-    #
-    # THE LEGACY ANSWER IS STILL COMPUTED FIRST AND KEPT. `serve` takes it as the
-    # fallback it returns to on any failure, which is what makes the fallback
-    # incapable of failing. Precedence here means the governed result may BECOME
-    # the response before the legacy one is returned — not that the legacy one is
-    # skipped.
-    def _pipeline_inputs(ds_mod, cid: Optional[str], rid: Optional[str]
-                         ) -> Dict[str, Any]:
-        """What the Pipeline owners need, from the module that already finds it.
-
-        Nothing is discovered or loaded here and no new loader exists: this is
-        `datasets`' own `_resolve_pipeline_source`, `_pipeline_discovery_root`
-        and `_pipeline_history` — the same three the accepted pipeline routes
-        use — handed to the canary the way the funded frame and the funded
-        snapshot catalogue already are. Every fault degrades to None, and a
-        pipeline plan with no source refuses rather than being answered from
-        anything else.
-        """
-        found: Dict[str, Any] = {"pipeline_source": None, "pipeline_root": None,
-                                 "pipeline_client_id": cid,
-                                 "pipeline_history": None}
-        try:
-            found["pipeline_source"] = ds_mod._resolve_pipeline_source(cid, rid)
-            found["pipeline_root"] = ds_mod._pipeline_discovery_root()
-            found["pipeline_history"] = ds_mod._pipeline_history(cid)
-        except Exception:  # noqa: BLE001 - the canary never costs an answer
-            logger.warning("pipeline inputs could not be resolved for the "
-                           "governed attempt", exc_info=True)
-        return found
-
-    def _governed_serving_attempt(legacy_envelope: Dict[str, Any]
-                                  ) -> Optional[Dict[str, Any]]:
-        from mi_agent import plan_serving_canary as _plan_serving
-        if not _plan_serving.handles(context):
-            return None
-        # THE GOVERNED CATALOGUE, PASSED IN — the same shape as `frame` and
-        # `semantics`. A temporal plan resolves its snapshots against the
-        # catalogue production already owns (`datasets.snapshot_index`, the one
-        # `/mi/snapshots` and the dropdowns are built from), scoped to THIS
-        # client; `build_store` returns None on any fault, and None means the
-        # temporal path is unavailable and the legacy envelope serves. A slice 1
-        # request never reads any of this.
-        from mi_agent_api import governed_snapshot_store as _snapshot_store
-        return _plan_serving.serve(
-            question=req.question, context=context, client_id=client_id,
-            run_id=run_id, legacy_result=legacy_envelope, frame=df,
-            semantics=semantics, view=view,
-            portfolio_id=authorised.portfolio_id,
-            render_portfolio_id=portfolio_id, as_of=req.as_of_date,
-            snapshot_store=_snapshot_store.build_store(ds, client_id),
-            snapshot_client_id=client_id,
-            snapshot_route=_snapshot_store.FUNDED_ROUTE,
-            source_registry=_source_registry(df, client_id),
-            # THE CHANGE-INTELLIGENCE OWNERS' INPUTS. The governed source root is
-            # `ds._onboarding_output_root()` — the same one this function already
-            # passes to `chat_routing.try_route`, so a plan-served material
-            # summary and a legacy-routed one read the same snapshots from the
-            # same place. The tenant comes from the AUTHORISATION, never from
-            # request data, which is the rule `_run_analysis` states for
-            # `context.tenant_id` and `authorise_portfolio_access` enforces.
-            #
-            # `authorised_portfolio_ids` is deliberately NOT supplied, exactly as
-            # the legacy period-change route does not supply it: it is a
-            # caller-side NARROWING of an already-authorised scope, and the
-            # tenancy boundary here is `client_id`, which
-            # `authorise_portfolio_access` has already proved and which is the
-            # only book `build_snapshots` will read.
-            output_root=ds._onboarding_output_root(),
-            tenant_id=authorised.tenant_id,
-            # THE PIPELINE OWNERS' INPUTS, resolved by the dataset module that
-            # already owns discovery. A pipeline PLAN is served from these
-            # regardless of which view the legacy router picked, which is what
-            # makes the plan — and not the sentence — decide the dataset.
-            **_pipeline_inputs(ds, client_id, run_id))
-
     routed = None
     try:
-        def _routed_frame(cli: str, rid: Optional[str]):
-            """The funded frame for a routed intent, resolved by exactly the same
-            governed resolver the point-in-time path uses. With no run selected
-            this is the ACTIVE governed dataset — a point-in-time question (e.g.
-            regional concentration) must never require a run id."""
-            pid = f"{cli}/{rid}" if rid else (cli or None)
-            frame, err = ds._resolve_query_frame("funded", pid)
-            return None if err else frame
-
         # P1L — GOVERNED POPULATION PROPAGATION.
         #
         # The population is resolved ONCE, here, and the specialist routes
@@ -2200,18 +2457,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # SITE 1 OF 2 — a named GEOGRAPHY this book does not carry.
         routed = _guard_stated_geography_basis(
             routed, question=req.question, geography=geography)
-        # BEFORE THE ROUTED ENVELOPE BECOMES AUTHORITATIVE — see the helper above.
-        served = _governed_serving_attempt(routed)
-        if served is not None:
-            # A GOVERNED ANSWER IS NOT THE ROUTED ONE, so it is not labelled with
-            # the routed capability's run requirement: it resolved its own
-            # snapshots from the governed catalogue. It is stamped exactly as a
-            # governed answer on the point-in-time branch is, so which branch the
-            # request happened to arrive on is not visible in the response.
-            return _governed_context(served, req=req, client_id=client_id,
-                                     run_id=run_id, geography=geography,
-                                     view=view, run_required=bool(run_id),
-                                     semantics=semantics, frame=df)
+        # The governed attempt was made above, before the parse; a routed
+        # envelope here is one it declined (or a principal outside the canary).
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  geography=geography,
                                  view=view, run_required=_route_requires_run(route),
@@ -2321,17 +2568,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # canary handled has already bought its interpretation, and shadowing it
     # would buy a second and compare the new result against itself.
     #
-    # The legacy envelope is complete before either runs, so `serve` returning
-    # None — off, ineligible, clarify, refuse, any failure — leaves `result`
-    # exactly as the legacy path built it.
-    # THE SAME ATTEMPT THE ROUTED BRANCH MAKES, through the one helper defined
-    # above. It was written out here when this was the only place it happened.
-    from mi_agent import plan_serving_canary as _plan_serving
-    if _plan_serving.handles(context):
-        served = _governed_serving_attempt(result)
-        if served is not None:
-            result = served
-    else:
+    # A canary principal never reaches this point: the governed attempt above
+    # returns its answer or its decline (D18). What remains here is everybody
+    # the governed path does not yet serve, for whom the shadow observes as
+    # before.
+    if not _canary:
         # THE SHADOW STAYS WHERE IT WAS, on this branch only. Extending it to
         # routed questions would buy a live interpretation for every
         # non-canary caller who asked a trend question — a change to the

@@ -170,8 +170,9 @@ function ForecastBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) 
   // its "View methodology" detail are not rendered here — this tab reads the
   // Expected Forecast's numbers, and the model behind them belongs on the
   // Forecast tab, where it is described once rather than a second time here.
-  // A stage genuinely falling back to a configured assumption still says so —
-  // that changes what the forecast column means, not merely how it is sourced.
+  // A stage with too little history to measure still says so (D21: its cases
+  // are not weighted, nothing configured stands in) — that changes what the
+  // forecast column means, not merely how it is sourced.
   if ((forecast?.stagesUsingConfigFallback?.length ?? 0) === 0) return null;
   return (
     <p
@@ -179,8 +180,9 @@ function ForecastBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) 
       data-testid="forecast-provenance-banner"
       className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
     >
-      Stage(s) {forecast?.stagesUsingConfigFallback?.join(", ")} fall back to configured
-      assumptions — the observed sample is below the sufficiency floor.
+      Stage(s) {forecast?.stagesUsingConfigFallback?.join(", ")} have too little history
+      to measure a completion rate — their cases are not weighted, and the forecast
+      figures that need them are not stated.
     </p>
   );
 }

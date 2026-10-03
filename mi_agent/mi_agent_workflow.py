@@ -126,7 +126,7 @@ def _statistic_refusal(errors: List[str], semantics: dict) -> Optional[str]:
     return None
 
 
-def _reporting_date_label(df) -> Optional[str]:
+def reporting_date_label(df) -> Optional[str]:
     """The frame's own reporting cut-off, formatted for the execution receipt.
 
     Read from the data (``data_cut_off_date``), never from the question, so the
@@ -148,6 +148,10 @@ def _reporting_date_label(df) -> Optional[str]:
     except Exception:  # noqa: BLE001 - a label must never break a query
         return None
     return None
+
+
+#: The private name existing callers use.
+_reporting_date_label = reporting_date_label
 
 
 def _dedupe(items: List[str]) -> List[str]:

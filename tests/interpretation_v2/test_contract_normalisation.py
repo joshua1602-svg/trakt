@@ -554,20 +554,27 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
 
     was_paras, now_paras = _paragraphs(was_prompt), _paragraphs(SYSTEM_PROMPT)
     amended = [p for p in was_paras if p not in now_paras]
-    #: The three paragraphs the slice 3 affordance was authorised to amend: the
-    #: tool list (one tool added), the RULES block (rules 3a-i and 9 added), and
-    #: preservation check A (the named source portfolio added to what must never
-    #: be dropped). Identified by their opening words so this reads as intent
-    #: rather than as a hash nobody can check.
-    assert len(amended) == 3, (
-        f"{len(amended)} paragraphs of the measured prompt changed; three were "
-        f"authorised")
-    assert amended[0].startswith("* `search_concepts`")
-    assert amended[1].startswith("1. Name governed concept identifiers")
-    assert amended[2].startswith("A. PRESERVATION.")
+    #: The paragraphs authorised to be amended, identified by their opening
+    #: words so this reads as intent rather than as a hash nobody can check:
+    #:   slice 3 portfolio affordance — the tool list (one tool added), the
+    #:     RULES block (rules 3a-i and 9 added), and preservation check A (the
+    #:     named source portfolio added to what must never be dropped);
+    #:   one call, not a retrieval loop (owner direction 2026-09-29, P0 design
+    #:     §21) — HOW TO WORK now points at the governed catalogue in the prompt
+    #:     instead of the lookup tools (its three paragraphs), and the rules
+    #:     that named a tool (1, 3a, 3a-i) name the catalogue; rule 6 asks for
+    #:     each claim in one short sentence.
+    AUTHORISED_AMENDMENTS = ("You have read-only metadata tools",
+                             "* `search_concepts`",
+                             "Retrieve what you need",
+                             "1. Name governed concept identifiers",
+                             "A. PRESERVATION.")
+    assert [p for p in amended
+            if not p.startswith(AUTHORISED_AMENDMENTS)] == [], (
+        "a paragraph of the measured prompt changed that was not authorised")
     assert len(now_paras) == len(was_paras), (
-        "the prompt gained or lost a paragraph; the three authorised changes "
-        "are all amendments to existing ones")
+        "the prompt gained or lost a paragraph; the authorised changes are "
+        "all amendments to existing ones")
 
     # -- the tool surface: one tool added, the rest untouched ---------------- #
     was_metadata = subprocess.run(
@@ -619,7 +626,8 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
         sys.modules[spec.name] = module
         try:
             spec.loader.exec_module(module)
-            was = module.load_governed_vocabulary().orientation_payload()
+            was_vocabulary = module.load_governed_vocabulary()
+            was = was_vocabulary.orientation_payload()
         finally:
             sys.modules.pop(spec.name, None)
 
@@ -643,11 +651,97 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     #: named measure is a metric delta, so the composition could never be
     #: entered. Nothing else about what the model is shown may move — a second
     #: added operation, a removed one, or any other reworded key still fails.
-    AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"}}
+    #: Catalogue batch 2 (vocabulary 2.7.0, P0 design §16): the Forecast tab
+    #: publishes the forecast by component, region and LTV band, the weighting
+    #: exclusion by reason and the milestone ladder by threshold, so a forecast
+    #: may be broken down.
+    #: D2a conversion (2.10.0, §20): a measured rate is one figure, so the
+    #: stage-movement capability may be asked for a point in time. D13 (2.10.0):
+    #: the pipeline's change between two dated extracts, as a movement or as
+    #: the two levels compared.
+    #: What moved in the whole pipeline (2.17.0, §28.2): stage movement owns
+    #: `material_summary` over its own figures, and `summary` is that form's
+    #: canonical operation — for the same reason as `period_movement`'s above,
+    #: without it the form is unreachable (normalisation rule 5 canonicalises
+    #: the form's operation to `summary`, and the compiler refuses an
+    #: operation the capability does not list).
+    #: A ranking over one of the Pipeline tab's breakdowns (2.22.0, the
+    #: 2026-10-01 twins run): "which broker has the largest pipeline" is a
+    #: rank, ordered by the figure, and the pipeline listed none.
+    AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"},
+                                      "forecast": {"breakdown"},
+                                      "pipeline_stage_movement": {"point_in_time",
+                                                                  "summary"},
+                                      "pipeline": {"movement", "compare", "rank"}}
+
+    #: THE CATALOGUE, WIDENED BY NAME. Catalogue batch 1 (vocabulary 2.6.0,
+    #: owner direction 2026-09-29: "narrow the gap") gave the Pipeline tab's
+    #: weighted value and its expected-completion view a concept each, so the
+    #: model stops refusing or misreading them. The concept counts move by
+    #: exactly these three; any other added or removed concept still fails.
+    AUTHORISED_CONCEPT_ADDITIONS = {"weighted_expected_funded_amount",
+                                    "expected_completion_month",
+                                    "expected_completion_timing",
+                                    # Catalogue batch 2 (2.7.0): the forecast
+                                    # semantic model's new figures and axes.
+                                    "forecast_loan_count",
+                                    "weighting_excluded_amount",
+                                    "weighting_excluded_case_count",
+                                    "projected_funded_balance",
+                                    "annualised_completion_run_rate",
+                                    "forecast_component", "forecast_scenario",
+                                    "funding_threshold",
+                                    "weighting_exclusion_reason",
+                                    # D2a (2.10.0): the stage-movement
+                                    # capability's measured rates.
+                                    "cohort_conversion", "stage_pull_through",
+                                    "stage_completion_rate",
+                                    # §23 (2.14.0): when the live pipeline
+                                    # is expected to complete, from history.
+                                    "expected_completion_date"}
+
+    #: ONE KEY REWORDED, BY NAME. `how_to_find_a_concept` told the model to
+    #: call the lookup tools; with the governed catalogue in the prompt (one
+    #: call, P0 design §21) it points at the catalogue instead.
+    AUTHORISED_REWORDINGS = {"how_to_find_a_concept"}
+
+    #: ONE GOVERNED DEFAULT ADDED, BY NAME. D23 (owner, 2026-09-30, vocabulary
+    #: 2.21.0): "'how much' = amount, 'how many' = count", and a question that
+    #: says neither is answered by amount. Every existing default must still
+    #: read word for word; another added default fails here.
+    AUTHORISED_DEFAULT_ADDITIONS = {"measures (amount or number)"}
 
     for key in sorted(set(was) & set(now)):
         if key == "vocabulary_version":
             continue                       # moves with the block, by design
+        if key in AUTHORISED_REWORDINGS:
+            continue
+        if key == "governed_defaults":
+            assert set(now[key]) - set(was[key]) == AUTHORISED_DEFAULT_ADDITIONS, (
+                f"the model was shown governed defaults "
+                f"{sorted(set(now[key]) - set(was[key]))}; only "
+                f"{sorted(AUTHORISED_DEFAULT_ADDITIONS)} were authorised")
+            for slot, text in was[key].items():
+                assert now[key].get(slot) == text, (
+                    f"governed default {slot!r} was reworded or removed")
+            continue
+        if key == "concept_counts":
+            before_ids = set(was_vocabulary.concepts)
+            after_ids = set(vocabulary.concepts)
+            assert after_ids - before_ids == AUTHORISED_CONCEPT_ADDITIONS, (
+                f"the model was shown new concepts "
+                f"{sorted(after_ids - before_ids - AUTHORISED_CONCEPT_ADDITIONS)}"
+                f"; only {sorted(AUTHORISED_CONCEPT_ADDITIONS)} were authorised")
+            #: ONE CONCEPT PER MEANING. `borrower_structure` is the registry's
+            #: legacy second name for single vs joint ("Legacy: prefer
+            #: borrower_type"), a band no book materialises; it is folded into
+            #: `borrower_type` as an alias (`superseded_by`), so the reader's
+            #: words still resolve — to the field the books carry.
+            AUTHORISED_CONCEPT_REMOVALS = {"borrower_structure"}
+            assert before_ids - after_ids == AUTHORISED_CONCEPT_REMOVALS, (
+                f"the model lost concepts "
+                f"{sorted(before_ids - after_ids - AUTHORISED_CONCEPT_REMOVALS)}")
+            continue
         if key == "capability_operations":
             for capability in sorted(set(was[key]) | set(now[key])):
                 before_ops = set(was[key].get(capability, ()))
@@ -680,8 +774,131 @@ def test_the_model_still_cannot_author_an_executable_binding():
     # ENUM of governed analytical forms, so it cannot carry a column, a
     # snapshot or an expression — which is the invariant this test is
     # actually about, asserted below rather than left to the set.
+    # `ranking` (2.22.0, the 2026-10-01 twins run) is the one slot added since:
+    # which END of a ranking and how many — an enum and a bounded integer, so
+    # it can carry no column, snapshot or expression either.
     assert set(schema["properties"]) == {
         "schema_version", "capability", "operation", "change_form",
         "population", "measures", "dimensions", "filters", "geography",
-        "time", "comparison", "target", "outputs", "ambiguity", "evidence"}
+        "time", "comparison", "target", "ranking", "outputs", "ambiguity",
+        "evidence"}
     assert schema["properties"]["change_form"]["enum"]
+    ranking = schema["properties"]["ranking"]
+    assert ranking["additionalProperties"] is False
+    assert set(ranking["properties"]) == {"order", "limit"}
+    assert ranking["properties"]["order"]["enum"] == ["highest", "lowest"]
+    assert ranking["properties"]["limit"]["type"] == "integer"
+
+
+# --------------------------------------------------------------------------- #
+# 6. a derived population has one spelling
+# --------------------------------------------------------------------------- #
+
+from mi_agent.interpretation_v2.normalise import (  # noqa: E402
+    DERIVED_POPULATION_OF,
+    DERIVED_POPULATION_SPELLINGS,
+)
+
+
+def milestone_intent(**over):
+    """The Q23 shape: when does the book reach a stated threshold."""
+    payload = {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "forecast",
+        "operation": "forecast_milestone",
+        "measures": [{"concept": "forecast_milestone_date"}],
+        "time": {"form": "forward_looking"},
+        "target": {"concept": "forecast_funded_balance", "comparator": "gte",
+                   "value": 100_000_000},
+    }
+    payload.update(over)
+    return parse_candidate_intent(payload)
+
+
+def _canonical(intent, vocabulary):
+    return canonical_intent(intent, vocabulary,
+                            capability_operations=CAPABILITY_OPERATIONS)
+
+
+def test_the_funded_spelling_of_a_forecast_is_the_forecast(compiler, vocabulary):
+    """Production: one milestone question, two spellings of its population.
+
+    The certification run recorded Q23A as `forecast` and Q23B/Q23C as
+    `funded`; the forecast runtime executes `forecast` only, so two of the three
+    were refused for a difference that is not a difference.
+    """
+    funded = milestone_intent(population={"base": "funded"})
+    stated = milestone_intent(population={"base": "forecast"})
+    result = _canonical(funded, vocabulary)
+    assert result.intent.population.base == "forecast"
+    assert any(a.startswith("derived_population:") for a in result.applied)
+    assert (compiler.compile(funded).plan.plan_id
+            == compiler.compile(stated).plan.plan_id)
+
+
+def test_an_unstated_base_is_the_default_and_means_the_same(vocabulary):
+    """The schema defaults `base` to `funded`; under forecast that is a spelling."""
+    result = _canonical(milestone_intent(), vocabulary)
+    assert result.intent.population.base == "forecast"
+
+
+def test_the_pipeline_base_is_not_a_spelling_and_is_left_alone(vocabulary):
+    """"Of the offer pipeline, how much converts" is not the whole forecast.
+
+    Rewriting it would answer with funded plus pipeline — a wider population
+    than the one named. It stays as stated and the runtime refuses it.
+    """
+    assert "pipeline" not in DERIVED_POPULATION_SPELLINGS
+    assert "whole_book" not in DERIVED_POPULATION_SPELLINGS
+    assert "forecast_of_the_pipeline" in BOUNDED
+    for base in ("pipeline", "whole_book"):
+        result = _canonical(
+            milestone_intent(operation="forecast_projection",
+                             measures=[{"concept": "forecast_funded_balance"}],
+                             target=None, population={"base": base}),
+            vocabulary)
+        assert result.intent.population.base == base
+        assert not any("derived_population" in a for a in result.applied)
+
+
+def test_only_a_capability_that_outputs_a_population_is_rewritten(vocabulary):
+    """A funded question about funded rows is not touched by this rule."""
+    assert set(DERIVED_POPULATION_OF) == {"forecast"}
+    result = _canonical(movement_intent(), vocabulary)
+    assert result.intent.population.base == "funded"
+    assert not any("derived_population" in a for a in result.applied)
+
+
+def test_the_rewrite_moves_the_base_and_nothing_else(vocabulary):
+    """Lens, seasoning and a named source travel unchanged.
+
+    A scoped forecast is the runtime's to refuse or honour. Dropping the scope
+    here would make it indistinguishable from a whole-book question.
+    """
+    intent = milestone_intent(population={
+        "base": "funded", "lens": "acquired", "seasoning": "back_book",
+        "source_reference": "ALP back book"})
+    after = _canonical(intent, vocabulary).intent.population
+    assert (after.base, after.lens, after.seasoning, after.source_reference) \
+        == ("forecast", "acquired", "back_book", "ALP back book")
+
+
+def test_rule_6_follows_the_owner_rule_3_derives(vocabulary):
+    """A forecast measure named under a generic capability: 3 binds, 6 follows."""
+    result = _canonical(milestone_intent(capability="generic_analysis",
+                                         population={"base": "funded"}),
+                        vocabulary)
+    assert result.intent.capability == "forecast"
+    assert result.intent.population.base == "forecast"
+    kinds = [a.split(":", 1)[0] for a in result.applied]
+    assert kinds == ["implementation_owner", "derived_population"]
+
+
+def test_rule_6_is_idempotent_and_keeps_the_model_s_claim(compiler, vocabulary):
+    intent = milestone_intent(population={"base": "funded"})
+    once = _canonical(intent, vocabulary).intent
+    assert _canonical(once, vocabulary).applied == ()
+    plan = compiler.compile(intent).plan
+    assert plan.provenance.intent_claims["population"][0] == "funded"
+    assert any("derived_population" in a for a in
+               plan.provenance.compiler_bindings["normalisation"]["applied"])

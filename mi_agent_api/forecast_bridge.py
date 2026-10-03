@@ -389,7 +389,13 @@ def compute_forecast_bridge(
         pipeline_amount = float(pipeline_report.get("total_pipeline_amount") or 0.0)
         pipeline_case_count = int(pipeline_report.get("row_count") or len(pipeline_df))
         weighted = pipeline_report.get("weighted_expected_funded_amount")
-        weighted = float(weighted) if weighted is not None else 0.0
+        # D21: the weighted pipeline is not stated where a live case's stage has
+        # no measured rate — and then neither is any forecast built on it. It
+        # is never taken as zero.
+        weighted = float(weighted) if weighted is not None else None
+        withheld = (None if weighted is not None else
+                    (pipeline_report.get("weighting_incomplete_reason")
+                     or "the pipeline's weighted amount is not stated"))
         stage_breakdown = (pipeline_snapshot or {}).get("stageBreakdown", [])
         completion_breakdown = (pipeline_snapshot or {}).get("expectedCompletionBreakdown", [])
         watchlist = build_pipeline_watchlist(pipeline_df, pipeline_report, readiness)
@@ -401,12 +407,13 @@ def compute_forecast_bridge(
         pipeline_amount = 0.0
         pipeline_case_count = 0
         weighted = 0.0
+        withheld = None
         stage_breakdown, completion_breakdown = [], []
         watchlist = [_watch("no_pipeline", "info", "No pipeline data available",
                             "No governed pipeline source was found for this run; "
                             "forecast equals the current funded balance.")]
 
-    forecast_balance = funded_balance + weighted
+    forecast_balance = (funded_balance + weighted) if weighted is not None else None
     # The forward case count must describe the SAME population as the forward
     # amount. Cases the governed config excludes — settled or withdrawn — do not
     # contribute to the expected amount, so counting them here would say the
@@ -432,14 +439,22 @@ def compute_forecast_bridge(
         #: the extract carries. ``excludedCaseCount`` is already reported below
         #: from the same source and is not repeated here.
         "eligibleCaseCount": eligible_case_count,
-        "weightedExpectedFundedAmount": round(weighted, 2),
-        "forecastFundedBalance": round(forecast_balance, 2),
+        "weightedExpectedFundedAmount": (round(weighted, 2)
+                                         if weighted is not None else None),
+        "forecastFundedBalance": (round(forecast_balance, 2)
+                                  if forecast_balance is not None else None),
+        # D21: why the weighted pipeline — and the forecast on it — is not
+        # stated, when it is not.
+        "forecastWithheldReason": withheld,
         "forecastLoanCount": forecast_loan_count,
         "completionProbabilityBasis": prob_basis,
         # Governed probability disclosure (gross / excluded / how weighted).
         "grossPipelineAmount": round(pipeline_amount, 2),
         "excludedFromWeightingAmount": prob_summary.get("excluded_amount", 0.0),
         "excludedCaseCount": prob_summary.get("excluded_count", 0),
+        # The same exclusion by governed reason (completed, withdrawn, not
+        # forecast, lapsed, missing stage, missing probability).
+        "excludedByReason": prob_summary.get("excluded_by_reason", {}),
         "activeGrossPipelineAmount": prob_summary.get("active_gross_amount"),
         "amountWeightedHistorical": prob_summary.get("amount_weighted_historical"),
         "amountWeightedConfig": prob_summary.get("amount_weighted_config"),

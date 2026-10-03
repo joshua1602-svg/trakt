@@ -35,21 +35,23 @@ export interface PipelineStageBucket {
 /** One month of the expected-completion breakdown. */
 export interface ExpectedCompletionBucket {
   month: string;
-  caseCount: number;
-  expectedFundedAmount: number;
+  /** D21: null when a case's stage has no measured validity window, so
+   *  whether it has lapsed is unknown — never counted as zero. */
+  caseCount: number | null;
+  expectedFundedAmount: number | null;
   weightedExpectedFundedAmount: number | null;
 }
 
 /** Completion-month classification relative to the pipeline as-of month. */
 export interface ExpectedCompletionSummary {
   asOfMonth: string | null;
-  overdueExpectedCompletionCount: number;
-  overdueExpectedCompletionWeightedAmount: number;
-  currentMonthExpectedCompletionCount: number;
-  currentMonthExpectedCompletionWeightedAmount: number;
+  overdueExpectedCompletionCount: number | null;
+  overdueExpectedCompletionWeightedAmount: number | null;
+  currentMonthExpectedCompletionCount: number | null;
+  currentMonthExpectedCompletionWeightedAmount: number | null;
   nextExpectedCompletionMonth: string | null;
-  nextExpectedCompletionCount: number;
-  nextExpectedCompletionWeightedAmount: number;
+  nextExpectedCompletionCount: number | null;
+  nextExpectedCompletionWeightedAmount: number | null;
 }
 
 /** A generic dimension breakdown row (broker / region). */
@@ -69,6 +71,17 @@ export interface DimensionBucket {
   isOther?: boolean;
   categoriesIncluded?: number;
   sharePct?: number;
+}
+
+/** Which region the region breakdown is: the client's reporting taxonomy
+ *  where the extract's regions resolve to it, and the live cases whose region
+ *  has no governed mapping (left out of the chart, disclosed here). */
+export interface PipelineRegionBasis {
+  field: string;
+  taxonomy: string | null;
+  unmappedCaseCount: number;
+  unmappedAmount: number;
+  unmappedValues: Record<string, number>;
 }
 
 /** Prior weekly pipeline snapshot aggregates, for week-on-week tile deltas.
@@ -148,6 +161,10 @@ export interface PipelineSnapshot {
   pipelineAmount: number | null;
   expectedFundedAmount: number | null;
   weightedExpectedFundedAmount: number | null;
+  /** D21: false when a live case's stage has no rate measured from the client's
+   *  history; the weighted figures it affects are then null, never zero. */
+  weightingComplete?: boolean;
+  weightingIncompleteReason?: string | null;
   /** Prior weekly extract aggregates for week-on-week tile deltas (optional). */
   priorWeek?: PipelineWeeklyPrior | null;
   completionProbabilityBasis?: string;
@@ -182,6 +199,10 @@ export interface PipelineSnapshot {
   /** Uncapped detail (API / agent), present when the breakdown was capped. */
   brokerBreakdownFull?: DimensionBucket[];
   regionBreakdownFull?: DimensionBucket[];
+  /** The region basis of the region breakdown (additive). */
+  regionBasis?: PipelineRegionBasis;
+  /** The extract's own region spelling, kept for audit (additive). */
+  regionSourceBreakdownFull?: DimensionBucket[];
   /** Product (capped top 10 + Other) and LTV band breakdowns — additive. */
   productBreakdown?: DimensionBucket[];
   productBreakdownFull?: DimensionBucket[];
@@ -229,14 +250,20 @@ export interface ForecastBridge {
   pipelineAvailable: boolean;
   pipelineAmount: number;
   pipelineCaseCount: number;
-  weightedExpectedFundedAmount: number;
-  forecastFundedBalance: number;
+  /** D21: null — with `forecastWithheldReason` — when the weighted pipeline
+   *  cannot be stated; the forecast built on it is then null too. */
+  weightedExpectedFundedAmount: number | null;
+  forecastFundedBalance: number | null;
+  forecastWithheldReason?: string | null;
   forecastLoanCount: number;
   completionProbabilityBasis: string;
   /** Governed probability disclosure. */
   grossPipelineAmount?: number;
   excludedFromWeightingAmount?: number;
   excludedCaseCount?: number;
+  /** The same exclusion by governed reason (completed, withdrawn,
+   *  not_forecast, lapsed, missing_stage, missing_probability). Additive. */
+  excludedByReason?: Record<string, { count: number; amount: number }>;
   activeGrossPipelineAmount?: number | null;
   amountWeightedHistorical?: number | null;
   amountWeightedConfig?: number | null;
@@ -271,10 +298,22 @@ export interface ForecastDimensionRow {
 }
 
 /** Forecast-by-dimension breakdowns (derived: funded + weighted pipeline). */
+/** Which region the forecast-by-region breakdown adds the two books up in
+ *  (the reporting taxonomy when both books carry it), and what it cannot
+ *  place. Additive. */
+export interface ForecastRegionBasis {
+  field: string;
+  unplacedFundedAmount: number;
+  unplacedWeightedPipelineAmount: number;
+  /** The two above together — the forecast the chart cannot place. */
+  unplacedForecastAmount: number;
+}
+
 export interface ForecastBreakdowns {
   byRegion: ForecastDimensionRow[];
+  regionBasis?: ForecastRegionBasis;
   byLtvBucket: ForecastDimensionRow[];
-  byCompletionMonth: { month: string; weightedExpectedFundedAmount: number }[];
+  byCompletionMonth: { month: string; weightedExpectedFundedAmount: number | null }[];
   byRegionCapped?: DimensionBucket[];
   byLtvBucketCapped?: DimensionBucket[];
 }

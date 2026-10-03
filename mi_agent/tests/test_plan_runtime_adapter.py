@@ -178,6 +178,24 @@ class TestEligibleExecution(unittest.TestCase):
         for key, value in want.items():
             self.assertAlmostEqual(got[key], value, places=3, msg=f"cell {key}")
 
+    def test_a_ranking_is_the_executors_grouped_ranking(self):
+        """`rank` is served generically since the ranking slot (vocabulary
+        2.22.0): the plan's order and number land on the executor's own ranking
+        fields, so the executor orders and cuts — the adapter ranks nothing."""
+        p = plan(operation="rank", dimensions=[PRODUCT])
+        p["ranking"] = {"order": "lowest", "limit": 1}
+        out = run(p)
+        self.assertTrue(out.eligible, out.reason)
+        self.assertEqual(out.error, "")
+        spec = adapter.spec_for_plan(p)
+        self.assertEqual((spec.ranking_mode, spec.sort_direction, spec.top_n),
+                         ("grouped", "asc", 1))
+        want = dict(truth.grouped(_BOOK, [PRODUCT], column=BALANCE, how="sum"))
+        lowest = min(want, key=want.get)
+        from mi_agent.mi_query_executor import execute_mi_query
+        frame = execute_mi_query(spec, _BOOK, _SEMANTICS).data
+        self.assertEqual([str(v) for v in frame[PRODUCT]], [str(lowest[0])])
+
     def test_the_configured_region_dimension(self):
         """The asset-config basis for equity_release is collateral, whose
         reporting field is `collateral_geography`. Grouping on it must bind."""
@@ -360,9 +378,6 @@ class TestIneligibility(unittest.TestCase):
         self._refused(plan(operation="distribution", dimensions=[PRODUCT]),
                       adapter.OPERATION_NOT_GENERIC)
 
-    def test_rank_is_not_generic(self):
-        self._refused(plan(operation="rank", dimensions=[PRODUCT]),
-                      adapter.OPERATION_NOT_GENERIC)
 
     def test_summary_is_not_generic(self):
         self._refused(plan(operation="summary"), adapter.OPERATION_NOT_GENERIC)

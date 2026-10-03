@@ -368,7 +368,10 @@ class TestDCanaryIneligible(unittest.TestCase):
             record = run(cfg, question=INELIGIBLE_LENS)
         gate = record["eligibility"]
         self.assertEqual(gate["gate_capability"], "generic_analysis")
-        self.assertEqual(gate["gate_operations"], ["breakdown", "point_in_time"])
+        # `rank` joined with the ranking slot (vocabulary 2.22.0): a ranking is
+        # the executor's own grouped ranking, one axis, in the asked direction.
+        self.assertEqual(gate["gate_operations"],
+                         ["breakdown", "point_in_time", "rank"])
         self.assertEqual(gate["gate_period_forms"], ["current"])
         self.assertEqual(gate["gate_max_dimensions"], 2)
 

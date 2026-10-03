@@ -1,0 +1,816 @@
+{
+ "what_this_is": "The 135 questions of the production question-bank run the owner supplied as qb_full.txt on 2026-09-28. Question text and bank identity only: no answer and no figure is recorded here. 'Show pipeline amount by product.' appears twice (pipeline_020, pipeline_strat_001).",
+ "question_count": 135,
+ "questions": [
+  {
+   "n": 1,
+   "id": "funded_kpi_001",
+   "category": "funded_kpi",
+   "question": "What is the funded balance?"
+  },
+  {
+   "n": 2,
+   "id": "funded_kpi_002",
+   "category": "funded_kpi",
+   "question": "What is the current funded balance?"
+  },
+  {
+   "n": 3,
+   "id": "funded_kpi_003",
+   "category": "funded_kpi",
+   "question": "What is total current outstanding balance?"
+  },
+  {
+   "n": 4,
+   "id": "funded_kpi_004",
+   "category": "funded_kpi",
+   "question": "How many funded loans are there?"
+  },
+  {
+   "n": 5,
+   "id": "funded_kpi_005",
+   "category": "funded_kpi",
+   "question": "How many loans are in the funded book?"
+  },
+  {
+   "n": 6,
+   "id": "funded_kpi_006",
+   "category": "funded_kpi",
+   "question": "What is the weighted average current LTV?"
+  },
+  {
+   "n": 7,
+   "id": "funded_kpi_007",
+   "category": "funded_kpi",
+   "question": "What is WA LTV?"
+  },
+  {
+   "n": 8,
+   "id": "funded_kpi_008",
+   "category": "funded_kpi",
+   "question": "What is the weighted average interest rate?"
+  },
+  {
+   "n": 9,
+   "id": "funded_kpi_009",
+   "category": "funded_kpi",
+   "question": "What is WA current interest rate?"
+  },
+  {
+   "n": 10,
+   "id": "funded_kpi_010",
+   "category": "funded_kpi",
+   "question": "What is the simple average interest rate?"
+  },
+  {
+   "n": 11,
+   "id": "funded_kpi_011",
+   "category": "funded_kpi",
+   "question": "What is the average borrower age?"
+  },
+  {
+   "n": 12,
+   "id": "funded_kpi_012",
+   "category": "funded_kpi",
+   "question": "What is the weighted average borrower age?"
+  },
+  {
+   "n": 13,
+   "id": "funded_kpi_013",
+   "category": "funded_kpi",
+   "question": "What is the average loan balance?"
+  },
+  {
+   "n": 14,
+   "id": "funded_kpi_014",
+   "category": "funded_kpi",
+   "question": "What is the median loan balance?"
+  },
+  {
+   "n": 15,
+   "id": "funded_kpi_015",
+   "category": "funded_kpi",
+   "question": "What is the largest loan?"
+  },
+  {
+   "n": 16,
+   "id": "funded_kpi_016",
+   "category": "funded_kpi",
+   "question": "What is the smallest loan?"
+  },
+  {
+   "n": 17,
+   "id": "funded_kpi_017",
+   "category": "funded_kpi",
+   "question": "What is the total original balance?"
+  },
+  {
+   "n": 18,
+   "id": "funded_kpi_018",
+   "category": "funded_kpi",
+   "question": "What is the current valuation amount?"
+  },
+  {
+   "n": 19,
+   "id": "funded_kpi_019",
+   "category": "funded_kpi",
+   "question": "What is the average current valuation?"
+  },
+  {
+   "n": 20,
+   "id": "funded_kpi_020",
+   "category": "funded_kpi",
+   "question": "What is the weighted average current valuation?"
+  },
+  {
+   "n": 21,
+   "id": "funded_breakdown_1d_001",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by region."
+  },
+  {
+   "n": 22,
+   "id": "funded_breakdown_1d_002",
+   "category": "funded_breakdown_1d",
+   "question": "Show funded balance by collateral region."
+  },
+  {
+   "n": 23,
+   "id": "funded_breakdown_1d_003",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by obligor region."
+  },
+  {
+   "n": 24,
+   "id": "funded_breakdown_1d_004",
+   "category": "funded_breakdown_1d",
+   "question": "Show loan count by region."
+  },
+  {
+   "n": 25,
+   "id": "funded_breakdown_1d_005",
+   "category": "funded_breakdown_1d",
+   "question": "Show average loan balance by region."
+  },
+  {
+   "n": 26,
+   "id": "funded_breakdown_1d_006",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA LTV by region."
+  },
+  {
+   "n": 27,
+   "id": "funded_breakdown_1d_007",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA interest rate by region."
+  },
+  {
+   "n": 28,
+   "id": "funded_breakdown_1d_008",
+   "category": "funded_breakdown_1d",
+   "question": "Show average borrower age by region."
+  },
+  {
+   "n": 29,
+   "id": "funded_breakdown_1d_009",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by broker."
+  },
+  {
+   "n": 30,
+   "id": "funded_breakdown_1d_010",
+   "category": "funded_breakdown_1d",
+   "question": "Show loan count by broker."
+  },
+  {
+   "n": 31,
+   "id": "funded_breakdown_1d_011",
+   "category": "funded_breakdown_1d",
+   "question": "Show average loan balance by broker."
+  },
+  {
+   "n": 32,
+   "id": "funded_breakdown_1d_012",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA LTV by broker."
+  },
+  {
+   "n": 33,
+   "id": "funded_breakdown_1d_013",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA interest rate by broker."
+  },
+  {
+   "n": 34,
+   "id": "funded_breakdown_1d_014",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by LTV bucket."
+  },
+  {
+   "n": 35,
+   "id": "funded_breakdown_1d_015",
+   "category": "funded_breakdown_1d",
+   "question": "Show loan count by LTV bucket."
+  },
+  {
+   "n": 36,
+   "id": "funded_breakdown_1d_016",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA interest rate by LTV bucket."
+  },
+  {
+   "n": 37,
+   "id": "funded_breakdown_1d_017",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by borrower age bucket."
+  },
+  {
+   "n": 38,
+   "id": "funded_breakdown_1d_018",
+   "category": "funded_breakdown_1d",
+   "question": "Show loan count by borrower age bucket."
+  },
+  {
+   "n": 39,
+   "id": "funded_breakdown_1d_019",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA LTV by borrower age bucket."
+  },
+  {
+   "n": 40,
+   "id": "funded_breakdown_1d_020",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by origination channel."
+  },
+  {
+   "n": 41,
+   "id": "funded_breakdown_1d_021",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by product type."
+  },
+  {
+   "n": 42,
+   "id": "funded_breakdown_1d_022",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by account status."
+  },
+  {
+   "n": 43,
+   "id": "funded_breakdown_1d_023",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by borrower structure."
+  },
+  {
+   "n": 44,
+   "id": "funded_breakdown_1d_024",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by property type."
+  },
+  {
+   "n": 45,
+   "id": "funded_breakdown_1d_025",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by occupancy type."
+  },
+  {
+   "n": 46,
+   "id": "pipeline_001",
+   "category": "pipeline",
+   "question": "What is the pipeline amount?"
+  },
+  {
+   "n": 47,
+   "id": "pipeline_002",
+   "category": "pipeline",
+   "question": "How many pipeline cases are there?"
+  },
+  {
+   "n": 48,
+   "id": "pipeline_003",
+   "category": "pipeline",
+   "question": "What is the weighted expected funded amount?"
+  },
+  {
+   "n": 49,
+   "id": "pipeline_004",
+   "category": "pipeline",
+   "question": "What is the pipeline conversion rate?"
+  },
+  {
+   "n": 50,
+   "id": "pipeline_005",
+   "category": "pipeline",
+   "question": "What is the pipeline amount by stage?"
+  },
+  {
+   "n": 51,
+   "id": "pipeline_006",
+   "category": "pipeline",
+   "question": "What is the pipeline case count by stage?"
+  },
+  {
+   "n": 52,
+   "id": "pipeline_007",
+   "category": "pipeline",
+   "question": "What is the pipeline amount by broker?"
+  },
+  {
+   "n": 53,
+   "id": "pipeline_008",
+   "category": "pipeline",
+   "question": "What is the pipeline amount by region?"
+  },
+  {
+   "n": 54,
+   "id": "pipeline_009",
+   "category": "pipeline",
+   "question": "What is the pipeline amount by expected completion month?"
+  },
+  {
+   "n": 55,
+   "id": "pipeline_010",
+   "category": "pipeline",
+   "question": "Which broker has the largest pipeline?"
+  },
+  {
+   "n": 56,
+   "id": "pipeline_011",
+   "category": "pipeline",
+   "question": "Which stage has the largest pipeline?"
+  },
+  {
+   "n": 57,
+   "id": "pipeline_012",
+   "category": "pipeline",
+   "question": "How much pipeline is expected to complete next month?"
+  },
+  {
+   "n": 58,
+   "id": "pipeline_013",
+   "category": "pipeline",
+   "question": "How much pipeline is overdue?"
+  },
+  {
+   "n": 59,
+   "id": "pipeline_014",
+   "category": "pipeline",
+   "question": "How much pipeline is current month?"
+  },
+  {
+   "n": 60,
+   "id": "pipeline_015",
+   "category": "pipeline",
+   "question": "Show overdue pipeline cases."
+  },
+  {
+   "n": 61,
+   "id": "pipeline_016",
+   "category": "pipeline",
+   "question": "Show pipeline by expected completion date."
+  },
+  {
+   "n": 62,
+   "id": "pipeline_017",
+   "category": "pipeline",
+   "question": "Show pipeline stage distribution."
+  },
+  {
+   "n": 63,
+   "id": "pipeline_018",
+   "category": "pipeline",
+   "question": "Show pipeline weighted expected amount by stage."
+  },
+  {
+   "n": 64,
+   "id": "pipeline_019",
+   "category": "pipeline",
+   "question": "Show pipeline weighted expected amount by broker."
+  },
+  {
+   "n": 65,
+   "id": "pipeline_020",
+   "category": "pipeline",
+   "question": "Show pipeline amount by product."
+  },
+  {
+   "n": 66,
+   "id": "pipeline_021",
+   "category": "pipeline",
+   "question": "Show pipeline amount by LTV bucket."
+  },
+  {
+   "n": 67,
+   "id": "pipeline_022",
+   "category": "pipeline",
+   "question": "Show pipeline amount by age bucket."
+  },
+  {
+   "n": 68,
+   "id": "pipeline_023",
+   "category": "pipeline",
+   "question": "Show pipeline amount by source file."
+  },
+  {
+   "n": 69,
+   "id": "pipeline_024",
+   "category": "pipeline",
+   "question": "Show current month pipeline completions expected."
+  },
+  {
+   "n": 70,
+   "id": "pipeline_evolution_001",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline amount evolution by week."
+  },
+  {
+   "n": 71,
+   "id": "pipeline_evolution_002",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline amount evolution by month."
+  },
+  {
+   "n": 72,
+   "id": "pipeline_evolution_003",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline case count evolution by week."
+  },
+  {
+   "n": 73,
+   "id": "pipeline_evolution_004",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline case count evolution by month."
+  },
+  {
+   "n": 74,
+   "id": "pipeline_evolution_005",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline amount by stage over time."
+  },
+  {
+   "n": 75,
+   "id": "pipeline_evolution_006",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline cases by stage over time."
+  },
+  {
+   "n": 76,
+   "id": "pipeline_evolution_007",
+   "category": "pipeline_evolution",
+   "question": "Show expected completions by month."
+  },
+  {
+   "n": 77,
+   "id": "pipeline_evolution_008",
+   "category": "pipeline_evolution",
+   "question": "Show weighted expected funded amount by month."
+  },
+  {
+   "n": 78,
+   "id": "pipeline_evolution_009",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline conversion basis over time."
+  },
+  {
+   "n": 79,
+   "id": "pipeline_evolution_010",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline by broker over time."
+  },
+  {
+   "n": 80,
+   "id": "pipeline_evolution_011",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline by stage for October and November."
+  },
+  {
+   "n": 81,
+   "id": "pipeline_evolution_012",
+   "category": "pipeline_evolution",
+   "question": "Compare October and November pipeline amount."
+  },
+  {
+   "n": 82,
+   "id": "pipeline_evolution_013",
+   "category": "pipeline_evolution",
+   "question": "Compare latest pipeline with prior pipeline."
+  },
+  {
+   "n": 83,
+   "id": "pipeline_evolution_014",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline growth from October to November."
+  },
+  {
+   "n": 84,
+   "id": "pipeline_evolution_015",
+   "category": "pipeline_evolution",
+   "question": "Show stage migration over time."
+  },
+  {
+   "n": 85,
+   "id": "forecast_001",
+   "category": "forecast",
+   "question": "What is the forecast funded balance?"
+  },
+  {
+   "n": 86,
+   "id": "forecast_002",
+   "category": "forecast",
+   "question": "What is funded balance plus weighted pipeline?"
+  },
+  {
+   "n": 87,
+   "id": "forecast_003",
+   "category": "forecast",
+   "question": "What is the expected funded balance?"
+  },
+  {
+   "n": 88,
+   "id": "forecast_004",
+   "category": "forecast",
+   "question": "What is the weighted expected pipeline contribution?"
+  },
+  {
+   "n": 89,
+   "id": "forecast_005",
+   "category": "forecast",
+   "question": "What is the forecast loan count?"
+  },
+  {
+   "n": 90,
+   "id": "forecast_006",
+   "category": "forecast",
+   "question": "Show forecast balance by region."
+  },
+  {
+   "n": 91,
+   "id": "forecast_007",
+   "category": "forecast",
+   "question": "Show forecast balance by broker."
+  },
+  {
+   "n": 92,
+   "id": "forecast_008",
+   "category": "forecast",
+   "question": "Show forecast balance by LTV bucket."
+  },
+  {
+   "n": 93,
+   "id": "forecast_009",
+   "category": "forecast",
+   "question": "Show forecast balance by expected completion month."
+  },
+  {
+   "n": 94,
+   "id": "forecast_010",
+   "category": "forecast",
+   "question": "How much of the forecast comes from funded book?"
+  },
+  {
+   "n": 95,
+   "id": "forecast_011",
+   "category": "forecast",
+   "question": "How much of the forecast comes from pipeline?"
+  },
+  {
+   "n": 96,
+   "id": "forecast_012",
+   "category": "forecast",
+   "question": "What is the forecast bridge?"
+  },
+  {
+   "n": 97,
+   "id": "forecast_013",
+   "category": "forecast",
+   "question": "Show funded vs pipeline contribution."
+  },
+  {
+   "n": 98,
+   "id": "forecast_014",
+   "category": "forecast",
+   "question": "Show forecast completion basis."
+  },
+  {
+   "n": 99,
+   "id": "forecast_015",
+   "category": "forecast",
+   "question": "Show historical conversion basis."
+  },
+  {
+   "n": 100,
+   "id": "forecast_016",
+   "category": "forecast",
+   "question": "Which stages use historical rates?"
+  },
+  {
+   "n": 101,
+   "id": "forecast_017",
+   "category": "forecast",
+   "question": "Which stages use config fallback rates?"
+  },
+  {
+   "n": 102,
+   "id": "forecast_018",
+   "category": "forecast",
+   "question": "How much active pipeline is excluded from weighting?"
+  },
+  {
+   "n": 103,
+   "id": "forecast_019",
+   "category": "forecast",
+   "question": "How much pipeline is excluded because of missing probability?"
+  },
+  {
+   "n": 104,
+   "id": "forecast_020",
+   "category": "forecast",
+   "question": "How much pipeline is excluded because of withdrawn status?"
+  },
+  {
+   "n": 105,
+   "id": "forecast_021",
+   "category": "forecast",
+   "question": "Show forecast balance by stage."
+  },
+  {
+   "n": 106,
+   "id": "forecast_022",
+   "category": "forecast",
+   "question": "Show forecast balance by broker and stage."
+  },
+  {
+   "n": 107,
+   "id": "forecast_scale_001",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a325m funded balance?"
+  },
+  {
+   "n": 108,
+   "id": "forecast_scale_002",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a350m funded balance?"
+  },
+  {
+   "n": 109,
+   "id": "forecast_scale_003",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a375m funded balance?"
+  },
+  {
+   "n": 110,
+   "id": "forecast_scale_004",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a3100m funded balance?"
+  },
+  {
+   "n": 111,
+   "id": "forecast_scale_005",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a3150m funded balance?"
+  },
+  {
+   "n": 112,
+   "id": "forecast_scale_006",
+   "category": "forecast_scale",
+   "question": "What is the current completion run rate?"
+  },
+  {
+   "n": 113,
+   "id": "forecast_scale_007",
+   "category": "forecast_scale",
+   "question": "What is the annualised completion run rate?"
+  },
+  {
+   "n": 114,
+   "id": "forecast_scale_008",
+   "category": "forecast_scale",
+   "question": "Show the funded balance extrapolation curve."
+  },
+  {
+   "n": 115,
+   "id": "forecast_scale_009",
+   "category": "forecast_scale",
+   "question": "Show the scale-up forecast."
+  },
+  {
+   "n": 116,
+   "id": "forecast_scale_010",
+   "category": "forecast_scale",
+   "question": "What is the downside forecast?"
+  },
+  {
+   "n": 117,
+   "id": "forecast_scale_011",
+   "category": "forecast_scale",
+   "question": "What is the base forecast?"
+  },
+  {
+   "n": 118,
+   "id": "forecast_scale_012",
+   "category": "forecast_scale",
+   "question": "What is the upside forecast?"
+  },
+  {
+   "n": 119,
+   "id": "forecast_scale_013",
+   "category": "forecast_scale",
+   "question": "How much pipeline is needed to reach \u00a3100m?"
+  },
+  {
+   "n": 120,
+   "id": "forecast_scale_014",
+   "category": "forecast_scale",
+   "question": "What happens if completion run rate falls by 25%?"
+  },
+  {
+   "n": 121,
+   "id": "forecast_scale_015",
+   "category": "forecast_scale",
+   "question": "What completion rate is assumed from KFI to completion?"
+  },
+  {
+   "n": 122,
+   "id": "forecast_scale_016",
+   "category": "forecast_scale",
+   "question": "What is the expected time to securitisation scale?"
+  },
+  {
+   "n": 123,
+   "id": "forecast_scale_017",
+   "category": "forecast_scale",
+   "question": "Show milestone dates to funding thresholds."
+  },
+  {
+   "n": 124,
+   "id": "forecast_scale_018",
+   "category": "forecast_scale",
+   "question": "Compare current weighted pipeline forecast with run-rate extrapolation."
+  },
+  {
+   "n": 125,
+   "id": "forecast_scale_019",
+   "category": "forecast_scale",
+   "question": "What is the 8-week completion run rate?"
+  },
+  {
+   "n": 126,
+   "id": "forecast_scale_020",
+   "category": "forecast_scale",
+   "question": "What is the 12-week completion run rate?"
+  },
+  {
+   "n": 127,
+   "id": "forecast_scale_021",
+   "category": "forecast_scale",
+   "question": "Project funded balance over the next twelve months."
+  },
+  {
+   "n": 128,
+   "id": "forecast_scale_022",
+   "category": "forecast_scale",
+   "question": "When does the book reach scale?"
+  },
+  {
+   "n": 129,
+   "id": "pipeline_strat_001",
+   "category": "pipeline",
+   "question": "Show pipeline amount by product."
+  },
+  {
+   "n": 130,
+   "id": "pipeline_strat_002",
+   "category": "pipeline",
+   "question": "Show pipeline amount by LTV band."
+  },
+  {
+   "n": 131,
+   "id": "pipeline_strat_003",
+   "category": "pipeline",
+   "question": "What is the pipeline case count by product?"
+  },
+  {
+   "n": 132,
+   "id": "forecast_runoff_001",
+   "category": "forecast",
+   "question": "What is the weighted expected pipeline?"
+  },
+  {
+   "n": 133,
+   "id": "forecast_runoff_002",
+   "category": "forecast",
+   "question": "How much of the pipeline has lapsed past its stage window?"
+  },
+  {
+   "n": 134,
+   "id": "forecast_runoff_003",
+   "category": "forecast",
+   "question": "What is the offer to completion pull-through rate?"
+  },
+  {
+   "n": 135,
+   "id": "forecast_runoff_004",
+   "category": "forecast",
+   "question": "When are pipeline cases expected to complete?"
+  }
+ ]
+}

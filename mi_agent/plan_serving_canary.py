@@ -55,16 +55,21 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
+from mi_agent import answer_standard as _standard
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_shadow_evidence as evidence
 from mi_agent import plan_shadow_wiring as wiring
 from mi_agent import plan_pipeline_runtime as pipeline_rt
+from mi_agent import plan_forecast_runtime as forecast_rt
+from mi_agent import plan_stage_movement_runtime as stage_rt
+from mi_agent import plan_runtime_registry as runtime_registry
 from mi_agent import plan_temporal_runtime as temporal
 from mi_agent import plan_material_summary as material_summary
 from mi_agent import plan_attribution as attribution
 from mi_agent import plan_metric_delta as metric_delta
+from mi_agent import plan_composition as composition
 
 logger = logging.getLogger("mi_agent.plan_serving_canary")
 
@@ -86,6 +91,10 @@ FORBIDDEN_PRINCIPAL_TOKENS = frozenset({
 #: What the response that reached the caller actually came from.
 SERVED_NEW = "NEW"
 SERVED_LEGACY = "LEGACY_FALLBACK"
+#: The governed path's own decline served (owner decision D18, `respond`): what
+#: the question was understood as and why it is not answered — never the legacy
+#: path's answer in its place.
+SERVED_DECLINED = "DECLINED"
 
 # Why legacy served instead. Stable strings: the evidence groups by them.
 INTERPRETER_FAILED = "INTERPRETER_FAILURE"
@@ -93,6 +102,8 @@ CLARIFY_NOT_SERVED = "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
 REFUSE_NOT_SERVED = "REFUSE_NOT_SERVED_IN_THIS_SLICE"
 INELIGIBLE = "INELIGIBLE"
 EXECUTION_FAILED = "EXECUTION_FAILED"
+#: The plan names a governed field the book being answered does not carry.
+FIELD_NOT_IN_BOOK = "FIELD_NOT_IN_BOOK"
 RECONCILIATION_FAILED = "PLAN_RECEIPT_RECONCILIATION_FAILED"
 RENDER_FAILED = "RENDER_FAILED"
 UNEXPECTED_ERROR = "UNEXPECTED_ERROR"
@@ -268,6 +279,28 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
         "warnings": warnings,
         "metadata": {},
     }
+    # THE EXECUTION RECEIPT, from the one owner every funded answer's receipt
+    # line comes from (`execution_receipt.build_receipt`): what was measured,
+    # over which loans, grouped how, and AS AT the book's own cut-off — D4 on
+    # the answer itself. Built from the executed result and the frame, never
+    # from the question; the governed coverage owner, not the legacy semantic
+    # guard, judges it. A series is described by the temporal runtime's own
+    # evidence instead, so only a single-snapshot answer gets one here.
+    if executed is None:
+        try:
+            from mi_agent import execution_receipt as receipt_mod
+            from mi_agent.mi_agent_workflow import reporting_date_label
+            workflow["execution_receipt"] = receipt_mod.build_receipt(
+                spec=spec, query_result=result,
+                semantics=dict(semantics) if isinstance(semantics, Mapping) else {},
+                facets=(), dataset=execution_population,
+                period=reporting_date_label(frame), frame=frame).to_dict()
+        except Exception as exc:                                     # noqa: BLE001
+            # A disclosure must never cost an answer that would otherwise stand.
+            warnings.append(f"Receipt not rendered: {type(exc).__name__}")
+    region = _region_disclosure(result, frame)
+    if region:
+        workflow["answer_notes"] = [region]
     payload = adapt_workflow_result(workflow, portfolio_id=portfolio_id,
                                     as_of=as_of)
     # THE TWO GOVERNED OBJECTS, CARRIED SO THE COVERAGE OWNER CAN RECONCILE THEM.
@@ -319,6 +352,32 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
 # the production entry point
 # --------------------------------------------------------------------------- #
 
+def _region_disclosure(result: Any, frame: Any) -> str:
+    """D12 on a funded answer: a breakdown by, or restriction to, the reporting
+    region says which location its regions are, and a breakdown says what it
+    could not place — the disclosure the Pipeline and Forecast answers make,
+    read from the harmonisation's own record (`region_taxonomy.disclosure`).
+
+    Over the whole book the counts are the book's; an answer over part of it
+    names the basis without counts, since the book's are not its own."""
+    from engine import region_taxonomy as region_mod
+
+    executed = dict(getattr(result, "metadata", None) or {})
+    grouped = region_mod.FIELD_REPORTING in (executed.get("group_field_keys") or ())
+    predicates = [p for p in (executed.get("applied_predicates") or ())
+                  if isinstance(p, Mapping)]
+    restricted = any(str(p.get("field") or "") == region_mod.FIELD_REPORTING
+                     for p in predicates)
+    if not (grouped or restricted) or frame is None:
+        return ""
+    told = region_mod.disclosure(frame)
+    whole_book = grouped and not predicates
+    return _standard.region_note(
+        told["source_field_rows"], noun="loan", counts=whole_book,
+        unmapped=told["unmapped_rows"] if whole_book else 0,
+        unmapped_amount=told["unmapped_amount"] if whole_book else 0.0)
+
+
 def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           run_id: Optional[str] = None, legacy_result: Any, frame: Any,
           semantics: Any,
@@ -343,6 +402,11 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           pipeline_source: Any = None, pipeline_root: Any = None,
           pipeline_client_id: Optional[str] = None,
           pipeline_history: Any = None,
+          # THE GOVERNED FUNDED FRAME, as a resolver `f(client_id, run_id)` —
+          # the one `mi_service` already hands the legacy analytical route. The
+          # forecast composer reads the funded book through it (D6). Supplied,
+          # never discovered here.
+          funded_frame_resolver: Any = None,
           # THE CHANGE-INTELLIGENCE OWNERS' INPUTS, resolved by the caller that
           # already owns discovery and authorisation. `output_root` is the
           # governed source root `mi_service` already resolves for its routed
@@ -353,6 +417,17 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           output_root: Optional[str] = None,
           tenant_id: Optional[str] = None,
           authorised_portfolio_ids: Tuple[str, ...] = (),
+          # WHAT A PLAN THIS PATH DOES NOT SERVE BECOMES. False: None, and the
+          # caller's legacy envelope serves — the canary's original contract,
+          # kept for the harnesses that measure the governed attempt on its
+          # own. True: the governed decline (`plan_decline`), and legacy never
+          # answers. Production asks through `respond`, which is D18.
+          decline: bool = False,
+          # THE CONVERSATION (§34, §38, §39): the `Turn` `read_turn` made of
+          # this message — `question` is then already the complete question
+          # it answers. None: a stand-alone question, exactly as before, and
+          # nothing is remembered.
+          conversation: Any = None,
           ) -> Optional[Dict[str, Any]]:
     """The new envelope to serve, or None meaning "legacy serves".
 
@@ -381,9 +456,17 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             snapshot_store=snapshot_store,
             snapshot_client_id=snapshot_client_id,
             snapshot_route=snapshot_route,
+            # THE CLIENT'S GOVERNED SOURCE PORTFOLIOS. Accepted above and, from
+            # e6e16c63 until this line was restored, never forwarded: every
+            # production compilation ran with no registry, so a question naming
+            # a portfolio was refused on the governed path however well the
+            # production seam built one. A structural test now asserts that
+            # every input `serve` shares with `_attempt` is passed through.
+            source_registry=source_registry,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
             pipeline_history=pipeline_history, pipeline_run_id=run_id,
+            funded_frame_resolver=funded_frame_resolver,
             client_id=client_id, output_root=output_root, tenant_id=tenant_id,
             authorised_portfolio_ids=tuple(authorised_portfolio_ids),
             # `view` IS THE EXECUTED POPULATION, and it is load-bearing here
@@ -400,6 +483,19 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
         body["orchestration_error"] = f"{type(exc).__name__}: {exc}"[:300]
         logger.warning("serving canary failed; legacy serves", exc_info=True)
 
+    # D18: A PLAN THIS PATH DOES NOT SERVE IS DECLINED HERE, IN WORDS, and the
+    # legacy path is never asked. Built before the record so the record states
+    # what the caller was handed.
+    declined: Optional[Dict[str, Any]] = None
+    if payload is None and decline:
+        declined = _declined(body, question=question, reason=reason, view=view)
+    served_from = (SERVED_NEW if payload is not None
+                   else SERVED_DECLINED if declined is not None
+                   else SERVED_LEGACY)
+    result = _converse(payload if payload is not None else declined, body=body,
+                       turn=conversation, answered=payload is not None,
+                       reason=reason)
+
     # RECORDING CANNOT COST THE ANSWER. `evidence.write` swallows its own
     # faults, but this tail is still guarded: a recorder that raises anyway —
     # a future sink, a patched one — must not turn a good answer into a 500.
@@ -413,14 +509,16 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             "principal_id": principal_of(context),
             "new_path_eligible": bool(
                 (body.get("eligibility") or {}).get("eligible")),
-            "decision": SERVED_NEW if payload is not None else SERVED_LEGACY,
+            "decision": served_from,
             "reason": "" if payload is not None else reason,
             "plan_id": (body.get("compiler") or {}).get("plan_id"),
             # WHICH ENVELOPE THE CALLER ACTUALLY RETURNED. Recorded as the
             # decision this module made and the caller honours unconditionally,
             # so the record states the served provenance rather than implying it.
-            "response_served_from": (SERVED_NEW if payload is not None
-                                     else SERVED_LEGACY),
+            "response_served_from": served_from,
+            # The sentence a declined reader was given, so the audit reads the
+            # decline itself rather than reconstructing it.
+            "decline_message": (declined or {}).get("answer"),
             "legacy_result_available": legacy_ok,
             "legacy_value": adapter._old_value(legacy_result),
             "legacy_ok": legacy_ok,
@@ -430,7 +528,290 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
     except Exception:                                                # noqa: BLE001
         logger.warning("the serving record could not be completed; the answer "
                        "stands", exc_info=True)
-    return payload
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# the conversation (§34, §38, §39)
+# --------------------------------------------------------------------------- #
+
+#: An ask-back the conversation reader made (one more detail would settle a
+#: follow-up), and a follow-up that refers to something the conversation does
+#: not hold. Both are worded by `plan_decline`; neither carries a figure.
+CLARIFY_CONVERSATION = "CLARIFY_CONVERSATION"
+CONVERSATION_NOT_HELD = "CONVERSATION_NOT_HELD"
+
+_reader_factory: Optional[Any] = None
+_reader_cache: Optional[Any] = None
+
+
+def set_reader_factory(factory: Optional[Any]) -> None:
+    """Inject the conversation reader. For tests and offline replay only."""
+    global _reader_factory, _reader_cache
+    _reader_factory = factory
+    _reader_cache = None
+
+
+def _reader() -> Any:
+    global _reader_cache
+    if _reader_cache is None:
+        from mi_agent.interpretation_v2 import conversation_reader
+        _reader_cache = (_reader_factory or conversation_reader.default_reader)()
+    return _reader_cache
+
+
+class Turn:
+    """One message in a conversation, as the request answers it.
+
+    ``message`` is what the user typed; ``question`` the complete question
+    the request answers — the message itself unless the conversation reader
+    made it one; ``memory`` what the returned token held; ``lapsed`` why a
+    returned token could not be used, or why the message could not be read
+    with it; ``reading`` the reader's own reading, when it ran."""
+
+    def __init__(self, *, message: str, principal: str, book: str,
+                 chat: Optional[str], question: Optional[str] = None,
+                 memory: Any = None, lapsed: Optional[str] = None,
+                 reading: Any = None) -> None:
+        self.message = message
+        self.question = question if question is not None else message
+        self.principal = principal
+        self.book = book
+        self.chat = chat
+        self.memory = memory
+        self.lapsed = lapsed
+        self.reading = reading
+
+    @property
+    def kind(self) -> str:
+        """`reply` to an ask-back, `follow_up` to an answer, or `new`."""
+        if self.memory is None or self.lapsed:
+            return "new"
+        return "reply" if self.memory.pending is not None else "follow_up"
+
+    @property
+    def carried(self) -> bool:
+        """Whether anything from the conversation went into the question."""
+        from mi_agent.interpretation_v2 import conversation_reader as reader
+        return (self.reading is not None and self.reading.ok
+                and self.reading.outcome == reader.COMPLETE
+                and reader.carried(self.message, self.question))
+
+    @property
+    def immediate(self) -> bool:
+        """The reader settled the turn without a plan: an ask, or a cannot."""
+        from mi_agent.interpretation_v2 import conversation_reader as reader
+        return (self.reading is not None and self.reading.ok
+                and self.reading.outcome in (reader.ASK, reader.CANNOT))
+
+
+def read_turn(message: str, *, token: Optional[str], principal: str, book: str,
+              chat: Optional[str]) -> Optional[Turn]:
+    """What this message is in its conversation. None when the conversation
+    is switched off — the request is then exactly a stand-alone one. Never
+    raises: a message that cannot be read with its conversation is read on
+    its own, and the answer says so (D24)."""
+    from mi_agent import conversation as convo
+    if not convo.enabled():
+        return None
+    turn = Turn(message=message, principal=principal, book=book, chat=chat)
+    returned = convo.read(token, principal=principal, book=book, chat=chat)
+    if returned is None:
+        return turn
+    if not returned.ok:
+        turn.lapsed = returned.lapsed
+        return turn
+    turn.memory = returned.memory
+    try:
+        from trakt_core import perf as _perf
+        with _perf.stage("governed.conversation_reader"):
+            reading = _reader().read(message, returned.memory)
+    except Exception as exc:                                         # noqa: BLE001
+        logger.warning("the conversation reader failed; the message is read "
+                       "on its own", exc_info=True)
+        from mi_agent.interpretation_v2.conversation_reader import Reading
+        reading = Reading(error=f"{type(exc).__name__}: {exc}"[:300])
+    turn.reading = reading
+    if not reading.ok:
+        turn.lapsed = convo.LAPSED_UNREAD
+    elif reading.question:
+        turn.question = reading.question
+    return turn
+
+
+def _next_memory(turn: Turn, *, answered: bool, reason: str,
+                 body: Mapping[str, Any]) -> Any:
+    """What the conversation holds after this turn (D24, D25): an answer
+    replaces the last answered question; an ask-back keeps it and opens an
+    ask; any other decline keeps it unchanged."""
+    from mi_agent import conversation as convo
+    from mi_agent import plan_decline
+    held = turn.memory if turn.memory is not None else None
+    last = held.last if held is not None else None
+    pending = held.pending if held is not None and turn.kind == "reply" else None
+    if answered:
+        return convo.Memory(last=turn.question)
+    asked = None
+    if reason == CLARIFY_NOT_SERVED:
+        # The interpreter could not answer the COMPLETE question without one
+        # more detail: the ask is about that question.
+        asked = convo.PendingAsk(
+            question=turn.question, ask=plan_decline.ask_detail(body),
+            turns=(tuple(pending.turns) + ((pending.ask, turn.message),)
+                   if pending is not None else ()))
+    elif reason == CLARIFY_CONVERSATION:
+        # The reader could not make the message complete: the ask is about
+        # the message, or still about the question already asked about.
+        asked = convo.PendingAsk(
+            question=pending.question if pending is not None else turn.message,
+            ask=turn.reading.ask,
+            turns=(tuple(pending.turns) + ((pending.ask, turn.message),)
+                   if pending is not None else ()))
+    return convo.Memory(last=last, pending=asked)
+
+
+def _converse(result: Optional[Dict[str, Any]], *, body: Dict[str, Any],
+              turn: Optional[Turn], answered: bool,
+              reason: str) -> Optional[Dict[str, Any]]:
+    """The conversation, on the envelope the caller is handed. Never raises.
+
+    - What carried over is stated: an answer to a follow-up or a reply says
+      the complete question it answered (D25).
+    - A returned memory that could not be used says so, and the message was
+      read on its own (D24: expiry is stated, never silent).
+    - The envelope carries the continuation the next message returns: the
+      question just answered, or the ask-back just made (D24).
+    With no turn — the conversation switched off — the envelope is returned
+    untouched."""
+    if result is None or turn is None:
+        return result
+    try:
+        from mi_agent import conversation as convo
+        notes: List[str] = []
+        if turn.lapsed:
+            notes.append(convo.lapsed_notice(turn.lapsed))
+        elif turn.carried:
+            notes.append(
+                f"With your reply, I read your question as “{turn.question}”."
+                if turn.kind == "reply" else
+                f"Following on from your previous question, I read this as "
+                f"“{turn.question}”.")
+        memory = _next_memory(turn, answered=answered, reason=reason, body=body)
+        token = convo.issue(principal=turn.principal, book=turn.book,
+                            chat=turn.chat, memory=memory)
+        tail = ""
+        if memory.pending is not None:
+            if len(memory.pending.turns) >= convo.max_asks():
+                tail = " " + convo.lapsed_notice(convo.LAPSED_TOO_MANY_ASKS)
+            elif token:
+                tail = " Reply with it and I will answer your question."
+        if token:
+            kept = convo.Memory(last=memory.last, pending=(
+                memory.pending if memory.pending is not None
+                and len(memory.pending.turns) < convo.max_asks() else None))
+            result["conversation"] = {
+                "kind": kept.kind, "continuation": token,
+                "expiresInSeconds": int(convo.memory_minutes() * 60),
+                **({"readAs": turn.question} if turn.carried else {})}
+        reading = turn.reading
+        body["conversation"] = {
+            "kind": turn.kind, "message": turn.message,
+            "read_as": turn.question if turn.carried else None,
+            "lapsed": turn.lapsed,
+            "reader": ({"outcome": reading.outcome, "error": reading.error,
+                        "model_id": reading.model_id,
+                        "model_ms": (reading.usage or {}).get("model_ms")}
+                       if reading is not None else None),
+            "continuation_issued": bool(token),
+            "holds": {"last": bool(memory.last),
+                      "ask": memory.pending is not None}}
+        if notes or tail:
+            for key in ("answer", "error"):
+                if isinstance(result.get(key), str):
+                    result[key] = (" ".join(notes + [result[key]]) + tail).strip()
+        return result
+    except Exception:                                                # noqa: BLE001
+        logger.warning("the conversation step failed; the answer stands as it "
+                       "was", exc_info=True)
+        return result
+
+
+def converse_without_plan(turn: Turn, *, context: Any,
+                          client_id: Optional[str] = None,
+                          run_id: Optional[str] = None,
+                          view: Optional[str] = None,
+                          portfolio_id: Optional[str] = None
+                          ) -> Optional[Dict[str, Any]]:
+    """The answer when the conversation reader settled the turn itself: it
+    asks for the one detail that would make the message a question, or says
+    the message refers to something the conversation does not hold. A
+    governed decline — no plan, no figure — recorded like every other."""
+    if not handles(context):
+        return None
+    from mi_agent.interpretation_v2 import conversation_reader as reader
+    body = evidence.new_record(correlation_id=evidence.correlation_id(),
+                               question=turn.message, client_id=client_id,
+                               run_id=run_id, view=view,
+                               portfolio_id=portfolio_id)
+    if turn.reading.outcome == reader.ASK:
+        reason = CLARIFY_CONVERSATION
+        body["disposition"] = evidence.CLARIFY
+        body["interpretation"] = {"ambiguities": [
+            {"slot": "conversation", "note": turn.reading.ask, "blocking": True}]}
+    else:
+        reason = CONVERSATION_NOT_HELD
+        body["disposition"] = evidence.REFUSE
+    declined = _declined(body, question=turn.message, reason=reason, view=view)
+    last = turn.memory.last if turn.memory is not None else None
+    if reason == CONVERSATION_NOT_HELD and last:
+        for key in ("answer", "error"):
+            if isinstance(declined.get(key), str):
+                declined[key] += f" The last question I answered was “{last}”."
+    result = _converse(declined, body=body, turn=turn, answered=False,
+                       reason=reason)
+    try:
+        body["serving"] = {
+            "mode": serve_mode(), "principal_matched": True,
+            "principal_id": principal_of(context), "new_path_eligible": False,
+            "decision": SERVED_DECLINED, "reason": reason, "plan_id": None,
+            "response_served_from": SERVED_DECLINED,
+            "decline_message": (result or {}).get("answer"),
+            "legacy_result_available": False, "legacy_value": None,
+            "legacy_ok": False, "new_value": None}
+        evidence.write(body)
+    except Exception:                                                # noqa: BLE001
+        logger.warning("the conversation record could not be completed; the "
+                       "answer stands", exc_info=True)
+    return result
+
+
+def respond(**kwargs: Any) -> Optional[Dict[str, Any]]:
+    """THE PRODUCTION ENTRY POINT (owner decision D18, 2026-09-30: "Do not use
+    the old system"). For a principal this path serves, the answer is the
+    governed answer or the governed decline, and never the legacy path's: a
+    question the governed path understood and declined was, until this, handed
+    to a path that answered a different question.
+
+    None only when this path does not serve the principal at all (`handles`),
+    which is the one case the caller's legacy path still answers.
+    """
+    kwargs["decline"] = True
+    return serve(**kwargs)
+
+
+def _declined(body: Mapping[str, Any], *, question: str, reason: str,
+              view: Optional[str]) -> Dict[str, Any]:
+    """The governed decline for `reason`. Never raises and never returns None:
+    wording that cannot be built from the record is still a decline."""
+    from mi_agent import plan_decline
+    try:
+        return plan_decline.envelope(question=question, body=body,
+                                     reason=reason, view=view)
+    except Exception:                                                # noqa: BLE001
+        logger.warning("the decline could not be worded from the record",
+                       exc_info=True)
+        return plan_decline.fallback_envelope(question=question, reason=reason,
+                                              view=view)
 
 
 def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],
@@ -475,13 +856,21 @@ def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],
         return None, f"{INELIGIBLE}:{base_why}"
 
     temporal_plan = pipeline_rt.is_temporal(plan)
+    dated_plan = pipeline_rt.is_dated(plan)
     body["execution"] = {"attempted": True,
                          "runtime": ("pipeline_temporal" if temporal_plan
+                                     else "pipeline_dated" if dated_plan
                                      else "pipeline_current"),
                          "requested_semantics": adapter.requested_semantics(plan)}
     try:
         if temporal_plan:
             outcome = pipeline_rt.execute_temporal(
+                plan, root=pipeline_root, client_id=pipeline_client_id or "",
+                to_run_id=pipeline_run_id, history_model=pipeline_history)
+        elif dated_plan:
+            # Named months (D7) and "latest against previous", from the same
+            # weekly owner; the runtime only chooses which extracts.
+            outcome = pipeline_rt.execute_dated(
                 plan, root=pipeline_root, client_id=pipeline_client_id or "",
                 to_run_id=pipeline_run_id, history_model=pipeline_history)
         else:
@@ -495,6 +884,8 @@ def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],
     if not outcome.ok:
         body["execution"].update({"attempted": False,
                                   "why_not": f"{outcome.reason}: {outcome.detail}"[:300]})
+        if (outcome.receipt or {}).get("not_published"):
+            body["execution"]["not_published"] = outcome.receipt["not_published"]
         body["disposition"] = evidence.INELIGIBLE
         return None, f"{INELIGIBLE}:{outcome.reason}"
 
@@ -556,36 +947,277 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
 
     receipt = dict(outcome.receipt)
     measure = str(receipt.get("measure_concept") or "")
-    is_amount = receipt.get("measure_kind") == "amount"
+    # The weighted expected funded amount is money too.
+    is_amount = receipt.get("measure_kind") in ("amount", "weighted")
     axis = (receipt.get("group_field_keys") or [None])[0]
     spec_dict = {"capability": receipt.get("capability"),
                  "population": receipt.get("population_base"),
                  "measure": measure, "dimensions": receipt.get("group_field_keys")}
     shape = str(receipt.get("result_shape") or "")
+    # WHICH PIPELINE. The runtime answers over the live pipeline by the
+    # dashboard's own rule and states it on the receipt, with the sentence the
+    # Pipeline owner writes about it; this only prints what it was handed.
+    scope = receipt.get("pipeline_scope") or {}
+    label = _PIPELINE_LABELS.get(measure, measure)
+    phrase = ("live " if scope.get("population") == "open" else "") + label.lower()
+
+    def _shown(value: Any) -> str:
+        if value is None:
+            return "n/a"
+        return _money(value) if is_amount else f"{float(value):,.0f}"
+
+    # D4: THE EXTRACT THE FIGURE WAS READ FROM, on the sentence. A current
+    # figure is as at one weekly extract — the dataset the runtime read.
+    extract = str((receipt.get("dataset") or {}).get("as_of_date") or "")
+    as_at = f", as at the weekly extract of {extract}" if extract else ""
 
     if shape == "scalar":
         value = float(outcome.value)
-        kpis = [{"field": measure, "label": _PIPELINE_LABELS.get(measure, measure),
+        kpis = [{"field": measure, "label": label,
                  "value": (f"£{value:,.0f}" if is_amount else f"{value:,.0f}"),
                  "rawValue": value}]
         artefacts = [_artefact("kpi", "Pipeline", kpis=kpis,
                                description="Governed pipeline extract.")]
-        answer = (f"Pipeline {_PIPELINE_LABELS.get(measure, measure).lower()} is "
-                  f"{kpis[0]['value']}.")
+        timing = receipt.get("timing") or {}
+        if timing:
+            # D11: the bucket, stated against the extract's month; D16: with
+            # the figures the question did not name beside the one it did.
+            answer = (f"The {phrase} {_timing_phrase(timing)} is "
+                      f"{_shown(value)}{as_at}."
+                      + _timing_companions(
+                          receipt.get("measure_kind"),
+                          receipt.get("timing_figures") or {},
+                          # A figure a sibling part of a composed answer
+                          # states is not restated beside this one (P1).
+                          stated_elsewhere={
+                              pipeline_rt.SUPPORTED_MEASURES[m]
+                              for m in composition.siblings(plan)
+                              if m in pipeline_rt.SUPPORTED_MEASURES}))
+        elif receipt.get("member"):
+            # One value of a published breakdown, named on the sentence.
+            member = receipt["member"]
+            dim = str(member.get("dimension") or "")
+            dim_label = _PIPELINE_AXES.get(dim, dim.replace("_", " "))
+            shown_value = (_stage_name(member.get("value"))
+                           if dim == "pipeline_stage" else str(member.get("value")))
+            answer = (f"The {phrase} for {dim_label} {shown_value} is "
+                      f"{_shown(value)}{as_at}.")
+        else:
+            answer = f"The {phrase} is {_shown(value)}{as_at}."
     elif shape == "grouped":
-        rows = [{str(axis): c[axis], "value": c["value"]} for c in outcome.cells]
+        # Months read in date order; every other breakdown largest first, so
+        # "which is largest" is answered by the sentence itself. A RANKING
+        # (2.22.0) orders by the figure in the direction it asked, even by
+        # month, and keeps the number it named.
+        ranking = plan.get("ranking") or {}
+        lowest = ranking.get("order") == "lowest"
+        rows = sorted(({str(axis): c[axis], "value": c["value"]}
+                       for c in outcome.cells),
+                      key=(lambda r: r[str(axis)])
+                      if axis == "expected_completion_month" and not ranking
+                      else (lambda r: (r["value"] or 0.0)) if lowest
+                      else (lambda r: -(r["value"] or 0.0)))
+        limit = ranking.get("limit")
+        ranked_of = len(rows)                 # groups compared, before the cut
+        if limit:
+            rows = rows[:int(limit)]
+        axis_label = _PIPELINE_AXES.get(str(axis), str(axis).replace("_", " "))
+        # D16 BY MONTH (§31): the figures for the same cases the breakdown
+        # does not lead with, less any a sibling part of a composed answer
+        # states as its own figure.
+        figures = receipt.get("completion_figures") or {}
+        companions = [k for k in ("amount", "weighted", "count")
+                      if figures and k != receipt.get("measure_kind")
+                      and k not in {pipeline_rt.SUPPORTED_MEASURES[m]
+                                    for m in composition.siblings(plan)
+                                    if m in pipeline_rt.SUPPORTED_MEASURES}]
+        for r in rows:
+            for k in companions:
+                r[f"{k}_companion"] = (figures.get(str(r[str(axis)])) or {}).get(k)
         artefacts = [_artefact(
-            "table", "Pipeline by stage", rows=rows,
-            columns=[{"key": str(axis), "label": "Stage"},
-                     {"key": "value",
-                      "label": _PIPELINE_LABELS.get(measure, measure)}],
+            "table", f"Pipeline by {axis_label}", rows=rows,
+            columns=[{"key": str(axis), "label": axis_label.capitalize()},
+                     {"key": "value", "label": label}]
+                    + [{"key": f"{k}_companion", "label": _COMPANION_LABEL[k]}
+                       for k in companions],
             description=f"{len(rows)} rows.")]
-        answer = f"Pipeline by {axis} across {len(rows)} governed stage(s)."
+        named = (_stage_name if axis == "pipeline_stage" else str)
+        if axis == "expected_completion_month" and not ranking:
+            # A TIMELINE reads in date order, every month named (capped for a
+            # long one); the table has them all.
+            shown = rows[:_SENTENCE_ROWS]
+            more = (f", and {len(rows) - len(shown):,} more"
+                    if len(rows) > len(shown) else "")
+            answer = (f"The {phrase} by {axis_label}: "
+                      + ", ".join(f"{named(r[str(axis)])} {_shown(r['value'])}"
+                                  for r in shown)
+                      + more + f"{as_at}.")
+            for k in companions:
+                if k == "count":
+                    continue                      # in the table
+                answer += (f" {_COMPANION_LABEL[k]}: "
+                           + ", ".join(f"{named(r[str(axis)])} "
+                                       f"{_companion_shown(r.get(f'{k}_companion'))}"
+                                       for r in shown) + more + ".")
+        else:
+            # THE ANSWER STANDARD: the measure, the grouping, the leaders and
+            # how many groups — the same sentence a funded breakdown makes.
+            word = "smallest" if lowest else "largest"
+            if limit and len(rows) == 1:
+                # ONE LEADER NAMES IT: "Offer has the largest ... by stage:
+                # £5.4m (of 3 groups)" — as the funded ranking says it.
+                compared = (f"of {ranked_of:,} groups" if ranked_of > 1
+                            else "1 group")
+                answer = (f"{named(rows[0][str(axis)])} has the {word} {phrase} "
+                          f"by {axis_label}: {_shown(rows[0]['value'])} "
+                          f"({compared}){as_at}.")
+            else:
+                if limit:
+                    word = f"the {len(rows):,} {word}"
+                lead = _standard.breakdown_lead(
+                    phrase[:1].upper() + phrase[1:], axis_label,
+                    [(named(r[str(axis)]), _shown(r["value"])) for r in rows],
+                    total=len(rows), word=word,
+                    lead=len(rows) if limit else None,
+                    ranked_of=(ranked_of if limit and ranked_of > len(rows)
+                               else None))
+                answer = f"{lead}{as_at}."
+    elif shape == "dated_summary":
+        # WHAT MOVED BETWEEN TWO SNAPSHOTS (D15): every headline figure, from
+        # and to, and the change the semantic engine computed.
+        resolution = list(receipt.get("period_resolution") or ())
+        first, second, gap = _snapshot_pair(resolution)
+        parts = []
+        for row in outcome.cells:
+            name = _PIPELINE_LABELS.get(str(row["measure"]), str(row["measure"]))
+            money = row["measure"] != "pipeline_case_count"
+            parts.append(_moved_phrase(
+                ("live " if scope.get("population") == "open" else "") + name.lower(),
+                row, money=money))
+        answer = (f"Between {first} and {second}{gap}: " + "; ".join(parts) + ".")
+        rows = [{"measure": _PIPELINE_LABELS.get(str(r["measure"]), str(r["measure"])),
+                 "from": r["from"], "to": r["to"], "change": r["change"],
+                 "change_pct": r["change_pct"]} for r in outcome.cells]
+        dates = [str(r.get("extract_date")) for r in resolution]
+        columns = [{"key": "measure", "label": "Figure"},
+                   {"key": "from", "label": dates[0] if dates else "from"},
+                   {"key": "to", "label": dates[-1] if dates else "to"},
+                   {"key": "change", "label": "Change"},
+                   {"key": "change_pct", "label": "Change %"}]
+        artefacts = [_artefact("table", "What moved in the pipeline",
+                               rows=rows, columns=columns,
+                               description=f"{_standard.plural(len(rows), 'figure')}.")]
+    elif shape in ("dated_change", "grouped_dated_change"):
+        # THE CHANGE BETWEEN TWO DATED EXTRACTS (D13, §20): both figures, both
+        # extracts and the rule that chose each, and the change the semantic
+        # engine computed — never a change stated without what it is from.
+        resolution = list(receipt.get("period_resolution") or ())
+        dates = [str(r.get("extract_date")) for r in resolution]
+        snapshots = _is_snapshot_pair(resolution)
+
+        def _at(i: int) -> str:
+            row = resolution[i] if i < len(resolution) else {}
+            asked = str(row.get("requested") or "")
+            if snapshots:
+                # D15: the snapshot it is, and its date — never "a week before".
+                return f"{asked} ({row.get('extract_date')})"
+            named = f" ({asked})" if asked and asked != row.get("extract_date") else ""
+            return f"the weekly extract of {row.get('extract_date')}{named}"
+
+        gap = _snapshot_pair(resolution)[2] if snapshots else ""
+
+        def _signed(value: Any) -> str:
+            return (_standard.signed_money(value) if is_amount
+                    else f"{float(value or 0):+,.0f}")
+
+        if shape == "dated_change":
+            moved = receipt.get("change") or {}
+            delta = moved.get("change")
+            pct = moved.get("change_pct")
+            if delta is None:
+                answer = (f"The {phrase} could not be compared: the owner "
+                          f"published no figure at one of the two extracts.")
+            elif delta == 0:
+                answer = (f"The {phrase} was unchanged at {_shown(moved['to'])} "
+                          f"between {_at(0)} and {_at(1)}{gap}.")
+            else:
+                verb = "rose" if delta > 0 else "fell"
+                size = _signed(delta).lstrip("+-")
+                answer = (f"The {phrase} {verb} by {size}"
+                          + (f" ({_standard.signed_percent(pct)})" if pct is not None
+                             else "")
+                          + f", from {_shown(moved['from'])} at {_at(0)} to "
+                            f"{_shown(moved['to'])} at {_at(1)}{gap}.")
+            rows = [dict(r) for r in outcome.cells]
+            columns = [{"key": "period", "label": "Weekly extract"},
+                       {"key": "value", "label": label}]
+        else:
+            axis_label = _PIPELINE_AXES.get(str(axis), str(axis).replace("_", " "))
+            named = (_stage_name if axis == "pipeline_stage" else str)
+            ranked = sorted(outcome.cells,
+                            key=lambda r: -abs(float(r.get("change") or 0.0)))
+            lead = _standard.breakdown_lead(
+                f"Change in the {phrase}", axis_label,
+                [(named(r[str(axis)]), _signed(r.get("change"))) for r in ranked],
+                total=len(ranked), word="largest moves")
+            answer = f"{lead}, from {_at(0)} to {_at(1)}{gap}."
+            rows = [dict(r) for r in outcome.cells]
+            columns = ([{"key": str(axis), "label": axis_label.capitalize()},
+                        {"key": "from", "label": dates[0] if dates else "from"},
+                        {"key": "to", "label": dates[-1] if dates else "to"},
+                        {"key": "change", "label": "Change"},
+                        {"key": "change_pct", "label": "Change %"}])
+        artefacts = [_artefact("table", "Pipeline change between two extracts",
+                               rows=rows, columns=columns,
+                               description=f"{_standard.plural(len(rows), 'row')}.")]
+    elif shape in ("dated", "grouped_dated"):
+        # THE PIPELINE AT NAMED DATES. D4: the measure and every extract date
+        # are in the sentence; the rule that chose each extract (D7 for a
+        # month) is in the source notes. No change between them is stated,
+        # because none was computed — the plan asked for the dates' figures.
+        dates = [str(r.get("extract_date"))
+                 for r in (receipt.get("period_resolution") or ())]
+        if shape == "dated":
+            rows = [{"period": str(c["period"]), "value": c["value"]}
+                    for c in outcome.cells]
+            values = "; ".join(f"{r['period']} {_shown(r['value'])}" for r in rows)
+            answer = f"The {phrase} at each weekly extract — {values}."
+            columns = [{"key": "period", "label": "Weekly extract"},
+                       {"key": "value", "label": label}]
+        else:
+            stages = sorted({str(c[axis]) for c in outcome.cells})
+            by_period: Dict[str, Dict[str, Any]] = {}
+            for c in outcome.cells:
+                by_period.setdefault(str(c["period"]), {"period": str(c["period"])})[
+                    str(c[axis])] = c["value"]
+            rows = [by_period[d] for d in sorted(by_period)]
+            # THE ANSWER STANDARD on a breakdown at named dates: every stage's
+            # figure at each date, largest first — not the stage names alone
+            # (2026-10-01 full bank, [80]: the figures were in the table only).
+            at_each = "; ".join(
+                f"at {row['period']}: " + ", ".join(
+                    f"{_stage_name(st)} {_shown(row.get(st))}"
+                    for st in sorted(stages, key=lambda s_: -(row.get(s_) or 0.0)))
+                for row in rows)
+            answer = (f"The {phrase} by stage at the weekly extracts of "
+                      f"{' and '.join(dates)} — {at_each}.")
+            columns = ([{"key": "period", "label": "Weekly extract"}]
+                       + [{"key": st, "label": st} for st in stages])
+        artefacts = [_artefact("table", "Pipeline at the named dates",
+                               rows=rows, columns=columns,
+                               description=f"{_standard.plural(len(rows), 'weekly extract')}.")]
     else:
         # A SERIES, weekly. One row per governed extract; a grouped series gets
         # one column per stage, which is the shape the accepted evolution route
         # already publishes.
         periods = sorted({str(c["period"]) for c in outcome.cells})
+        # A MONTHLY series is one point per month — D7's extract, the last
+        # weekly one dated within the month — and says so; the rule is in the
+        # source notes. Otherwise the series is weekly and says that.
+        span = (f"{_standard.plural(len(periods), 'month')}, at the last weekly "
+                f"extract of each"
+                if receipt.get("grain") == "monthly"
+                else _standard.plural(len(periods), "weekly extract"))
         if axis:
             stages = sorted({str(c[axis]) for c in outcome.cells})
             rows = [{"period": per,
@@ -594,15 +1226,28 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                         for st in stages}}
                     for per in periods]
             series = [{"key": st, "label": st} for st in stages]
-            answer = (f"Pipeline by {axis} across {len(periods)} governed weekly "
-                      f"extract(s): {', '.join(stages)}.")
+            # The first and last extract, so the series says when it spans,
+            # and each stage from its first figure to its latest — largest at
+            # the latest extract first (the answer standard's leaders).
+            window = (f" ({periods[0]} to {periods[-1]})"
+                      if len(periods) > 1 else f" ({periods[0]})" if periods else "")
+            ranked = (sorted(stages, key=lambda st: -(rows[-1].get(st) or 0.0))
+                      if rows else stages)
+            moves = ", ".join(
+                f"{_stage_name(st)} from {_shown(rows[0].get(st))} to "
+                f"{_shown(rows[-1].get(st))}" if len(rows) > 1
+                else f"{_stage_name(st)} {_shown(rows[-1].get(st))}"
+                for st in ranked)
+            answer = f"The {phrase} by stage across {span}{window}: {moves}."
         else:
-            rows = [{"period": str(c["period"]), "value": c["value"]}
-                    for c in outcome.cells]
-            series = [{"key": "value",
-                       "label": _PIPELINE_LABELS.get(measure, measure)}]
-            answer = (f"Pipeline {_PIPELINE_LABELS.get(measure, measure).lower()} "
-                      f"across {len(periods)} governed weekly extract(s).")
+            rows = sorted(({"period": str(c["period"]), "value": c["value"]}
+                           for c in outcome.cells), key=lambda r: r["period"])
+            series = [{"key": "value", "label": label}]
+            answer = f"The {phrase} across {span}"
+            if rows:
+                answer += (f", from {_shown(rows[0]['value'])} at {rows[0]['period']} "
+                           f"to {_shown(rows[-1]['value'])} at {rows[-1]['period']}")
+            answer += "."
         artefacts = [_artefact(
             "chart", "Pipeline over time", chartType="line", xKey="period",
             rows=rows, series=series,
@@ -611,13 +1256,59 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     reconciliation = {"dataset": "pipeline", "coverage_by_balance_pct": 100.0}
     for artefact in artefacts:
         artefact.setdefault("reconciliation", reconciliation)
+    # WHICH EXTRACT ANSWERED WHICH REQUESTED DATE, and by what rule — D7 for a
+    # named month. Empty for every shape that selects no dates.
+    source_notes = [{"field": f"period: {row.get('requested')}",
+                     "note": f"{row.get('extract_date')} — {row.get('rule')}"}
+                    for row in (receipt.get("period_resolution") or ())]
+    if receipt.get("month_rule"):
+        source_notes.append({"field": "grain: monthly",
+                             "note": str(receipt["month_rule"])})
+    # D20: a series stating no span was read as every reporting date held —
+    # a default the plan records, so the answer discloses it.
+    period_default = plan.get("period") or {}
+    if period_default.get("defaulted") and period_default.get("default_reason"):
+        source_notes.append({"field": "period: over time",
+                             "note": str(period_default["default_reason"])})
+    # D21: a weighted amount the owner does not state (a stage whose rate or
+    # validity window the history cannot yet measure) is "n/a" above; the
+    # answer says why, in the owner's words.
+    if receipt.get("weighting_withheld"):
+        answer = (f"{answer} Figures shown as n/a are not stated: "
+                  f"{receipt['weighting_withheld']}.")
+        source_notes.append({"field": "weighting",
+                             "note": str(receipt["weighting_withheld"])})
+    # WHAT THE FIGURE LEAVES OUT, on the sentence and in the notes — the same
+    # disclosure the Pipeline tab makes, in the Pipeline owner's words.
+    if scope.get("note"):
+        answer = f"{answer} {scope['note']}."
+        source_notes.append({"field": "population", "note": scope["note"]})
+    # WHICH REGIONS: the client's reporting taxonomy, and the live cases whose
+    # extract region it could not place — the tab's own disclosure.
+    region = receipt.get("region_basis") or {}
+    if region:
+        note = _standard.region_note(
+            region.get("sourceFieldRows"), noun="case",
+            unmapped=int(region.get("unmappedCaseCount") or 0),
+            unmapped_amount=float(region.get("unmappedAmount") or 0.0))
+        answer = f"{answer} {note}."
+        # The taxonomy's own name is for the reader of the notes, not the
+        # sentence.
+        source_notes.append({"field": "region", "note": note + (
+            f" (taxonomy: {region['taxonomy']})" if region.get("taxonomy") else "")})
+    # The expected-completion view counts the cases carrying a forecast; say so.
+    if receipt.get("completion_basis"):
+        answer = f"{answer} Counted over {receipt['completion_basis']}."
+        source_notes.append({"field": "expected completion",
+                             "note": str(receipt["completion_basis"])})
     payload: Dict[str, Any] = {
         "ok": True, "error": None, "question": question, "answer": answer,
         "interpreted": "", "spec": spec_dict,
         "validation": {"ok": True, "errors": [], "warnings": [],
                        "resolved_fields": {}},
         "artifacts": artefacts, "reconciliation": reconciliation,
-        "sourceNotes": [], "warnings": [], "diagnostics": [], "assumptions": [],
+        "sourceNotes": source_notes, "warnings": [], "diagnostics": [],
+        "assumptions": [],
         "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
                      "route": "governed_plan_pipeline", "lensApplied": None},
     }
@@ -634,10 +1325,781 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     return payload
 
 
+def _attempt_stage_movement(body: Dict[str, Any], *, plan: Mapping[str, Any],
+                            question: str, pipeline_root: Any,
+                            pipeline_client_id: Optional[str],
+                            pipeline_history: Any,
+                            render_portfolio_id: Optional[str],
+                            as_of: Optional[str]
+                            ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One STAGE MOVEMENT serving attempt. Same contract as `_attempt`.
+
+    Perimeter, prove the population, execute, render, record — with the stage
+    movement runtime's own perimeter and declaration, and the pipeline inputs
+    the legacy stage movement route hands the same owner.
+    """
+    eligible, why, detail = stage_rt.check_eligibility(plan)
+    body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail,
+                           "perimeter": "stage_movement_specialist"}
+    if not eligible:
+        body["execution"] = {"attempted": False, "why_not": f"{why}: {detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{why}"
+
+    base_ok, base_why, base_detail = adapter.check_population_base(
+        plan, stage_rt.EXECUTION_POPULATION,
+        executable=stage_rt.EXECUTABLE_POPULATIONS)
+    if not base_ok:
+        body["eligibility"] = {"eligible": False, "reason": base_why,
+                               "detail": base_detail,
+                               "perimeter": "stage_movement_population"}
+        body["execution"] = {"attempted": False,
+                             "why_not": f"{base_why}: {base_detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{base_why}"
+
+    body["execution"] = {"attempted": True, "runtime": "stage_movement",
+                         "requested_semantics": adapter.requested_semantics(plan)}
+    try:
+        outcome = stage_rt.execute(plan, root=pipeline_root,
+                                   client_id=pipeline_client_id or "",
+                                   history_model=pipeline_history)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        body["disposition"] = evidence.EXECUTION_ERROR
+        return None, EXECUTION_FAILED
+    if not outcome.ok:
+        body["execution"].update({"attempted": False,
+                                  "why_not": f"{outcome.reason}: {outcome.detail}"[:300]})
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{outcome.reason}"
+
+    body["execution"].update({"receipt": dict(outcome.receipt),
+                              "grouped_cells": outcome.rows,
+                              "row_count": len(outcome.rows)})
+    if outcome.value is not None:
+        body["execution"]["value"] = outcome.value
+    body["disposition"] = evidence.EXECUTED
+    renderer = (render_catalogue
+                if stage_rt.kind_of(plan) == stage_rt.KIND_CATALOGUE
+                else render_stage_movement)
+    try:
+        payload = renderer(plan, outcome, question=question,
+                           portfolio_id=render_portfolio_id, as_of=as_of)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    return dict(payload), ""
+
+
+def render_catalogue(plan: Mapping[str, Any], outcome: Any, *, question: str,
+                     portfolio_id: Optional[str], as_of: Optional[str]
+                     ) -> Dict[str, Any]:
+    """A figure a capability's semantic model declares, in the envelope every
+    channel renders — the one wording for every declared figure: the measure,
+    its member or breakdown, its value in its unit, and the date of every
+    input it used (D4). The forecast's figures take the same sentence through
+    `render_forecast`, which adds what only a forecast has."""
+    import uuid
+    from datetime import datetime, timezone
+
+    receipt = dict(outcome.receipt)
+    inputs = dict(receipt.get("inputs") or {})
+    as_at = _as_at_clause(inputs)
+    spec_dict = {"capability": receipt.get("capability"),
+                 "population": receipt.get("population_base"),
+                 "measure": receipt.get("measure_concept"),
+                 "operation": receipt.get("operation"),
+                 "dimensions": receipt.get("group_field_keys") or []}
+
+    def _artefact(kind_: str, title: str, **rest: Any) -> Dict[str, Any]:
+        return {"id": f"art_{uuid.uuid4().hex[:8]}", "type": kind_,
+                "title": title,
+                "source": {"engine": "mi_agent.governed_plan",
+                           "label": f"MI Agent · {kind_}", "spec": spec_dict,
+                           "asOf": as_of, "portfolio": portfolio_id},
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "mock": False, **rest}
+
+    answer, artefacts, _ = _catalogue_answer(receipt, outcome, as_at, _artefact)
+    answer = f"{answer}{_provisional_clause(receipt)}"
+    # The owner's own caveat for the member asked (D27: "The forecast weights
+    # no KFI case: it is top of funnel.").
+    for note in receipt.get("member_notes") or ():
+        answer = f"{answer} {note}"
+    notes = _catalogue_notes(receipt)
+    for name, row in sorted(inputs.items()):
+        notes.append({"field": f"input:{name}",
+                      "note": f"{row.get('owner')} as at {row.get('as_of')}"})
+    reconciliation = {"dataset": str(receipt.get("population_base") or ""),
+                      "inputs": sorted(inputs), "coverage_by_balance_pct": 100.0}
+    for artefact in artefacts:
+        artefact["reconciliation"] = reconciliation
+    return {
+        "ok": True, "error": None, "question": question, "answer": answer,
+        "interpreted": "", "spec": spec_dict,
+        "validation": {"ok": True, "errors": [], "warnings": [],
+                       "resolved_fields": {}},
+        "artifacts": artefacts, "reconciliation": reconciliation,
+        "sourceNotes": notes, "warnings": [], "diagnostics": [],
+        "assumptions": [],
+        "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
+                     "route": f"governed_plan_{receipt.get('capability')}",
+                     "lensApplied": None, "parserMode": "governed_plan",
+                     "governedPlan": {
+                         "requested": dict(adapter.requested_semantics(plan)),
+                         "executed": receipt}},
+    }
+
+
+def _provisional_clause(receipt: Mapping[str, Any]) -> str:
+    """The owner's own flag for a figure measured on too few cases, stated with
+    the figure — with the counts it rests on — rather than dropped."""
+    evidence_words = ", ".join(
+        f"{_camel_words(name)} {count}"
+        for name, count in (receipt.get("member_evidence") or {}).items()
+        if count is not None)
+    if receipt.get("provisional"):
+        return (" Provisional: the owner measured it on too few cases to rely "
+                "on" + (f" ({evidence_words})" if evidence_words else "") + ".")
+    flagged = receipt.get("provisional_members") or ()
+    if flagged:
+        axis = (receipt.get("group_field_keys") or [None])[0]
+        names = ", ".join(_value_words(axis, v) for v in flagged)
+        return (f" Provisional for {names}: the owner measured "
+                f"{'it' if len(flagged) == 1 else 'them'} on too few cases to "
+                f"rely on.")
+    return (f" Measured on: {evidence_words}." if evidence_words else "")
+
+
+def _camel_words(name: Any) -> str:
+    """`fellOut` -> 'fell out': an owner's key as words. Presentation only."""
+    out = []
+    for ch in str(name):
+        out.append(f" {ch.lower()}" if ch.isupper() else ch)
+    return "".join(out).replace("_", " ").strip()
+
+
+def render_stage_movement(plan: Mapping[str, Any], outcome: Any, *,
+                          question: str, portfolio_id: Optional[str],
+                          as_of: Optional[str]) -> Dict[str, Any]:
+    """The stage movement result, in the envelope every channel renders.
+
+    THE SENTENCE IS THE OWNER'S. `stage_movement_query.compose` worded it from
+    the governed payload, and it already states the measure and the window
+    ("between <prior extract> and <latest extract>") — D4 on the sentence.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    receipt = dict(outcome.receipt)
+    dataset = receipt.get("dataset") or {}
+    spec_dict = {"capability": receipt.get("capability"),
+                 "population": receipt.get("population_base"),
+                 "operation": receipt.get("operation"),
+                 "measure": receipt.get("measure_concept")}
+    artefacts: List[Dict[str, Any]] = []
+    if outcome.rows:
+        artefacts.append({
+            "id": f"art_{uuid.uuid4().hex[:8]}", "type": "table",
+            "title": "Governed stage movement", "rows": outcome.rows,
+            "columns": outcome.columns,
+            "description": f"{_standard.plural(len(outcome.rows), 'row')}.",
+            "source": {"engine": "mi_agent.governed_plan",
+                       "label": "MI Agent · table", "spec": spec_dict,
+                       "asOf": dataset.get("as_of_date") or as_of,
+                       "portfolio": portfolio_id},
+            "createdAt": datetime.now(timezone.utc).isoformat(), "mock": False})
+    reconciliation = {"dataset": "pipeline", "coverage_by_balance_pct": 100.0}
+    for artefact in artefacts:
+        artefact["reconciliation"] = reconciliation
+    notes = [{"field": "stage_movement",
+              "note": (f"{receipt.get('execution_owner')}: weekly extracts "
+                       f"{dataset.get('comparison_date')} and "
+                       f"{dataset.get('as_of_date')}")}]
+    return {
+        "ok": True, "error": None, "question": question, "answer": outcome.answer,
+        "interpreted": "", "spec": spec_dict,
+        "validation": {"ok": True, "errors": [], "warnings": [],
+                       "resolved_fields": {}},
+        "artifacts": artefacts, "reconciliation": reconciliation,
+        "sourceNotes": notes, "warnings": [], "diagnostics": [],
+        "assumptions": [],
+        "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
+                     "route": "governed_plan_stage_movement", "lensApplied": None,
+                     "parserMode": "governed_plan",
+                     "governedPlan": {
+                         "requested": dict(adapter.requested_semantics(plan)),
+                         "executed": receipt}},
+    }
+
+
+def _attempt_forecast(body: Dict[str, Any], *, plan: Mapping[str, Any],
+                      question: str, client_id: Optional[str],
+                      output_root: Optional[str], pipeline_root: Any,
+                      pipeline_history: Any, run_id: Optional[str],
+                      render_portfolio_id: Optional[str], as_of: Optional[str],
+                      funded_frame_resolver: Any = None, semantics: Any = None
+                      ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One FORECAST serving attempt. Same contract as `_attempt`.
+
+    Stage for stage the pipeline attempt — perimeter, prove the population,
+    execute, render, record — with the forecast runtime's perimeter and its own
+    population declaration. The inputs are the ones the legacy forecast route
+    hands the same owner: the governed funded root, the pipeline discovery root,
+    the client's historical model and the selected run. None is discovered here,
+    and with any missing the runtime refuses and the legacy envelope serves.
+    """
+    eligible, why, detail = forecast_rt.check_eligibility(plan)
+    body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail,
+                           "perimeter": "forecast_specialist"}
+    if not eligible:
+        body["execution"] = {"attempted": False, "why_not": f"{why}: {detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{why}"
+
+    base_ok, base_why, base_detail = adapter.check_population_base(
+        plan, forecast_rt.execution_population(plan),
+        executable=forecast_rt.EXECUTABLE_POPULATIONS)
+    if not base_ok:
+        body["eligibility"] = {"eligible": False, "reason": base_why,
+                               "detail": base_detail,
+                               "perimeter": "forecast_population"}
+        body["execution"] = {"attempted": False,
+                             "why_not": f"{base_why}: {base_detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{base_why}"
+
+    body["execution"] = {"attempted": True, "runtime": "forecast",
+                         "requested_semantics": adapter.requested_semantics(plan)}
+    try:
+        outcome = forecast_rt.execute(
+            plan, output_root=output_root, pipeline_root=pipeline_root,
+            client_id=client_id or "", run_id=run_id,
+            history_model=pipeline_history,
+            funded_frame_resolver=funded_frame_resolver,
+            semantics=semantics if isinstance(semantics, Mapping) else None)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        body["disposition"] = evidence.EXECUTION_ERROR
+        return None, EXECUTION_FAILED
+    if not outcome.ok:
+        body["execution"].update({"attempted": False,
+                                  "why_not": f"{outcome.reason}: {outcome.detail}"[:300]})
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{outcome.reason}"
+
+    body["execution"].update({"value": outcome.value,
+                              "receipt": dict(outcome.receipt)})
+    body["disposition"] = evidence.EXECUTED
+
+    try:
+        payload = render_forecast(plan, outcome, question=question,
+                                  portfolio_id=render_portfolio_id, as_of=as_of)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    if not isinstance(payload, Mapping) or not payload.get("ok"):
+        body["execution"]["render_error"] = "the rendered envelope was not ok"
+        return None, RENDER_FAILED
+    return dict(payload), ""
+
+
+def _money(value: Any) -> str:
+    """A reader-facing amount, by the answer standard: the platform's money
+    formatter, in the request's reporting currency. Presentation only."""
+    return _standard.money(value)
+
+
+def _as_at_clause(inputs: Mapping[str, Any]) -> str:
+    """D4 + D1: the as-at date of EVERY input the figure used, on the sentence.
+
+    One input, one date. Two inputs, both dates, each named — a forecast that
+    composes a funded snapshot with a pipeline extract and states one date has
+    not said what it is as at.
+    """
+    parts = [f"{row.get('label') or name} {row.get('as_of')}"
+             for name, row in sorted(inputs.items())]
+    return "As at " + " and ".join(parts) + "."
+
+
+def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
+                    portfolio_id: Optional[str], as_of: Optional[str]
+                    ) -> Dict[str, Any]:
+    """The forecast result, in the envelope every channel already renders.
+
+    D4: the MEASURE and its AS-AT are in the sentence itself, every time. D1:
+    when the figure composes two datasets, both vintages are. Everything else
+    the owner said — the completion signal it used, its scenario basis, its
+    caveats, the path of the figure in its output — is published in
+    `sourceNotes` and `warnings`, not dropped.
+
+    THE WORDS COME FROM THE RECEIPT. A milestone's state is the owner's
+    `milestone_answer`; every other figure's label, unit and companion figures
+    are the semantic model's, and its value the owner's. Nothing is re-derived
+    here, including the verb: "already reached", "around <date>" and "beyond
+    the projection horizon" map one-to-one onto the owner's states.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    receipt = dict(outcome.receipt)
+    kind = str(receipt.get("measure_kind") or "")
+    measure = str(receipt.get("measure_concept") or "")
+    inputs = dict(receipt.get("inputs") or {})
+    as_at = _as_at_clause(inputs)
+    signal = (receipt.get("completion_signal") or {}).get("description") or ""
+    spec_dict = {"capability": receipt.get("capability"),
+                 "population": receipt.get("population_base"),
+                 "measure": measure, "operation": receipt.get("operation"),
+                 "dimensions": receipt.get("group_field_keys") or []}
+
+    def _artefact(kind_: str, title: str, **rest: Any) -> Dict[str, Any]:
+        return {"id": f"art_{uuid.uuid4().hex[:8]}", "type": kind_,
+                "title": title,
+                "source": {"engine": "mi_agent.governed_plan",
+                           "label": f"MI Agent · {kind_}", "spec": spec_dict,
+                           "asOf": as_of, "portfolio": portfolio_id},
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "mock": False, **rest}
+
+    warnings = [str(c) for c in (receipt.get("caveats") or ())]
+    notes: List[Dict[str, str]] = []
+    if kind == forecast_rt.KIND_MILESTONE:
+        answer, kpis, title = _milestone_sentence(receipt, outcome, as_at)
+        artefacts = [_artefact("kpi", title, kpis=kpis,
+                               description="Governed forecast.")]
+        if kpis[0]["rawValue"] is not None:
+            # Only a PROJECTED date has bands to qualify; "already reached" and
+            # "beyond the horizon" state no banded figure.
+            warnings.append(_BANDS_WARNING)
+    else:
+        answer, artefacts, banded = _catalogue_answer(receipt, outcome, as_at,
+                                                      _artefact)
+        if banded:
+            warnings.append(_BANDS_WARNING)
+        notes.extend(_catalogue_notes(receipt))
+
+    if signal:
+        notes.insert(0, {"field": "completion_signal", "note": signal})
+    if receipt.get("scenario_basis"):
+        notes.append({"field": "scenario_basis",
+                      "note": str(receipt.get("scenario_basis"))})
+    for name, row in sorted(inputs.items()):
+        notes.append({"field": f"input:{name}",
+                      "note": f"{row.get('owner')} as at {row.get('as_of')}"})
+    if receipt.get("input_vintage_skew_days") is not None:
+        notes.append({"field": "input_vintage_skew",
+                      "note": (f"{receipt['input_vintage_skew_days']} days between "
+                               f"inputs; ceiling "
+                               f"{receipt.get('input_vintage_ceiling_days')} days")})
+
+    reconciliation = {"dataset": "forecast",
+                      "inputs": sorted(inputs), "coverage_by_balance_pct": 100.0}
+    for artefact in artefacts:
+        artefact["reconciliation"] = reconciliation
+    payload: Dict[str, Any] = {
+        "ok": True, "error": None, "question": question, "answer": answer,
+        "interpreted": "", "spec": spec_dict,
+        "validation": {"ok": True, "errors": [], "warnings": [],
+                       "resolved_fields": {}},
+        "artifacts": artefacts, "reconciliation": reconciliation,
+        "sourceNotes": notes, "warnings": warnings, "diagnostics": [],
+        "assumptions": [],
+        "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
+                     "route": "governed_plan_forecast", "lensApplied": None,
+                     "parserMode": "governed_plan",
+                     "governedPlan": {
+                         "requested": dict(adapter.requested_semantics(plan)),
+                         "executed": receipt}},
+    }
+    return payload
+
+
+_BANDS_WARNING = ("Downside/base/upside are indicative scenario bands, not "
+                  "statistically validated confidence intervals.")
+
+
+def _milestone_sentence(receipt: Mapping[str, Any], outcome: Any, as_at: str
+                        ) -> Tuple[str, List[Dict[str, Any]], str]:
+    """A milestone for a stated threshold, in the owner's own state."""
+    from mi_agent_api import forecast_extrapolation as fx_mod
+
+    measure = str(receipt.get("measure_concept") or "")
+    base_rate = receipt.get("base_monthly_run_rate")
+    target = receipt.get("target") or {}
+    scale = receipt.get("scale") or None
+    threshold = _money(receipt.get("threshold_applied", target.get("value")))
+    state = str(receipt.get("milestone_state") or "")
+    row = receipt.get("milestone") or {}
+    label = f"Forecast milestone date (funded balance reaching {threshold})"
+    # D9: a question about SCALE is answered against the portfolio's own
+    # threshold, and the answer says which rule set it and what it is
+    # measured on — the reader never has to know the number to ask.
+    if scale:
+        label = (f"Scale ({scale.get('decision')}): for a "
+                 f"{scale.get('stage_label')}, scale is {threshold}, measured "
+                 f"on {scale.get('measured_on')}")
+    if state == fx_mod.MILESTONE_ALREADY_REACHED:
+        answer = (f"{label}: already reached — the funded balance is "
+                  f"{_money(receipt.get('current_funded_balance'))}"
+                  + (", so the portfolio is at scale" if scale else "")
+                  + f". {as_at}")
+        kpi_value = "at scale" if scale else "reached"
+    elif state == fx_mod.MILESTONE_PROJECTED:
+        to_go = (f", {_money(receipt.get('gap_to_threshold'))} to go"
+                 if receipt.get("gap_to_threshold") else "")
+        scenario = str(receipt.get("scenario") or "base")
+        if scenario == "base":
+            answer = (f"{label}: around {row.get('baseDate')} at the base "
+                      f"completion run-rate of {_money(base_rate)}/month "
+                      f"(downside {row.get('downsideDate')}, upside "
+                      f"{row.get('upsideDate')}), from a funded balance of "
+                      f"{_money(receipt.get('current_funded_balance'))}{to_go}. "
+                      f"{as_at}")
+        else:
+            # ONE SCENARIO asked for: its date leads, at its own run-rate, with
+            # the others beside it — every date the owner's row carries.
+            rate = (receipt.get("scenario_monthly_run_rate") or {}).get(scenario)
+            others = ", ".join(f"{s} {row.get(f'{s}Date')}"
+                               for s in ("base", "downside", "upside")
+                               if s != scenario)
+            answer = (f"{label}, {scenario} scenario: around "
+                      f"{row.get(f'{scenario}Date')}"
+                      + (f" at the {scenario} completion run-rate of "
+                         f"{_money(rate)}/month" if rate is not None else "")
+                      + f" ({others}), from a funded balance of "
+                      f"{_money(receipt.get('current_funded_balance'))}{to_go}. "
+                      f"{as_at}")
+        kpi_value = str(row.get(f"{scenario}Date"))
+    else:
+        answer = (f"{label}: beyond the projection horizon, so no date is "
+                  f"given. The funded balance is "
+                  f"{_money(receipt.get('current_funded_balance'))}. {as_at}")
+        kpi_value = "beyond horizon"
+    kpis = [{"field": measure, "label": label, "value": kpi_value,
+             "rawValue": outcome.value}]
+    return answer, kpis, "Forecast milestone"
+
+
+#: Axes whose order is the owner's and is itself the answer: a breakdown by
+#: them names every row in that order rather than leading with the largest.
+_OWNER_ORDERED_AXES = frozenset({"forecast_scenario", "funding_threshold",
+                                 "origin_stage", "destination_stage"})
+
+#: Reader-facing names for the axes a forecast figure is broken down by.
+#: Presentation only.
+_FORECAST_AXES = {
+    "forecast_component": "component", "forecast_scenario": "scenario",
+    "funding_threshold": "funding threshold",
+    "weighting_exclusion_reason": "reason",
+    "canonical_region_reporting": "region", "ltv_bucket": "LTV band",
+    # The stage-movement capability's rates (D2a).
+    "origin_stage": "from stage", "destination_stage": "milestone reached",
+}
+
+#: Axes whose values are pipeline stages, named as a reader writes them.
+_STAGE_AXES = frozenset({"origin_stage", "destination_stage"})
+
+
+def _shown_in(unit: str, value: Any) -> str:
+    """A figure in its semantic-model unit. Presentation only."""
+    if value is None:
+        return {"month": "no date",
+                "date": "no completion observed"}.get(unit, "n/a")
+    if unit == "gbp":
+        return _money(value)
+    if unit == "gbp_per_month":
+        return f"{_money(value)}/month"
+    if unit == "gbp_per_year":
+        return f"{_money(value)}/year"
+    if unit == "count":
+        return f"{float(value):,.0f}"
+    if unit == "pct":
+        return _standard.percent(value)
+    if unit == "ratio":
+        return _standard.percent(value, fraction=True)
+    if unit == "days":
+        return _standard.plural(value, "day")
+    return str(value)
+
+
+def _explained(receipt: Mapping[str, Any]) -> str:
+    """The semantic model's `explain` sentence, with the owner's companion
+    figures in it — money, or a count for a `*_count` figure."""
+    import string
+
+    template = str(receipt.get("explain") or "")
+    if not template:
+        return ""
+    companions = receipt.get("context") or {}
+    values = {}
+    for _, key, _, _ in string.Formatter().parse(template):
+        if key:
+            raw = companions.get(key)
+            values[key] = ("n/a" if raw is None
+                           else f"{float(raw):,.0f}" if key.endswith("_count")
+                           else _money(raw))
+    return template.format(**values)
+
+
+def _words(value: Any) -> str:
+    return str(value).replace("_", " ")
+
+
+def _value_words(axis: Any, value: Any) -> str:
+    """A governed value as a reader writes it: a pipeline stage as KFI,
+    Application, Offer, Completed — anything else with its underscores gone."""
+    return _stage_name(value) if axis in _STAGE_AXES else _words(value)
+
+
+def _catalogue_answer(receipt: Mapping[str, Any], outcome: Any, as_at: str,
+                      make: Any) -> Tuple[str, List[Dict[str, Any]], bool]:
+    """A semantic-model figure: `(sentence, artefacts, banded)`.
+
+    D4 — the measure and its as-at in the sentence. The label and unit are the
+    semantic model's; the numbers the owner's; the order of a breakdown the
+    owner's (a month-ordered curve, the ladder low to high)."""
+    label = str(receipt.get("measure_label") or receipt.get("measure_concept"))
+    unit = str(receipt.get("unit") or "")
+    shape = str(receipt.get("result_shape") or "")
+    member = receipt.get("member") or None
+    axis = (receipt.get("group_field_keys") or [None])[0]
+    banded = False
+    # The semantic model's caveat, as its own sentence, with every shape.
+    caveat = str(receipt.get("caveat") or "").strip().rstrip(".")
+    caveat = f" {caveat}." if caveat else ""
+
+    if shape == "series":
+        columns = list(receipt.get("series_columns") or ())
+        rows = [dict(c) for c in (outcome.cells or ())]
+        first, last = rows[0], rows[-1]
+        bands = ", ".join(f"{_words(c)} {_shown_in(unit, last.get(c))}"
+                          for c in columns)
+        horizon = receipt.get("horizon") or {}
+        span = (f"over the next {_standard.plural(horizon['periods_ahead'], 'month')}"
+                if horizon.get("periods_ahead") else
+                f"over the {horizon.get('published_months')}-month forecast horizon")
+        rate = receipt.get("base_monthly_run_rate")
+        answer = (f"{label} {span}, {first.get('period')} to "
+                  f"{last.get('period')}: {bands} by {last.get('period')}"
+                  + (f", at a base completion run-rate of "
+                     f"{_shown_in('gbp_per_month', rate)}" if rate is not None else "")
+                  + f". {as_at}")
+        artefacts = [make("chart", label, chartType="line", xKey="period",
+                          rows=rows,
+                          series=[{"key": c, "label": _words(c).capitalize()}
+                                  for c in columns],
+                          valueFormat="gbp")]
+        return answer, artefacts, len(columns) > 1 or bool(member)
+
+    if shape == "grouped":
+        axis_label = (receipt.get("axis_label")
+                      or _FORECAST_AXES.get(str(axis), _words(axis)))
+        rows = [dict(c) for c in (outcome.cells or ())]
+        if str(axis) in _OWNER_ORDERED_AXES:
+            # The owner's order IS the answer (downside → upside, the ladder
+            # low to high, the funnel KFI → Completed): every row, as published.
+            parts = ", ".join(f"{_value_words(axis, r.get(axis))} "
+                              f"{_shown_in(unit, r.get('value'))}" for r in rows)
+            answer = f"{label} by {axis_label}: {parts}."
+        else:
+            ranked = sorted(rows, key=lambda r: -float(r.get("value") or 0.0))
+            answer = _standard.breakdown_lead(
+                label, axis_label,
+                [(_value_words(axis, r.get(axis)), _shown_in(unit, r.get("value")))
+                 for r in ranked], total=len(rows)) + "."
+        basis = receipt.get("axis_basis") or {}
+        if basis.get("field"):
+            # Funded loans and pipeline cases together: the bases are named,
+            # not counted in one noun.
+            note = _standard.region_note(
+                basis.get("sourceFieldRows"), counts=False,
+                unplaced_amount=float(basis.get("unplacedForecastAmount") or 0.0),
+                unplaced_of="the forecast")
+            answer = f"{answer} {note}."
+        # D21: a group the owner does not state is "n/a" above; say why.
+        if receipt.get("withheld"):
+            answer = (f"{answer} Groups shown as n/a are not stated: "
+                      f"{receipt['withheld']}.")
+        answer = f"{answer}{caveat} {as_at}"
+        also = [k for k in (rows[0] if rows else {}) if k not in (axis, "value")]
+        columns = ([{"key": str(axis), "label": axis_label.capitalize()},
+                    {"key": "value", "label": label}]
+                   + [{"key": k, "label": _words(k)} for k in also])
+        artefacts = [make("table", f"{label} by {axis_label}", rows=rows,
+                          columns=columns, description=f"{len(rows)} rows.")]
+        banded = axis == "forecast_scenario" or axis == "funding_threshold"
+        return answer, artefacts, banded
+
+    value = outcome.value
+    if member:
+        member_axis = (receipt.get("axis_label")
+                       or _FORECAST_AXES.get(member['dimension'],
+                                             _words(member['dimension'])))
+        answer = (f"{label} ({member_axis}: "
+                  f"{_value_words(member['dimension'], member['value'])}): "
+                  f"{_shown_in(unit, value)}.{caveat} {as_at}")
+        banded = member.get("dimension") == "forecast_scenario"
+    else:
+        explained = _explained(receipt)
+        # D22: the calendar window the figure was measured over — the one the
+        # question named, or the owner's own — with what completed in it.
+        window = (receipt.get("window")
+                  or (receipt.get("context") or {}).get("run_rate_window"))
+        answer = (f"{label}{_window_words(window)}: {_shown_in(unit, value)}"
+                  + (f" — {explained}" if explained else "")
+                  + _window_evidence(window)
+                  + f".{caveat} {as_at}")
+    kpis = [{"field": str(receipt.get("measure_concept")), "label": label,
+             "value": _shown_in(unit, value), "rawValue": value}]
+    artefacts = [make("kpi", label, kpis=kpis, description="Governed forecast.")]
+    return answer, artefacts, banded
+
+
+def _window_words(window: Any) -> str:
+    """' over the 8 weeks 2026-07-31 to 2026-09-24' — the calendar window a
+    run-rate was measured over (D22). Presentation only."""
+    if not isinstance(window, Mapping) or not window.get("from"):
+        return ""
+    length = window.get("length") or window.get("weeks")
+    unit = str(window.get("unit") or "week")
+    return (f" over the {_standard.plural(length, unit)} {window.get('from')} "
+            f"to {window.get('to')}")
+
+
+def _window_evidence(window: Any) -> str:
+    """'; 3 cases completed in the window, £1.2m' — what the window holds."""
+    if not isinstance(window, Mapping) or window.get("cases") is None:
+        return ""
+    amount = window.get("amount")
+    return (f"; {_standard.plural(window.get('cases'), 'case')} completed in "
+            f"the window" + (f", {_money(amount)}" if amount is not None else ""))
+
+
+def _catalogue_notes(receipt: Mapping[str, Any]) -> List[Dict[str, str]]:
+    """Where the figure came from: the owner, the path, the model entry."""
+    notes = [{"field": "owner",
+              "note": f"{receipt.get('execution_owner')} → {receipt.get('read_path')}"},
+             {"field": "semantic_model",
+              "note": f"{receipt.get('semantic_model')}: {receipt.get('measure_concept')}"}]
+    if receipt.get("definition_decision"):
+        notes.append({"field": "definition",
+                      "note": f"owner decision {receipt.get('definition_decision')}"})
+    return notes
+
+
+#: How a companion figure is named beside the one a breakdown leads with.
+_COMPANION_LABEL: Mapping[str, str] = {
+    "amount": "At face value",
+    "weighted": "Weighted by each case's chance of completing",
+    "count": "Cases",
+}
+
+
+def _companion_shown(value: Any) -> str:
+    """A companion amount the owner published, or "n/a" where it published
+    none — never a zero it did not state."""
+    return "n/a" if value is None else _money(value)
+
+
+def _timing_companions(kind: Any, figures: Mapping[str, Any], *,
+                       stated_elsewhere: Any = ()) -> str:
+    """D16: the figures for the same cases that the headline is not — the
+    face value, the weighted value and the case count — less any another part
+    of the same composed answer states as its own figure."""
+    amount, count, weighted = (figures.get("amount"), figures.get("count"),
+                               figures.get("weighted"))
+    skip = {kind, *stated_elsewhere}
+    parts = []
+    if "amount" not in skip and amount is not None:
+        parts.append(f"at face value {_money(amount)}")
+    if "weighted" not in skip and weighted is not None:
+        parts.append(f"weighted by each case's chance of completing "
+                     f"{_money(weighted)}")
+    if "count" not in skip and count is not None:
+        parts.append(_standard.plural(int(count), "case"))
+    return (" " + "; ".join(parts)[:1].upper() + "; ".join(parts)[1:] + "."
+            if parts else "")
+
+
+def _is_snapshot_pair(resolution: Sequence[Mapping[str, Any]]) -> bool:
+    """Were these two extracts chosen as the latest snapshot and the one
+    before it (D15), rather than by a named month (D7)?"""
+    from mi_agent import plan_pipeline_runtime as _rt
+    return bool(resolution) and all(
+        str(r.get("rule") or "").startswith(_rt.SNAPSHOT_RULE) for r in resolution)
+
+
+def _snapshot_pair(resolution: Sequence[Mapping[str, Any]]) -> Tuple[str, str, str]:
+    """`(earlier, later, gap)` as a reader writes them: "the previous snapshot
+    (2026-09-21)", "the latest snapshot (2026-09-24)", ", 3 days apart"."""
+    from datetime import date
+    rows = list(resolution)
+    named = [f"{r.get('requested')} ({r.get('extract_date')})" for r in rows]
+    gap = ""
+    try:
+        days = (date.fromisoformat(str(rows[-1]["extract_date"]))
+                - date.fromisoformat(str(rows[0]["extract_date"]))).days
+        gap = f", {_standard.plural(days, 'day')} apart"
+    except Exception:                                               # noqa: BLE001
+        pass
+    return (named[0] if named else "", named[-1] if named else "", gap)
+
+
+def _moved_phrase(name: str, row: Mapping[str, Any], *, money: bool) -> str:
+    """"the live pipeline amount rose £2.9m (+0.3%) to £969.8m"."""
+    def shown(v: Any) -> str:
+        return "n/a" if v is None else (_money(v) if money else f"{float(v):,.0f}")
+    delta = row.get("change")
+    if delta is None:
+        return f"{name}: no figure at one of the two snapshots"
+    if delta == 0:
+        return f"{name} unchanged at {shown(row.get('to'))}"
+    size = (_standard.signed_money(delta) if money
+            else f"{float(delta):+,.0f}").lstrip("+-")
+    pct = row.get("change_pct")
+    return (f"{name} {'rose' if delta > 0 else 'fell'} {size}"
+            + (f" ({_standard.signed_percent(pct)})" if pct is not None else "")
+            + f" to {shown(row.get('to'))}")
+
+
 #: Reader-facing names for the governed pipeline measures. Presentation only.
+def _stage_name(stage: Any) -> str:
+    """A stage as a reader writes it: KFI, Application, Offer."""
+    text = str(stage or "").strip().upper()
+    return text if text == "KFI" else text.title()
+
+
+#: How a pipeline breakdown's axis reads in a sentence.
+_PIPELINE_AXES = {
+    "pipeline_stage": "stage", "broker_channel": "broker",
+    "erm_product_type": "product", "ltv_bucket": "LTV band",
+    "canonical_region_reporting": "region",
+    "expected_completion_month": "expected completion month"}
+
+#: At most this many groups are named in a sentence; the table has them all.
+_SENTENCE_ROWS = 10
+
+
+def _timing_phrase(timing: Mapping[str, Any]) -> str:
+    """D11's bucket in words, against the extract's month."""
+    as_of = timing.get("as_of_month")
+    value = timing.get("value")
+    if value == "overdue":
+        return f"overdue (expected to complete before {as_of})"
+    if value == "current_month":
+        return f"expected to complete this month ({as_of})"
+    nxt = timing.get("next_month")
+    return (f"expected to complete next month ({nxt})" if nxt
+            else "expected to complete after this month (no later month "
+                 "carries a completion)")
+
+
 _PIPELINE_LABELS = {
     "pipeline_amount": "Pipeline amount",
     "pipeline_case_count": "Pipeline case count",
+    "weighted_expected_funded_amount": "Pipeline weighted expected funded amount",
     "loan": "Pipeline case count",
     "loan_count": "Pipeline case count",
 }
@@ -891,6 +2353,27 @@ def _attempt_change_form(body: Dict[str, Any], *, plan: Mapping[str, Any],
     return dict(payload), ""
 
 
+def _history(pipeline_history: Any) -> Any:
+    """The pipeline's case history, resolved by the branch that reads it.
+
+    The caller may hand it over as a provider `f()` rather than the model: the
+    history is built from every weekly extract, and a funded question — most of
+    them — never reads it, so it is fetched only by a pipeline, stage-movement
+    or forecast plan. A provider that fails degrades to None, as an unresolved
+    input always has, and the runtime that needed it refuses.
+    """
+    if not callable(pipeline_history):
+        return pipeline_history
+    from trakt_core import perf as _perf
+    with _perf.stage("governed.pipeline_history"):
+        try:
+            return pipeline_history()
+        except Exception:  # noqa: BLE001 - the canary never costs an answer
+            logger.warning("pipeline history could not be resolved for the "
+                           "governed attempt", exc_info=True)
+            return None
+
+
 def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              render_portfolio_id: Optional[str], as_of: Optional[str],
              snapshot_store: Any = None,
@@ -902,6 +2385,7 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              pipeline_client_id: Optional[str] = None,
              pipeline_history: Any = None,
              pipeline_run_id: Optional[str] = None,
+             funded_frame_resolver: Any = None,
              client_id: Optional[str] = None,
              output_root: Optional[str] = None,
              tenant_id: Optional[str] = None,
@@ -916,8 +2400,10 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # compilation and never caches it. With none supplied a question naming a
     # portfolio is refused, which is where every caller was until the production
     # seam started passing one.
-    outcome, compiled = wiring.build_plan(question,
-                                          source_registry=source_registry)
+    from trakt_core import perf as _perf
+    with _perf.stage("governed.interpret_and_compile"):
+        outcome, compiled = wiring.build_plan(question,
+                                              source_registry=source_registry)
     wiring.record_plan_stages(body, outcome, compiled)
 
     if not outcome.ok:
@@ -936,6 +2422,121 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # From here the accepted slice 1 perimeter owns every decision, and nothing
     # below edits the plan the compiler emitted.
     plan = compiled.plan.to_dict()
+    inputs = dict(frame=frame, semantics=semantics,
+                  render_portfolio_id=render_portfolio_id, as_of=as_of,
+                  snapshot_store=snapshot_store,
+                  snapshot_client_id=snapshot_client_id,
+                  snapshot_route=snapshot_route,
+                  source_registry=source_registry,
+                  execution_population=execution_population,
+                  pipeline_source=pipeline_source, pipeline_root=pipeline_root,
+                  pipeline_client_id=pipeline_client_id,
+                  pipeline_history=pipeline_history,
+                  pipeline_run_id=pipeline_run_id,
+                  funded_frame_resolver=funded_frame_resolver,
+                  client_id=client_id, output_root=output_root,
+                  tenant_id=tenant_id,
+                  authorised_portfolio_ids=authorised_portfolio_ids)
+    # SEVERAL FIGURES OF ONE POPULATION: one plan per figure, each through its
+    # own runtime, all or none (`plan_composition`; P1, D4).
+    if composition.needs_composition(plan):
+        return _attempt_composed(body, plan=plan, question=question,
+                                 inputs=inputs)
+    return _serve_plan(body, plan=plan, question=question, **inputs)
+
+
+def _attempt_composed(body: Dict[str, Any], *, plan: Dict[str, Any],
+                      question: str, inputs: Mapping[str, Any]
+                      ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """A plan naming several figures: each part served by `_serve_plan`, every
+    part answered, every part from the same data, then one composed answer.
+
+    The record keeps every part's eligibility and execution, and the top-level
+    eligibility, execution and disposition state the composition's outcome.
+    """
+    parts = composition.split(plan)
+    # THE CASE HISTORY IS BUILT ONCE for the whole question, however many parts
+    # read it: it is the same history, and building it is the slowest input.
+    history = inputs.get("pipeline_history")
+    if callable(history):
+        built: List[Any] = []
+
+        def history_once() -> Any:
+            if not built:
+                built.append(history())
+            return built[0]
+
+        inputs = dict(inputs, pipeline_history=history_once)
+    served: List[Dict[str, Any]] = []
+    record: List[Dict[str, Any]] = []
+    body["composition"] = {"figures": composition.figures(plan),
+                           "parts": record}
+    for part in parts:
+        part_body: Dict[str, Any] = {k: v for k, v in body.items()
+                                     if k not in ("eligibility", "execution",
+                                                  "disposition", "composition")}
+        payload, reason = _serve_plan(part_body, plan=part, question=question,
+                                      **inputs)
+        figure = composition.figures(part)[0]
+        record.append({"figure": figure, "plan_id": part.get("plan_id"),
+                       "eligibility": part_body.get("eligibility"),
+                       "execution": part_body.get("execution"),
+                       "disposition": part_body.get("disposition"),
+                       "served": payload is not None, "reason": reason})
+        if payload is None:
+            # ALL OR NOTHING: the whole question is declined with the reason
+            # its unanswered figure gives, and the record says which figure.
+            body["composition"]["failed_figure"] = figure
+            body["eligibility"] = dict(part_body.get("eligibility") or {},
+                                       perimeter="composition")
+            body["execution"] = dict(part_body.get("execution") or {})
+            body["disposition"] = part_body.get("disposition")
+            return None, reason
+        served.append(payload)
+
+    body["eligibility"] = {"eligible": True, "reason": "", "detail": "",
+                           "perimeter": "composition"}
+    body["execution"] = {
+        "attempted": True, "runtime": "composition",
+        "value": [(r.get("execution") or {}).get("value") for r in record],
+        "receipt": {"composed": [(r.get("execution") or {}).get("receipt")
+                                 for r in record]}}
+    if not composition.aligned(served):
+        body["disposition"] = evidence.EXECUTION_ERROR
+        body["execution"]["why_not"] = (
+            "the parts declare different data, so their figures are not put "
+            "side by side")
+        return None, composition.FIGURES_NOT_ALIGNED
+    body["disposition"] = evidence.EXECUTED
+    try:
+        payload = composition.compose(plan, served)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    return payload, ""
+
+
+def _serve_plan(body: Dict[str, Any], *, plan: Dict[str, Any], question: str,
+                frame: Any, semantics: Any,
+                render_portfolio_id: Optional[str], as_of: Optional[str],
+                snapshot_store: Any = None,
+                snapshot_client_id: Optional[str] = None,
+                snapshot_route: Optional[str] = None,
+                source_registry: Any = None,
+                execution_population: Optional[str] = None,
+                pipeline_source: Any = None, pipeline_root: Any = None,
+                pipeline_client_id: Optional[str] = None,
+                pipeline_history: Any = None,
+                pipeline_run_id: Optional[str] = None,
+                funded_frame_resolver: Any = None,
+                client_id: Optional[str] = None,
+                output_root: Optional[str] = None,
+                tenant_id: Optional[str] = None,
+                authorised_portfolio_ids: Tuple[str, ...] = (),
+                ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One PLAN, through the runtime that owns it. `(payload or None, reason)`;
+    fills `body` as it goes. Every gate a one-figure question passes is here,
+    so a part of a composed answer passes exactly the same ones."""
 
     # SPECIALIST CAPABILITY DISPATCH, FIRST, and from the plan alone.
     #
@@ -953,7 +2554,29 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
             render_portfolio_id=render_portfolio_id, as_of=as_of,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
-            pipeline_history=pipeline_history, pipeline_run_id=pipeline_run_id)
+            pipeline_history=_history(pipeline_history), pipeline_run_id=pipeline_run_id)
+
+    # STAGE MOVEMENT, a second pipeline owner, above the gate for the same
+    # reason: its plans are about the pipeline and the funded runtimes would
+    # refuse them for a population they never execute.
+    if stage_rt.claims(plan):
+        return _attempt_stage_movement(
+            body, plan=plan, question=question,
+            pipeline_root=pipeline_root, pipeline_client_id=pipeline_client_id,
+            pipeline_history=_history(pipeline_history),
+            render_portfolio_id=render_portfolio_id, as_of=as_of)
+
+    # FORECAST, the derived population, likewise above the gate: a forecast plan
+    # is not the funded runtimes' to refuse. It reads the funded book and the
+    # pipeline as INPUTS and executes neither — `forecast_rt` declares
+    # `forecast` alone, so this branch cannot carry a funded plan past the gate.
+    if forecast_rt.claims(plan):
+        return _attempt_forecast(
+            body, plan=plan, question=question, client_id=client_id,
+            output_root=output_root, pipeline_root=pipeline_root,
+            pipeline_history=_history(pipeline_history), run_id=pipeline_run_id,
+            funded_frame_resolver=funded_frame_resolver, semantics=semantics,
+            render_portfolio_id=render_portfolio_id, as_of=as_of)
 
     # WHICH POPULATION, BEFORE WHICH RUNTIME. Placed above the dispatch because
     # it is true of both: the temporal runtime reads the same funded route the
@@ -962,8 +2585,15 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # the reason that matters — a refusal here means zero rows were touched, so
     # a pipeline question cannot produce a funded number even transiently, in
     # the evidence sink or anywhere else.
+    #
+    # WHOSE DECLARATION THIS CHECKS, named rather than inherited. The gate speaks
+    # for the funded runtimes below it, so it admits exactly what they declare —
+    # `runtime_registry.FUNDED_GATE_POPULATIONS`, derived from those runtimes and
+    # nothing else. A runtime owning another population is dispatched ABOVE this
+    # line from `POPULATION_OWNING_RUNTIMES`; one that is not is refused here.
     base_ok, base_why, base_detail = adapter.check_population_base(
-        plan, execution_population)
+        plan, execution_population,
+        executable=runtime_registry.FUNDED_GATE_POPULATIONS)
     if not base_ok:
         body["eligibility"] = {"eligible": False, "reason": base_why,
                                "detail": base_detail,
@@ -1019,10 +2649,43 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
 
     from mi_agent.mi_query_executor import execute_mi_query
     spec = adapter.spec_for_plan(plan)
+    # A FIELD THIS BOOK DOES NOT CARRY is a fact about the book, not a failed
+    # execution: the executor's own validator says which governed fields have
+    # no column here, and the attempt is recorded as that — never as a crash,
+    # and never answered from a neighbouring field.
+    missing = adapter.fields_not_in_book(spec, semantics,
+                                         getattr(frame, "columns", None))
+    if missing:
+        body["execution"] = {"attempted": False,
+                             "why_not": (f"{FIELD_NOT_IN_BOOK}: this book carries "
+                                         f"no {', '.join(missing)}")[:300],
+                             "fields_not_in_book": missing}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{FIELD_NOT_IN_BOOK}"
+    # A FILTER VALUE THIS BOOK DOES NOT RECORD is the same kind of fact: the
+    # filter could only match nothing, so it is declined in words naming what
+    # the book does record. A value the book merely spells differently is
+    # rewritten to the book's spelling first.
+    spec, absent = adapter.filter_values_in_book(
+        spec, semantics, frame)
+    if absent:
+        body["execution"] = {"attempted": False,
+                             "why_not": (f"{adapter.FILTER_VALUE_NOT_IN_BOOK}: "
+                                         + "; ".join(f"{a['field']}={a['values']}"
+                                                     for a in absent))[:300],
+                             "filter_values_not_in_book": absent}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{adapter.FILTER_VALUE_NOT_IN_BOOK}"
     body["execution"] = {"attempted": True, "bound_spec": spec.to_dict(),
                          "requested_semantics": adapter.requested_semantics(plan)}
     try:
-        result = execute_mi_query(spec, frame, semantics)
+        # A governed ranking is ranked by ITS OWN figure: "the five brokers
+        # with the most loans" by loan count, never by balance first (the
+        # executor's default top-N basis for an additive measure).
+        ranking_basis = ({"top_n_rank_priority": ()}
+                         if getattr(spec, "ranking_mode", None) == "grouped"
+                         else {})
+        result = execute_mi_query(spec, frame, semantics, **ranking_basis)
     except Exception as exc:                                         # noqa: BLE001
         body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
         body["disposition"] = evidence.EXECUTION_ERROR

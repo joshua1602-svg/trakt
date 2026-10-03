@@ -44,6 +44,23 @@ describe("PipelineSnapshotPanel", () => {
     expect(note).toContain("750 withdrawn");
   });
 
+  it("states a withheld weighted figure as n/a with the reason (D21)", () => {
+    const reason = "the client's history is not yet enough to measure "
+      + "the completion rate for OFFER (2 cases), and no configured rate is used "
+      + "in its place (D21)";
+    render(<PipelineSnapshotPanel snapshot={{
+      ...NOV,
+      weightedExpectedFundedAmount: null,
+      weightingComplete: false,
+      weightingIncompleteReason: reason,
+      expectedCompletionBreakdown: NOV.expectedCompletionBreakdown.map(
+        (m) => ({ ...m, weightedExpectedFundedAmount: null })),
+    }} />);
+    expect(screen.getAllByText("n/a").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(reason).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/^Not stated: the client's history/)).toBeInTheDocument();
+  });
+
   it("shows no scope note when nothing is excluded", () => {
     render(<PipelineSnapshotPanel snapshot={NOV} />);
     expect(screen.queryByTestId("pipeline-open-scope")).toBeNull();
@@ -150,6 +167,25 @@ describe("PipelineSnapshotPanel", () => {
     render(<PipelineSnapshotPanel snapshot={snap} />);
     expect(screen.getAllByText("No prior week").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/vs prior week/)).not.toBeInTheDocument();
+  });
+
+  it("says how many cases have a region the reporting taxonomy cannot place", () => {
+    render(<PipelineSnapshotPanel snapshot={{
+      ...NOV,
+      regionBasis: { field: "canonical_region_reporting", taxonomy: "uk_itl1",
+                     unmappedCaseCount: 3, unmappedAmount: 450_000,
+                     unmappedValues: { Atlantis: 3 } },
+    }} />);
+    expect(screen.getByText(/have a region with no governed mapping/)).toBeInTheDocument();
+  });
+
+  it("adds nothing under the region chart when every region is placed", () => {
+    render(<PipelineSnapshotPanel snapshot={{
+      ...NOV,
+      regionBasis: { field: "canonical_region_reporting", taxonomy: "uk_itl1",
+                     unmappedCaseCount: 0, unmappedAmount: 0, unmappedValues: {} },
+    }} />);
+    expect(screen.queryByText(/no governed mapping/)).not.toBeInTheDocument();
   });
 
   it("renders an unavailable state gracefully", () => {

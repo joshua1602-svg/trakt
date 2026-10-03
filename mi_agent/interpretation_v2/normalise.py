@@ -51,19 +51,26 @@ from typing import List, Mapping, Optional, Sequence, Tuple
 
 from .intent import CandidateIntent, SemanticTime
 from .plan import LABELS_ARE_WORDING_ONLY, identity_labels
-from .vocabulary import (CHANGE_FORM_CANONICAL_OPERATION,
+from .vocabulary import (CAPABILITY_CHANGE_FORMS,
+                         CHANGE_FORM_CANONICAL_OPERATION,
                          CHANGE_FORM_CAPABILITY,
                          CHANGE_FORM_OPERATION_VARIANTS,
+                         POPULATION_CHANGE_OWNER,
                          GovernedVocabulary)
 
 __all__ = ["NORMAL_FORM_VERSION", "PAIR_IMPLYING_OPERATIONS",
            "CANONICAL_PAIR_FORM", "CANONICAL_PAIR_PERIODS_BACK", "BOUNDED",
+           "DERIVED_POPULATION_OF", "DERIVED_POPULATION_SPELLINGS",
+           "SINGLE_FIGURE_OPERATION", "GROUPED_FIGURE_OPERATION",
+           "GROUPED_SPELLINGS", "RUN_RATE_MEASURES",
            "LABELS_ARE_WORDING_ONLY", "identity_labels",
            "NormalisationResult", "canonical_intent"]
 
 #: The normal form's own version, separate from the intent schema version: the
-#: schema did not change, the canonicalisation of it is new.
-NORMAL_FORM_VERSION = "candidate_intent_normal_form/1.0"
+#: schema did not change, the canonicalisation of it is new. 1.2 (design §40):
+#: a grouped distribution is a breakdown (rule 7); a completion run-rate on the
+#: pipeline base is the forecast's (rule 6).
+NORMAL_FORM_VERSION = "candidate_intent_normal_form/1.2"
 
 # --------------------------------------------------------------------------- #
 # 1. period labels
@@ -138,7 +145,117 @@ BOUNDED: Mapping[str, str] = {
         "MEASURES, not between two owners of one measure. Collapsing it would "
         "decide whether a period change is a net movement or a bridge figure, "
         "which is deterministic analytical behaviour this sprint may not change."),
+    "forecast_of_the_pipeline": (
+        "A forecast intent on the PIPELINE base asks what the pipeline alone "
+        "converts into, which is a different figure from the funded book "
+        "projected forward. Rule 6 leaves it as stated, so the forecast runtime "
+        "refuses it by population rather than answering it as the whole "
+        "forecast. The one exception is the completion run-rate, which is "
+        "defined on the pipeline's own completions and is one figure either "
+        "way (RUN_RATE_MEASURES, design §40.2)."),
 }
+
+# --------------------------------------------------------------------------- #
+# 6. a derived population has one spelling
+# --------------------------------------------------------------------------- #
+
+#: THE POPULATION A CAPABILITY'S OUTPUT IS. `forecast` is not a dataset anyone
+#: loads: it is the funded book projected forward from funded and pipeline
+#: inputs (P0 design §4.1), and it is the only population the forecast runtime
+#: executes. So a forecast intent names its population twice — once in
+#: `capability`, once in `population.base` — and the production bank shows the
+#: model spelling the second one two ways for one question: "when does the book
+#: reach £100m" arrived five times as `forecast` and four times as `funded`,
+#: and the four were refused for a population nobody asked to change.
+DERIVED_POPULATION_OF: Mapping[str, str] = {"forecast": "forecast"}
+
+#: WHICH STATED BASES ARE SPELLINGS OF THE DERIVED ONE, and which are not.
+#: `funded` is: under the forecast capability it means "the funded book, going
+#: forward", which is what `forecast` means. It is also the schema's DEFAULT,
+#: so an intent that stated no base arrives as `funded` and means the same.
+#:
+#: `pipeline` is NOT, and neither is `whole_book`. "Of the current offer
+#: pipeline, how much should convert?" asks for the pipeline's contribution on
+#: its own; rewriting it to `forecast` would answer with funded plus pipeline,
+#: which is a wider population than the one named. Those stay as stated and are
+#: refused by the runtime that cannot execute them — see
+#: `BOUNDED["forecast_of_the_pipeline"]`.
+DERIVED_POPULATION_SPELLINGS: frozenset = frozenset({"funded"})
+
+#: THE COMPLETION RUN-RATE IS ONE FIGURE WHICHEVER POPULATION IS NAMED (owner,
+#: 2026-10-02: "Include the run-rate rule"; design §40.2). The run-rate is
+#: defined as the £ completing per month "from the pipeline's observed
+#: completions": the completions ARE the pipeline's flow into the funded book,
+#: so there is no pipeline-only run-rate distinct from the forecast's. A
+#: reading that names the pipeline for it names the same figure — and the
+#: model did, run after run: "the 12-week completion run rate" and "completion
+#: run rate on a yearly basis" arrived on the pipeline base and were refused
+#: for a population nobody meant to change, on Claude Opus 5 and 5.5 alike.
+#:
+#: So for an intent whose EVERY measure is a completion run-rate, `pipeline` is
+#: also a spelling of the derived population. Only these measures: the
+#: forecast funded balance on the pipeline base still asks what the pipeline
+#: alone converts into, a different figure, and stays refused
+#: (`BOUNDED["forecast_of_the_pipeline"]`). Structural slots only — the
+#: capability, the measure ids and the base.
+RUN_RATE_MEASURES: frozenset = frozenset({"forecast_completion_rate",
+                                          "annualised_completion_run_rate"})
+RUN_RATE_POPULATION_SPELLINGS: frozenset = frozenset({"pipeline"})
+
+
+def _every_measure_is_a_run_rate(intent: CandidateIntent) -> bool:
+    concepts = [measure.concept for output in intent.effective_outputs()
+                for measure in output.measures]
+    return bool(concepts) and all(c in RUN_RATE_MEASURES for c in concepts)
+
+
+# --------------------------------------------------------------------------- #
+# 7. a grouped figure is a breakdown
+# --------------------------------------------------------------------------- #
+
+#: "When are pipeline cases expected to complete?" (must-answer [135], the
+#: 2026-09-30 10:26 check) arrived as `point_in_time` over
+#: `expected_completion_date` GROUPED BY `origin_stage`, and was refused: the
+#: compiler forbids a grouping on a single figure because "a grouping makes the
+#: output a breakdown, not a point_in_time" (compiler `_GROUPING_FORBIDDEN`).
+#: The compiler had already named the meaning. The operation label and the
+#: grouping state ONE thing twice — how many figures the answer is — and the
+#: grouping is the slot that says it, so the label has one canonical value.
+#: This is the same redundancy as rule 5's linguistic variants: one request,
+#: two spellings, one of them refused.
+#:
+#: WHAT IT MAY NOT DO. It reads the operation and whether every output groups;
+#: it adds no dimension, drops no filter and picks no member. It fires only when
+#: EVERY output groups (a mixed intent keeps its refusal, because rewriting it
+#: would make the ungrouped output the unsupported one) and only when the
+#: capability produces a breakdown (`limit_assessment` does not, and keeps its
+#: refusal). A question about one member keeps its filter, so the breakdown is
+#: that member's row. A ranking is not inferred: "which stage completes first"
+#: needs an order the reading did not state, and inventing one would be adding
+#: meaning.
+#:
+#: A GROUPED DISTRIBUTION IS THE SAME REQUEST (design §40). "How is the
+#: balance spread across LTV bands?" arrived as `distribution` of the balance
+#: over the LTV band — one figure per band, which is a breakdown — and was
+#: refused by a runtime that serves the breakdown. A distribution with no
+#: grouping (the spread of one figure's own values) is not touched.
+SINGLE_FIGURE_OPERATION = "point_in_time"
+GROUPED_FIGURE_OPERATION = "breakdown"
+GROUPED_SPELLINGS: frozenset = frozenset({SINGLE_FIGURE_OPERATION, "distribution"})
+
+
+def _every_output_groups(intent: CandidateIntent) -> bool:
+    """The compiler's own test of "grouped", read from the intent's slots.
+
+    An output groups when it names a dimension or a geography grouping, its own
+    or the top-level one it inherits (compiler `_authorise_composition`).
+    """
+    top = intent.geography.requested and intent.geography.group_by
+    outputs = intent.effective_outputs()
+    return bool(outputs) and all(
+        bool(output.dimensions) or top
+        or (output.geography.requested and output.geography.group_by)
+        for output in outputs)
 
 
 @dataclass(frozen=True)
@@ -257,8 +374,28 @@ def canonical_intent(intent: CandidateIntent,
     # is the substitution this slot exists to end.
     form = getattr(intent, "change_form", None)
     form_conflict = False
-    if form:
+    # The measure's owner may implement this form over its own measures (the
+    # pipeline's change between two dated extracts): then the owner stands and
+    # there is nothing to reconcile — the form still decides the operation.
+    owner_implements = bool(form and owner is not None
+                            and form in CAPABILITY_CHANGE_FORMS.get(owner, ()))
+    # With NO measure named at all, the POPULATION names the owner: "what
+    # moved in the pipeline" is the pipeline's to implement, where it
+    # implements the form (D15) — never the funded book's owner of the same
+    # form. A named measure keeps rule 3's ownership: a funded measure asked of
+    # the pipeline is refused for its population, not re-homed.
+    names_a_measure = any(output.measures
+                          for output in intent.effective_outputs())
+    population_owner = (None if names_a_measure else POPULATION_CHANGE_OWNER.get(
+        getattr(intent.population, "base", None) or ""))
+    if (form and owner is None and population_owner
+            and form in CAPABILITY_CHANGE_FORMS.get(population_owner, ())):
+        owner_implements = population_owner == intent.capability
+    if form and not owner_implements:
         implied = CHANGE_FORM_CAPABILITY.get(form)
+        if (owner is None and population_owner
+                and form in CAPABILITY_CHANGE_FORMS.get(population_owner, ())):
+            implied = population_owner
         form_conflict = (owner is not None and implied is not None
                          and owner != implied)
         if form_conflict:
@@ -311,5 +448,44 @@ def canonical_intent(intent: CandidateIntent,
         # does not produce. It is left exactly as it is, so the compiler refuses
         # it against the capability's own operation set rather than this module
         # silently flattening it into a summary.
+
+    # -- 6. a derived population has one spelling --------------------------- #
+    #
+    # AFTER RULES 3-5, because they can set the capability: an intent naming
+    # `forecast_milestone_date` under `generic_analysis` becomes a forecast
+    # intent in rule 3, and its base is then this rule's to canonicalise.
+    #
+    # STRUCTURED SLOTS ONLY, and NO WIDENING. The capability and the stated base
+    # are read; nothing else is. Only a base listed in
+    # `DERIVED_POPULATION_SPELLINGS` is rewritten, lens, seasoning and a named
+    # source travel unchanged, and a pipeline base is left for the runtime to
+    # refuse. The model's original base still travels in `intent_claims`.
+    derived = DERIVED_POPULATION_OF.get(intent.capability)
+    population = intent.population
+    spellings = (DERIVED_POPULATION_SPELLINGS | RUN_RATE_POPULATION_SPELLINGS
+                 if _every_measure_is_a_run_rate(intent)
+                 else DERIVED_POPULATION_SPELLINGS)
+    if (derived is not None and population.base != derived
+            and population.base in spellings):
+        applied.append(
+            f"derived_population: base {population.base!r} -> {derived!r} "
+            f"(capability {intent.capability!r} outputs the {derived!r} "
+            f"population)")
+        intent = replace(intent, population=replace(population, base=derived))
+
+    # -- 7. a grouped figure is a breakdown ---------------------------------- #
+    #
+    # LAST, because rules 3-4 can set the capability, and whether the owner
+    # produces a breakdown is this rule's condition. STRUCTURED SLOTS ONLY: the
+    # operation, the groupings and the capability's own operation set.
+    if (intent.operation in GROUPED_SPELLINGS
+            and _every_output_groups(intent)):
+        supported = (capability_operations or {}).get(intent.capability)
+        if supported is None or GROUPED_FIGURE_OPERATION in supported:
+            applied.append(
+                f"grouped_figure: operation {intent.operation!r} -> "
+                f"{GROUPED_FIGURE_OPERATION!r} (every output is grouped, so "
+                f"the answer is one figure per member)")
+            intent = replace(intent, operation=GROUPED_FIGURE_OPERATION)
 
     return NormalisationResult(intent=intent, applied=tuple(applied))

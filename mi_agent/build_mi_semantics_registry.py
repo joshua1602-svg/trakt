@@ -150,6 +150,13 @@ CURATION: Dict[str, dict] = {
         "synonyms": ["balance", "outstanding balance", "current balance",
                      "loan balance", "exposure", "current outstanding"],
         "overrides": {"bucket_field": "ticket_bucket"},
+        # THE SMALLEST LOAN HAS A BALANCE (owner decision D14, 2026-09-29).
+        # A redeemed loan's balance is zeroed on purpose (closed_account
+        # zero_fields), so the minimum over the whole book is £0 — true, and
+        # not the smallest loan. The minimum counts only balances above zero;
+        # the compiler states it as a predicate on the plan, so the answer
+        # discloses it and the coverage ledger proves it.
+        "statistic_scope": {"min": {"comparator": "gt", "value": 0}},
     },
     "current_principal_balance": {
         "tier": "core", "business_name": "Principal Balance",
@@ -208,6 +215,12 @@ CURATION: Dict[str, dict] = {
         "business_description": "Most recent property/collateral valuation.",
         "synonyms": ["valuation", "current valuation", "property value",
                      "collateral value", "valuation amount"],
+        # The dashboard's "Weighted avg property value" tile and the LTV
+        # denominator: valuation weighted by current balance (owner decision
+        # D10, 2026-09-29).
+        "overrides": {"allowed_aggregations": ["sum", "avg", "weighted_avg",
+                                               "median", "min", "max"],
+                      "weight_field": "current_outstanding_balance"},
     },
     "indexed_value": {
         "tier": "core", "business_name": "Indexed Valuation",
@@ -1002,6 +1015,10 @@ CURATION: Dict[str, dict] = {
         # dimension); keeping them here too made resolution order-dependent.
         "synonyms": ["borrower structure", "sole or joint"],
         "overrides": dict(_BUCKET_OVERRIDES),
+        # The governed field for single vs joint: the interpreter is shown
+        # borrower_type, and "borrower structure" / "sole or joint" resolve
+        # to it (vocabulary 2.8.0).
+        "superseded_by": "borrower_type",
     },
     "borrower_type": {
         "tier": "core", "derived": True, "derived_from": "borrower_2_dob",
@@ -1598,6 +1615,17 @@ def build_entry(name: str, meta: dict, curated: dict,
     # TLI43 is a property of the uk_region domain, not of the query engine.
     if curated.get("value_domain"):
         entry["value_domain"] = curated["value_domain"]
+
+    # ONE CONCEPT PER MEANING: a legacy field folded into its successor.
+    if curated.get("superseded_by"):
+        entry["superseded_by"] = curated["superseded_by"]
+
+    # A STATISTIC GOVERNED OVER ITS OWN POPULATION: `{statistic: {comparator,
+    # value}}` — the rows that statistic counts, stated on the field so the
+    # compiler writes it onto the plan as a predicate (owner decision D14).
+    if curated.get("statistic_scope"):
+        entry["statistic_scope"] = {
+            stat: dict(rule) for stat, rule in curated["statistic_scope"].items()}
 
     if curated.get("derived"):
         entry["derived"] = True

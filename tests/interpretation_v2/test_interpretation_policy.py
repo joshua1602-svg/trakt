@@ -197,14 +197,23 @@ def test_the_candidate_intent_schema_did_not_change():
     it is an ENUM, so it can no more carry a column or a snapshot than any other
     slot here. The schema version is unchanged for the same reason: an optional
     additive enum is backward compatible with every existing reading.
+
+    `ranking` (vocabulary 2.22.0) says which end of a ranked breakdown was asked
+    for and how many groups — "highest" or "lowest", and a bounded whole number.
+    It exists because "which is lowest" and "the top five" had no home: the
+    order was dropped and every group was listed. It is OPTIONAL, an ENUM plus
+    an integer bounded 1-50, so it can carry no column either, and the schema
+    version is unchanged for the same reason.
     """
     assert INTENT_SCHEMA_VERSION == "candidate_intent/1.0"
     schema = candidate_intent_json_schema()
     assert set(schema["properties"]) == {
         "schema_version", "capability", "operation", "change_form",
         "population", "measures", "dimensions", "filters", "geography", "time",
-        "comparison", "target", "outputs", "ambiguity", "evidence"}
+        "comparison", "target", "outputs", "ambiguity", "evidence", "ranking"}
     assert schema["additionalProperties"] is False
+    assert "ranking" not in schema["required"]
+    assert set(schema["properties"]["ranking"]["properties"]) == {"order", "limit"}
     assert "change_form" not in schema["required"]
     assert schema["properties"]["change_form"]["enum"]
 
@@ -258,25 +267,40 @@ def test_the_measured_policy_has_not_moved_since_it_was_measured():
     code, and the next benchmark would be measuring two changes at once — which
     is the same failure the original guard existed to prevent.
     """
-    import subprocess
-
     # Repointed once, at the slice 3 portfolio affordance. The interpreter moved
     # to describe the portfolio axes, so the 57-question probe at 5ae1f73 stopped
     # describing this code and the guard would otherwise let the NEXT change ride
     # in unmeasured beside it. `test_the_interpreter_policy_did_not_move` is what
     # constrains WHAT moved: 23 of the prompt's 26 paragraphs word for word, and
     # every pre-existing metadata tool schema byte-identical.
-    measured_at = "88fdf7f9"
-    diff = subprocess.run(
-        ["git", "diff", "--name-only", measured_at, "--",
-         "mi_agent/interpretation_v2/opus_interpreter.py"],
-        cwd=_REPO_ROOT, capture_output=True, text=True)
-    if diff.returncode != 0:
-        pytest.skip("measured commit not reachable in this checkout")
-    changed = [line for line in diff.stdout.splitlines() if line.strip()]
-    assert changed == [], (
-        f"the interpreter moved since its behaviour was measured at "
-        f"{measured_at}: {changed}")
+    # Repointed again at the one-call interpreter (88a50290, P0 design §21):
+    # the governed catalogue moved into the prompt and the retrieval loop went,
+    # so the behaviour measured at 88fdf7f9 no longer describes this code.
+    #
+    # Repointed a third time, from the FILE to WHAT THE MODEL IS SHOWN
+    # (2026-10-02, design §37). The sign-off run on 42fc3768 measured one
+    # model view, and its fingerprint is pinned to that baseline — which is
+    # what this guard always meant: the measured numbers describe the code
+    # only while the model reads what it read then. The file itself may move
+    # without moving that (the fingerprint function; the reply path of §38,
+    # which only a reply to an ask-back reads and the `askback` run measures).
+    import json
+
+    #
+    # A view UNDER MEASUREMENT is the one exception (design §40): recorded as
+    # the named candidate beside the baseline, deployed, and promoted only if
+    # the sign-off set matches or beats the baseline — the same rule, with
+    # the change named while it is measured rather than hidden until then.
+    from mi_agent.interpretation_v2.opus_interpreter import model_view_fingerprint
+    baseline = json.loads((_REPO_ROOT / "config/mi/model_view_baseline.json")
+                          .read_text(encoding="utf-8"))
+    candidate = baseline.get("candidate") or {}
+    accepted = {baseline["model_view_fingerprint"]}
+    if candidate and candidate.get("measured_by") is None:
+        accepted.add(candidate["model_view_fingerprint"])
+    assert model_view_fingerprint() in accepted, (
+        f"what the model is shown moved since it was measured at "
+        f"{baseline['commit'][:8]}, and is not the recorded candidate")
 
 
 def test_production_surfaces_are_untouched():
@@ -296,14 +320,22 @@ def test_the_model_and_tool_configuration_did_not_change():
     from mi_agent.interpretation_v2.opus_interpreter import (
         CONFIGURED_MODEL, INTENT_TOOL_NAME, AnthropicInterpreterClient)
 
-    assert CONFIGURED_MODEL == "claude-opus-5"
+    # Claude Opus 5.5 since design §40: measured as the candidate against the
+    # Claude Opus 5 baseline, and the baseline since §40.3.
+    assert CONFIGURED_MODEL == "claude-opus-5-5"
     assert INTENT_TOOL_NAME == "emit_candidate_intent"
     client = AnthropicInterpreterClient.__init__
     defaults = inspect.signature(client).parameters
     assert defaults["temperature"].default is None, (
         "temperature must stay unset so the benchmark configuration is the one "
         "Run 6 used")
-    assert AnthropicInterpreterClient.max_rounds == 6
+    # ONE model call a question (owner direction 2026-09-29, P0 design §21):
+    # the governed catalogue is in the prompt, so the first round asks for the
+    # intent tool. It was six retrieve-then-think rounds, about three used. On
+    # a model that cannot be forced to call it (Claude Opus 5.5) a response
+    # without the call is asked for once more, and only once (§40).
+    assert AnthropicInterpreterClient.max_rounds == 1
+    assert AnthropicInterpreterClient.retries_without_call == 1
 
 
 def test_the_policy_phase_changed_only_the_interpreter():

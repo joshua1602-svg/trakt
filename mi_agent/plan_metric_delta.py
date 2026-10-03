@@ -49,7 +49,7 @@ router or `re`.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, FrozenSet, Optional, Tuple
 
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_material_summary as shared
@@ -66,7 +66,13 @@ CAPABILITY = "period_movement"
 WORKFLOW_MODE: Optional[str] = CHANGE_FORM_MODE.get(CHANGE_FORM)
 
 #: The funded book, and only the funded book.
-POPULATION_BASES = frozenset({"funded"})
+#:
+#: WHICH POPULATIONS THIS RUNTIME EXECUTES, AND WHICH ONE IT LOADS. This runtime's
+#: own declaration, read by `plan_runtime_registry` — which is how the estate
+#: knows what it can execute and by whom. Not a shared constant: another funded
+#: runtime holding the same value is a coincidence of scope, not a dependency.
+EXECUTABLE_POPULATIONS: FrozenSet[str] = frozenset({"funded"})
+EXECUTION_POPULATION = "funded"
 
 #: The one result shape this form executes as.
 #:
@@ -170,7 +176,7 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
             f"canonicalise to {sorted(OPERATIONS)[0]!r}")
 
     base = (body.get("population") or {}).get("base")
-    if base not in POPULATION_BASES:
+    if base not in EXECUTABLE_POPULATIONS:
         return False, POPULATION_NOT_FUNDED, (
             f"population base {base!r}: this owner compares governed funded "
             f"snapshots")

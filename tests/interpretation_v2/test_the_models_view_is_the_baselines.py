@@ -1,0 +1,97 @@
+"""Nothing reaches the model without being measured (owner, 2026-10-02).
+
+The sign-off run recorded as the baseline (91c550c4 on Claude Opus 5.5 since
+design §40.3; 42fc3768 on Claude Opus 5 before it) — must-answer 88/88, no
+wrong answer, 78 of 81 held-out variants identical — measured ONE model view:
+the system prompt, the governed context and catalogue, the user message around
+the question, the intent tool and the call's settings. The model's readings
+depend on every character of it, so any change to it is a change to the
+model's behaviour.
+
+This pins the view's fingerprint to the baseline's. A change that moves it
+fails here — on purpose. To move the baseline: deploy the change, run the
+sign-off set (`run_production_bank.sh <principal> signoff`), and only if it
+matches or beats the results in config/mi/model_view_baseline.json record the new commit, run and
+fingerprint there. A change that leaves the view alone (speed, wording of
+answers, restructuring) passes, and is checked by the suites alone.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from mi_agent.interpretation_v2.opus_interpreter import model_view_fingerprint
+
+_ROOT = Path(__file__).resolve().parents[2]
+_BASELINE = _ROOT / "config/mi/model_view_baseline.json"
+
+
+def _baseline():
+    return json.loads(_BASELINE.read_text(encoding="utf-8"))
+
+
+def _recorded():
+    """The fingerprints the guard accepts: the signed-off baseline's and,
+    while one is under measurement, the named candidate's (§40)."""
+    baseline = _baseline()
+    accepted = {baseline["model_view_fingerprint"]}
+    candidate = baseline.get("candidate")
+    if candidate and candidate.get("measured_by") is None:
+        accepted.add(candidate["model_view_fingerprint"])
+    return accepted
+
+
+def test_the_models_view_is_the_signed_off_one():
+    baseline = _baseline()
+    assert model_view_fingerprint() in _recorded(), (
+        "The text the model is shown has changed since the signed-off build "
+        f"{baseline['commit'][:8]} and is not the recorded candidate. Record the "
+        "change as the candidate in config/mi/model_view_baseline.json, deploy "
+        "it, run the sign-off set on it, and promote it only if it matches or "
+        "beats the baseline.")
+
+
+def test_a_candidate_says_what_changed_and_what_promotes_it():
+    """A view under measurement is named, not merely tolerated."""
+    candidate = _baseline().get("candidate")
+    if candidate:
+        assert candidate["change"] and candidate["to_promote"]
+        assert len(candidate["model_view_fingerprint"]) == 64
+        assert (candidate["model_view_fingerprint"]
+                != _baseline()["model_view_fingerprint"])
+
+
+def test_the_fingerprint_does_not_depend_on_the_process():
+    """A fingerprint that moved between processes would guard nothing."""
+    code = ("from mi_agent.interpretation_v2.opus_interpreter import "
+            "model_view_fingerprint as f; print(f())")
+    env = dict(os.environ, PYTHONHASHSEED="12345",
+               PYTHONPATH=os.pathsep.join([str(_ROOT), os.environ.get("PYTHONPATH", "")]))
+    out = subprocess.run([sys.executable, "-c", code], cwd=_ROOT, env=env,
+                         capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == model_view_fingerprint()
+    assert out.stdout.strip() in _recorded()
+
+
+def test_the_baseline_records_what_was_measured():
+    baseline = _baseline()
+    assert baseline["results"]["must_answer"] == {"questions": 88, "answered": 88}
+    assert baseline["results"]["wrong_answers"] == 0
+    assert len(baseline["commit"]) == 40
+
+
+def test_the_conversation_readers_view_is_the_recorded_one():
+    """The reader (§39) is the one other model step. Its view is pinned the
+    same way: a change to it is measured by the conversation bank
+    (`run_production_bank.sh <principal> conversations`) before it is used."""
+    from mi_agent.interpretation_v2.conversation_reader import (
+        reader_view_fingerprint)
+    recorded = _baseline()["conversation_reader"]
+    assert reader_view_fingerprint() == recorded["fingerprint"], (
+        "The text the conversation reader is shown has changed. Re-run the "
+        "conversation bank on this change and record it in "
+        "config/mi/model_view_baseline.json only if it matches or beats the "
+        "results there.")

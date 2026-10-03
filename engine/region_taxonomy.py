@@ -54,6 +54,11 @@ ENV_CONFIG_PATH = "TRAKT_REGION_TAXONOMY"
 FIELD_DETAIL = "canonical_region_detail"
 FIELD_REPORTING = "canonical_region_reporting"
 FIELD_SOURCE_VALUE = "region_source_value"
+#: WHICH SOURCE COLUMN a row's raw region came from. The harmonisation fills
+#: each row from the first populated source column, so one book's regions can
+#: rest on the property's location for most rows and the borrower's address for
+#: a few; an answer states which, and this is where it reads it.
+FIELD_SOURCE_FIELD = "region_source_field"
 FIELD_METHOD = "region_mapping_method"
 FIELD_RULE = "region_mapping_rule"
 
@@ -266,14 +271,17 @@ def apply(df, taxonomy: Optional[RegionTaxonomy], *,
     if not present:
         return {}
 
-    # First populated source column per row, in preference order.
+    # First populated source column per row, in preference order — and which
+    # column that was.
     raw = pd.Series(pd.NA, index=df.index, dtype="object")
+    origin = pd.Series(pd.NA, index=df.index, dtype="object")
     for col in present:
         candidate = df[col]
         blank = raw.isna() | raw.astype(str).str.strip().str.lower().isin(_NULL_TOKENS)
         take = blank & candidate.notna()
         if take.any():
             raw = raw.mask(take, candidate)
+            origin = origin.mask(take, col)
 
     # Resolve once per DISTINCT value, then map — a tape has thousands of rows
     # and a handful of regions.
@@ -293,6 +301,7 @@ def apply(df, taxonomy: Optional[RegionTaxonomy], *,
 
     as_text = raw.astype("object").where(raw.notna())
     df[FIELD_SOURCE_VALUE] = as_text
+    df[FIELD_SOURCE_FIELD] = origin.astype("object").where(as_text.notna())
     df[FIELD_DETAIL] = as_text.map(lambda v: detail_by_raw.get(str(v)) if v is not None else None)
     df[FIELD_REPORTING] = as_text.map(lambda v: reporting_by_raw.get(str(v)) if v is not None else None)
     df[FIELD_METHOD] = as_text.map(
@@ -317,7 +326,57 @@ def apply(df, taxonomy: Optional[RegionTaxonomy], *,
         "unresolved_values": dict(sorted(unresolved.items(), key=lambda kv: -kv[1])),
         "methods": {m: int((df[FIELD_METHOD] == m).sum())
                     for m in (METHOD_EXACT, METHOD_SYNONYM, METHOD_UNRESOLVED, METHOD_ABSENT)},
+        "source_field_rows": source_field_rows(df),
     }
+
+
+def source_field_rows(df) -> Dict[str, int]:
+    """Rows per source column the raw region was read from."""
+    if FIELD_SOURCE_FIELD not in getattr(df, "columns", ()):
+        return {}
+    return {str(k): int(v) for k, v in
+            df[FIELD_SOURCE_FIELD].dropna().astype(str).value_counts().items()}
+
+
+def disclosure(df, report: Optional[Mapping[str, Any]] = None, *,
+               amount_field: str = "current_outstanding_balance") -> Dict[str, Any]:
+    """WHAT A REGION BREAKDOWN OF ``df`` RESTS ON, AND WHAT IT LEAVES OUT.
+
+    One disclosure for every surface that breaks a book down by the reporting
+    region — the Pipeline tab, the Forecast tab and every agent answer:
+
+      taxonomy           the reporting taxonomy's name (for notes, not prose)
+      source_field_rows  rows per source column the region was read from
+      unmapped_rows      rows WITH a raw region that has no governed mapping —
+                         in no region, never assigned to one (a row with no
+                         raw region at all has nothing to map and is not
+                         counted here)
+      unmapped_amount    their ``amount_field`` total, when the frame has it
+      unmapped_values    the raw values, with their row counts
+
+    Reads the columns ``apply`` stamped; computes nothing else.
+    """
+    import pandas as pd
+
+    out: Dict[str, Any] = {
+        "taxonomy": (report or {}).get("reporting_taxonomy"),
+        "source_field_rows": source_field_rows(df),
+        "unmapped_rows": 0, "unmapped_amount": 0.0, "unmapped_values": {}}
+    columns = getattr(df, "columns", ())
+    if FIELD_REPORTING not in columns:
+        return out
+    unmapped = df[FIELD_REPORTING].isna()
+    if FIELD_SOURCE_VALUE in columns:
+        raw = df[FIELD_SOURCE_VALUE]
+        unmapped = unmapped & raw.notna() & raw.astype(str).str.strip().ne("")
+        out["unmapped_values"] = {
+            str(k): int(v) for k, v in
+            raw[unmapped].astype(str).value_counts().items()}
+    out["unmapped_rows"] = int(unmapped.sum())
+    if amount_field in columns:
+        out["unmapped_amount"] = round(float(pd.to_numeric(
+            df.loc[unmapped, amount_field], errors="coerce").fillna(0.0).sum()), 2)
+    return out
 
 
 # --------------------------------------------------------------------------- #

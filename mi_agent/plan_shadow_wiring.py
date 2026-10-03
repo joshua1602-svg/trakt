@@ -196,6 +196,8 @@ def build_plan(question: str, *, source_registry: Any = None) -> Tuple[Any, Any]
     # model that cannot see a client's governed books can only guess at one or
     # refuse. It is passed per call and never held: `_interpreter()` is cached
     # across requests and across clients, and the registry must not be.
+    # A follow-up or a reply arrives here already made a complete question
+    # (the conversation reader, §39): there is one way to read a question.
     outcome = _interpreter().interpret(question, source_registry=source_registry)
     compiled = (compiler.compile(outcome.intent) if outcome.ok
                 else refuse(outcome.reason, compiler_version=compiler.version))

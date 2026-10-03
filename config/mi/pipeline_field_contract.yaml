@@ -256,16 +256,11 @@ pipeline_specific_fields:
     role: metric
     availability: derived
     semantic_registry_field: forecast_funding_probability
-    description: Stage conversion probability. Row-level where supplied, else the
-      config/client/pipeline_expected_funding.yaml stage_probabilities lookup.
-      Never invented.
+    description: Stage conversion probability. Row-level where supplied, else
+      measured from the client's own case history (owner decision D21) — never
+      a configured value, and never invented. None where the history is not
+      enough.
     source_aliases: [completion probability, conversion probability, funding probability]
-
-  stage_conversion_probability:
-    role: metric
-    availability: derived
-    description: Alias of completion_probability from the config stage->probability
-      assumption (kept distinct so a row-level probability can override it later).
 
   expected_funded_amount:
     role: metric

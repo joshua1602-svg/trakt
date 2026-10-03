@@ -1,0 +1,6664 @@
+{
+ "what_this_is": "The model's own output for each question of the owner's production bank run (2026-09-30 07:10:30 UTC, deployed 622351a2, vocabulary 2.12.0, one model call), as the serving canary recorded it, read back by qb-plan-readback.yml (run 36689644793). The model payload and the recorded compile and serving decisions only: no answer, no executed figure and no row. The evidence the run-rate hold was released on (P0 design \u00a722).",
+ "source_run": 36689644793,
+ "sink_records_seen": 1054,
+ "question_count": 135,
+ "cases": [
+  {
+   "n": 1,
+   "id": "funded_kpi_001",
+   "category": "funded_kpi",
+   "question": "What is the funded balance?",
+   "recorded_at": "2026-09-30T07:11:40.114003+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'funded balance' as the summed current outstanding balance of the funded population.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The reader asks for the balance of the funded book.",
+      "text": "the funded balance"
+     },
+     {
+      "claim": "No period named, so the current reporting period applies.",
+      "text": "What is the funded balance?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "sum"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_55f99892adcd0e3e",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 2,
+   "id": "funded_kpi_002",
+   "category": "funded_kpi",
+   "question": "What is the current funded balance?",
+   "recorded_at": "2026-09-30T07:12:07.152887+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'funded balance' as the governed outstanding balance of the funded population.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "Asks for the balance level at the latest reporting period.",
+      "text": "What is the current funded balance?"
+     },
+     {
+      "claim": "Population is the funded book.",
+      "text": "funded balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "sum"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_55f99892adcd0e3e",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 3,
+   "id": "funded_kpi_003",
+   "category": "funded_kpi",
+   "question": "What is total current outstanding balance?",
+   "recorded_at": "2026-09-30T07:12:32.812426+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No population stated; read as the funded book per the governed default.",
+      "options": [
+       "funded",
+       "whole_book"
+      ],
+      "slot": "population.base"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The measure asked for is the current outstanding balance, summed.",
+      "text": "total current outstanding balance"
+     },
+     {
+      "claim": "No period named, so the current reporting period applies.",
+      "text": "What is total current outstanding balance?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "sum"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_55f99892adcd0e3e",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 4,
+   "id": "funded_kpi_004",
+   "category": "funded_kpi",
+   "question": "How many funded loans are there?",
+   "recorded_at": "2026-09-30T07:12:55.569430+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The reader asks for a count of loans.",
+      "text": "How many funded loans are there?"
+     },
+     {
+      "claim": "The population is the funded book.",
+      "text": "funded loans"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "loan",
+      "statistic": "count"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_71095424872ec097",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 5,
+   "id": "funded_kpi_005",
+   "category": "funded_kpi",
+   "question": "How many loans are in the funded book?",
+   "recorded_at": "2026-09-30T07:13:18.432989+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The reader asks for a count of loans.",
+      "text": "How many loans"
+     },
+     {
+      "claim": "The population is the funded book.",
+      "text": "in the funded book"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "loan",
+      "statistic": "count"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_71095424872ec097",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 6,
+   "id": "funded_kpi_006",
+   "category": "funded_kpi",
+   "question": "What is the weighted average current LTV?",
+   "recorded_at": "2026-09-30T07:13:42.000129+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Weighting taken as the governed balance weight for LTV.",
+      "slot": "measures[0].weight"
+     },
+     {
+      "blocking": false,
+      "note": "No population named; read as the funded book.",
+      "slot": "population.base"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The reader asks for the balance-weighted average of current LTV.",
+      "text": "weighted average current LTV"
+     },
+     {
+      "claim": "No period named, so the current reporting period applies.",
+      "text": "What is the weighted average current LTV?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_loan_to_value",
+      "statistic": "weighted_average",
+      "weight": "current_outstanding_balance"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_24da737829d9d792",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 7,
+   "id": "funded_kpi_007",
+   "category": "funded_kpi",
+   "question": "What is WA LTV?",
+   "recorded_at": "2026-09-30T07:14:05.375339+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as current LTV rather than original or indexed LTV.",
+      "options": [
+       "current_loan_to_value",
+       "indexed_loan_to_value",
+       "original_loan_to_value"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "Asks for the balance-weighted average current LTV.",
+      "text": "WA LTV"
+     },
+     {
+      "claim": "No period stated, so the current reporting period applies.",
+      "text": "What is WA LTV?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_loan_to_value",
+      "statistic": "weighted_average",
+      "weight": "current_outstanding_balance"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_24da737829d9d792",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 8,
+   "id": "funded_kpi_008",
+   "category": "funded_kpi",
+   "question": "What is the weighted average interest rate?",
+   "recorded_at": "2026-09-30T07:14:26.547122+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Weighting basis unstated; the governed balance weight for interest rate applies.",
+      "options": [],
+      "slot": "measures[].weight"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The reader asks for the interest rate as a weighted average.",
+      "text": "weighted average interest rate"
+     },
+     {
+      "claim": "No period named, so the current reporting period applies.",
+      "text": "What is the"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_interest_rate",
+      "statistic": "weighted_average"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_30e0bfa6feb66613",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 9,
+   "id": "funded_kpi_009",
+   "category": "funded_kpi",
+   "question": "What is WA current interest rate?",
+   "recorded_at": "2026-09-30T07:14:48.499175+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Weight left empty so the governed balance weighting applies.",
+      "options": [],
+      "slot": "measures[0].weight"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The reader asks for the weighted-average current interest rate.",
+      "text": "WA current interest rate"
+     },
+     {
+      "claim": "No period named, so the current reporting period applies.",
+      "text": "What is"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_interest_rate",
+      "statistic": "weighted_average"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_30e0bfa6feb66613",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 10,
+   "id": "funded_kpi_010",
+   "category": "funded_kpi",
+   "question": "What is the simple average interest rate?",
+   "recorded_at": "2026-09-30T07:15:09.213541+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The measure is the current interest rate.",
+      "text": "interest rate"
+     },
+     {
+      "claim": "A simple (unweighted) average is explicitly requested, overriding the governed weighted-average default.",
+      "text": "simple average"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_interest_rate",
+      "statistic": "average"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_47eea00f91eb2be2",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 11,
+   "id": "funded_kpi_011",
+   "category": "funded_kpi",
+   "question": "What is the average borrower age?",
+   "recorded_at": "2026-09-30T07:15:30.140275+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Borrower age is governed as the age of the youngest borrower on the loan.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The question asks for the governed borrower age measure.",
+      "text": "borrower age"
+     },
+     {
+      "claim": "The statistic requested is a simple average.",
+      "text": "average"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "youngest_borrower_age",
+      "statistic": "average"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_8d65e30a291fa02f",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 12,
+   "id": "funded_kpi_012",
+   "category": "funded_kpi",
+   "question": "What is the weighted average borrower age?",
+   "recorded_at": "2026-09-30T07:15:50.166728+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Borrower age is governed only as the youngest borrower's age.",
+      "slot": "measures.concept"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The measure is borrower age, governed as the youngest borrower's age.",
+      "text": "borrower age"
+     },
+     {
+      "claim": "The statistic is explicitly a weighted average; the governed default weight is balance.",
+      "text": "weighted average"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "youngest_borrower_age",
+      "statistic": "weighted_average"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_7ed67d46d28d7af7",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 13,
+   "id": "funded_kpi_013",
+   "category": "funded_kpi",
+   "question": "What is the average loan balance?",
+   "recorded_at": "2026-09-30T07:16:11.443287+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The reader asks for the mean balance per loan.",
+      "text": "average loan balance"
+     },
+     {
+      "claim": "No period stated, so the current reporting period applies.",
+      "text": "What is the average loan balance?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "average"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_0146447ebebea529",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 14,
+   "id": "funded_kpi_014",
+   "category": "funded_kpi",
+   "question": "What is the median loan balance?",
+   "recorded_at": "2026-09-30T07:16:34.785728+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No population stated; read as the funded book per the governed default.",
+      "slot": "population.base"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The requested statistic is the median.",
+      "text": "median"
+     },
+     {
+      "claim": "The measure is the loan balance concept.",
+      "text": "loan balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "median"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_25a01878a95eac1f",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 15,
+   "id": "funded_kpi_015",
+   "category": "funded_kpi",
+   "question": "What is the largest loan?",
+   "recorded_at": "2026-09-30T07:16:56.479958+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'largest' as the maximum outstanding balance rather than valuation or original balance.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The reader asks for the maximum individual loan balance.",
+      "text": "the largest loan"
+     },
+     {
+      "claim": "No period stated, so the current reporting period applies.",
+      "text": "What is"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "max"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_a63f52f77f011a85",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 16,
+   "id": "funded_kpi_016",
+   "category": "funded_kpi",
+   "question": "What is the smallest loan?",
+   "recorded_at": "2026-09-30T07:17:22.132286+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'smallest' as the minimum current outstanding balance.",
+      "options": [
+       "current_outstanding_balance",
+       "original_principal_balance"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "Asks for the minimum loan balance.",
+      "text": "smallest loan"
+     },
+     {
+      "claim": "No period stated, so the current reporting period applies.",
+      "text": "What is the smallest loan?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "min"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_bf1e3357006b541a",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 17,
+   "id": "funded_kpi_017",
+   "category": "funded_kpi",
+   "question": "What is the total original balance?",
+   "recorded_at": "2026-09-30T07:17:44.841012+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The measure is the origination principal balance, summed.",
+      "text": "total original balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "original_principal_balance",
+      "statistic": "sum"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_f4b21dbd85429f50",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 18,
+   "id": "funded_kpi_018",
+   "category": "funded_kpi",
+   "question": "What is the current valuation amount?",
+   "recorded_at": "2026-09-30T07:18:04.570856+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No statistic stated; the governed default for valuation applies.",
+      "slot": "measures[0].statistic"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The measure asked for is the most recent collateral valuation.",
+      "text": "current valuation amount"
+     },
+     {
+      "claim": "The question asks for a single figure at the latest reporting period.",
+      "text": "What is the current"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_valuation_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_34199fc596a02299",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 19,
+   "id": "funded_kpi_019",
+   "category": "funded_kpi",
+   "question": "What is the average current valuation?",
+   "recorded_at": "2026-09-30T07:18:26.779948+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The measure is the most recent property valuation.",
+      "text": "current valuation"
+     },
+     {
+      "claim": "The statistic asked for is a simple average.",
+      "text": "average"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_valuation_amount",
+      "statistic": "average"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_a82ec4f08cb78a07",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 20,
+   "id": "funded_kpi_020",
+   "category": "funded_kpi",
+   "question": "What is the weighted average current valuation?",
+   "recorded_at": "2026-09-30T07:18:46.700061+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Weight not stated; used the governed balance weight for valuation.",
+      "slot": "measures[0].weight"
+     }
+    ],
+    "capability": "generic_analysis",
+    "evidence": [
+     {
+      "claim": "The measure is the most recent property valuation.",
+      "text": "current valuation"
+     },
+     {
+      "claim": "The statistic asked for is a weighted average.",
+      "text": "weighted average"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_valuation_amount",
+      "statistic": "weighted_average",
+      "weight": "current_outstanding_balance"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_8bb2a0fa64792dc6",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 21,
+   "id": "funded_breakdown_1d_001",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by region.",
+   "recorded_at": "2026-09-30T07:19:11.426783+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Region basis unstated; the governed reporting taxonomy default applies.",
+      "options": [
+       "collateral",
+       "obligor",
+       "reporting_taxonomy"
+      ],
+      "slot": "geography.basis"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "canonical_region_reporting"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is balance.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "The grouping is by region at reporting level.",
+      "text": "by region"
+     }
+    ],
+    "geography": {
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_fb0533751a7af71a",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 22,
+   "id": "funded_breakdown_1d_002",
+   "category": "funded_breakdown_1d",
+   "question": "Show funded balance by collateral region.",
+   "recorded_at": "2026-09-30T07:19:34.200789+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'collateral region' as the reporting-level region on a collateral basis, not NUTS3/ITL3.",
+      "slot": "geography.level"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "collateral_geography"
+    ],
+    "evidence": [
+     {
+      "claim": "Balance of the funded book is the measure.",
+      "text": "funded balance"
+     },
+     {
+      "claim": "Grouped by the property's region.",
+      "text": "by collateral region"
+     }
+    ],
+    "geography": {
+     "basis": "collateral",
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "sum"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "funded"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_915626e3db954f1f",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 23,
+   "id": "funded_breakdown_1d_003",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by obligor region.",
+   "recorded_at": "2026-09-30T07:19:59.895803+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Obligor region bound to the NUTS3 obligor region, the governed obligor geography available here.",
+      "options": [
+       "nuts3",
+       "itl3"
+      ],
+      "slot": "geography.level"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "geographic_region_obligor"
+    ],
+    "evidence": [
+     {
+      "claim": "Balance is the requested measure.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "Grouped by the borrower's region, obligor basis.",
+      "text": "by obligor region"
+     }
+    ],
+    "geography": {
+     "basis": "obligor",
+     "group_by": true,
+     "level": "nuts3",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_c4165dcd2b1df4c1",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:FIELD_NOT_IN_BOOK"
+   }
+  },
+  {
+   "n": 24,
+   "id": "funded_breakdown_1d_004",
+   "category": "funded_breakdown_1d",
+   "question": "Show loan count by region.",
+   "recorded_at": "2026-09-30T07:20:28.422302+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Question says 'region' without saying whose; left empty so the governed reporting taxonomy default applies.",
+      "options": [
+       "obligor",
+       "collateral",
+       "reporting_taxonomy"
+      ],
+      "slot": "geography.basis"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "canonical_region_reporting"
+    ],
+    "evidence": [
+     {
+      "claim": "The figure requested is a count of loans.",
+      "text": "Show loan count"
+     },
+     {
+      "claim": "The breakdown dimension is region.",
+      "text": "by region"
+     }
+    ],
+    "geography": {
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "loan",
+      "statistic": "count"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_9a60479902d3d10c",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 25,
+   "id": "funded_breakdown_1d_005",
+   "category": "funded_breakdown_1d",
+   "question": "Show average loan balance by region.",
+   "recorded_at": "2026-09-30T07:20:57.417615+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Region stated without saying whose; left empty so the governed reporting taxonomy default applies.",
+      "options": [
+       "collateral",
+       "obligor",
+       "reporting_taxonomy"
+      ],
+      "slot": "geography.basis"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "canonical_region_reporting"
+    ],
+    "evidence": [
+     {
+      "claim": "Average of the loan balance measure is requested.",
+      "text": "average loan balance"
+     },
+     {
+      "claim": "Grouped by region at the reporting level.",
+      "text": "by region"
+     }
+    ],
+    "geography": {
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "average"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_f44404d60cb41fa9",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 26,
+   "id": "funded_breakdown_1d_006",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA LTV by region.",
+   "recorded_at": "2026-09-30T07:21:22.615405+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Region stated without saying whose; left empty so the governed reporting taxonomy default applies.",
+      "options": [
+       "collateral",
+       "obligor",
+       "reporting_taxonomy"
+      ],
+      "slot": "geography.basis"
+     },
+     {
+      "blocking": false,
+      "note": "Read WA LTV as current LTV rather than original or indexed LTV.",
+      "slot": "measures[0].concept"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "canonical_region_reporting"
+    ],
+    "evidence": [
+     {
+      "claim": "Weighted-average LTV is the requested measure.",
+      "text": "WA LTV"
+     },
+     {
+      "claim": "Grouped by region at the reporting level.",
+      "text": "by region"
+     }
+    ],
+    "geography": {
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "current_loan_to_value",
+      "statistic": "weighted_average"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_43a699f292de6cf4",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 27,
+   "id": "funded_breakdown_1d_007",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA interest rate by region.",
+   "recorded_at": "2026-09-30T07:21:47.595677+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Region stated without saying borrower's or property's; left empty so the governed reporting taxonomy resolves it.",
+      "options": [
+       "obligor",
+       "collateral",
+       "reporting_taxonomy"
+      ],
+      "slot": "geography.basis"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "canonical_region_reporting"
+    ],
+    "evidence": [
+     {
+      "claim": "Weighted-average interest rate is the requested measure.",
+      "text": "WA interest rate"
+     },
+     {
+      "claim": "Grouped by region at the reporting level.",
+      "text": "by region"
+     }
+    ],
+    "geography": {
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "current_interest_rate",
+      "statistic": "weighted_average"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_94a1a67347eb9bad",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 28,
+   "id": "funded_breakdown_1d_008",
+   "category": "funded_breakdown_1d",
+   "question": "Show average borrower age by region.",
+   "recorded_at": "2026-09-30T07:22:18.746826+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Question says 'region' without saying whose; governed reporting default applies.",
+      "options": [
+       "collateral",
+       "obligor",
+       "reporting_taxonomy"
+      ],
+      "slot": "geography.basis"
+     },
+     {
+      "blocking": false,
+      "note": "Borrower age is governed as the youngest borrower's age.",
+      "slot": "measures.concept"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "canonical_region_reporting"
+    ],
+    "evidence": [
+     {
+      "claim": "Average of the governed borrower age measure is requested.",
+      "text": "average borrower age"
+     },
+     {
+      "claim": "Grouping is by region at the reporting level.",
+      "text": "by region"
+     }
+    ],
+    "geography": {
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "youngest_borrower_age",
+      "statistic": "average"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_4231da289603d1b8",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 29,
+   "id": "funded_breakdown_1d_009",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by broker.",
+   "recorded_at": "2026-09-30T07:22:41.511032+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the outstanding balance.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "Grouped by broker / origination channel.",
+      "text": "by broker"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_9b1139ffb35f6b04",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 30,
+   "id": "funded_breakdown_1d_010",
+   "category": "funded_breakdown_1d",
+   "question": "Show loan count by broker.",
+   "recorded_at": "2026-09-30T07:23:03.786704+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested figure is a count of loans.",
+      "text": "Show loan count"
+     },
+     {
+      "claim": "The figure is grouped by broker channel.",
+      "text": "by broker"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "loan",
+      "statistic": "count"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_8dd6f4774a04221d",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 31,
+   "id": "funded_breakdown_1d_011",
+   "category": "funded_breakdown_1d",
+   "question": "Show average loan balance by broker.",
+   "recorded_at": "2026-09-30T07:23:24.676489+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The figure asked for is the average loan balance.",
+      "text": "average loan balance"
+     },
+     {
+      "claim": "It is grouped by broker.",
+      "text": "by broker"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "average"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_857fde02d334bf46",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 32,
+   "id": "funded_breakdown_1d_012",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA LTV by broker.",
+   "recorded_at": "2026-09-30T07:23:46.356910+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'LTV' as current LTV rather than original or indexed LTV.",
+      "options": [
+       "current_loan_to_value",
+       "original_loan_to_value",
+       "indexed_loan_to_value"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "Weighted-average LTV is the requested measure.",
+      "text": "WA LTV"
+     },
+     {
+      "claim": "Grouped by broker / origination channel.",
+      "text": "by broker"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_loan_to_value",
+      "statistic": "weighted_average"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_bf368c25fe65d7a8",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 33,
+   "id": "funded_breakdown_1d_013",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA interest rate by broker.",
+   "recorded_at": "2026-09-30T07:24:09.216704+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Weight left empty so the governed default (balance) applies.",
+      "slot": "measures[0].weight"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the weighted-average current interest rate.",
+      "text": "WA interest rate"
+     },
+     {
+      "claim": "The breakdown dimension is broker.",
+      "text": "by broker"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_interest_rate",
+      "statistic": "weighted_average"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_633a84c8544b512a",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 34,
+   "id": "funded_breakdown_1d_014",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by LTV bucket.",
+   "recorded_at": "2026-09-30T07:24:31.495161+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "ltv_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "The measure requested is the current outstanding balance.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "The grouping requested is the governed LTV band.",
+      "text": "by LTV bucket"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_f8f3d025f73e3e93",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 35,
+   "id": "funded_breakdown_1d_015",
+   "category": "funded_breakdown_1d",
+   "question": "Show loan count by LTV bucket.",
+   "recorded_at": "2026-09-30T07:24:51.308822+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "ltv_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "The figure requested is a count of loans.",
+      "text": "Show loan count"
+     },
+     {
+      "claim": "The breakdown dimension is the governed LTV band.",
+      "text": "by LTV bucket"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "loan",
+      "statistic": "count"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_39dec41bd702aec4",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 36,
+   "id": "funded_breakdown_1d_016",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA interest rate by LTV bucket.",
+   "recorded_at": "2026-09-30T07:25:10.066077+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Weight left empty so the governed default (balance) applies.",
+      "slot": "measures[0].weight"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "ltv_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "The measure is the weighted-average current interest rate.",
+      "text": "WA interest rate"
+     },
+     {
+      "claim": "It is broken down by LTV band.",
+      "text": "by LTV bucket"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_interest_rate",
+      "statistic": "weighted_average"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_a1223a606de256a4",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 37,
+   "id": "funded_breakdown_1d_017",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by borrower age bucket.",
+   "recorded_at": "2026-09-30T07:25:29.271195+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "age_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "Balance is the requested measure.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "Grouped by borrower age band.",
+      "text": "by borrower age bucket"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "sum"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_97ef2b646586a0b0",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 38,
+   "id": "funded_breakdown_1d_018",
+   "category": "funded_breakdown_1d",
+   "question": "Show loan count by borrower age bucket.",
+   "recorded_at": "2026-09-30T07:25:47.744991+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "age_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested figure is a count of loans.",
+      "text": "Show loan count"
+     },
+     {
+      "claim": "Grouped by the governed borrower age band.",
+      "text": "by borrower age bucket"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "loan",
+      "statistic": "count"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_763092767d0d6043",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 39,
+   "id": "funded_breakdown_1d_019",
+   "category": "funded_breakdown_1d",
+   "question": "Show WA LTV by borrower age bucket.",
+   "recorded_at": "2026-09-30T07:26:07.772015+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'WA LTV' as balance-weighted current LTV, the governed default weighting.",
+      "options": [
+       "current_loan_to_value",
+       "indexed_loan_to_value",
+       "original_loan_to_value"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "age_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "Weighted-average current LTV is the requested measure.",
+      "text": "WA LTV"
+     },
+     {
+      "claim": "Grouped by borrower age band.",
+      "text": "by borrower age bucket"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_loan_to_value",
+      "statistic": "weighted_average",
+      "weight": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_dbf1ebdf1c351cd5",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 40,
+   "id": "funded_breakdown_1d_020",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by origination channel.",
+   "recorded_at": "2026-09-30T07:26:28.586711+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "origination_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the outstanding balance.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "The breakdown dimension is origination channel.",
+      "text": "by origination channel"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_5d73aaf232bde301",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 41,
+   "id": "funded_breakdown_1d_021",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by product type.",
+   "recorded_at": "2026-09-30T07:26:59.133625+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "erm_product_type"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the outstanding balance.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "The grouping dimension is product type.",
+      "text": "by product type"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_6f6d78d80311f269",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 42,
+   "id": "funded_breakdown_1d_022",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by account status.",
+   "recorded_at": "2026-09-30T07:27:19.243178+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "account_status"
+    ],
+    "evidence": [
+     {
+      "claim": "Balance is the requested measure.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "Account status is the grouping dimension.",
+      "text": "by account status"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_592a623ad2542852",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 43,
+   "id": "funded_breakdown_1d_023",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by borrower structure.",
+   "recorded_at": "2026-09-30T07:27:37.815023+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'borrower structure' as borrower type (single vs joint).",
+      "options": [
+       "borrower_type",
+       "number_of_borrowers"
+      ],
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "borrower_type"
+    ],
+    "evidence": [
+     {
+      "claim": "Balance is the governed outstanding balance measure.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "Borrower structure maps to the single-vs-joint borrower type dimension.",
+      "text": "by borrower structure"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "sum"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_77da7a3539b3d5b3",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 44,
+   "id": "funded_breakdown_1d_024",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by property type.",
+   "recorded_at": "2026-09-30T07:27:57.511943+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'property type' as collateral type (House, Flat, etc.).",
+      "options": [
+       "collateral_type",
+       "occupancy_type",
+       "tenure"
+      ],
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "generic_analysis",
+    "dimensions": [
+     "collateral_type"
+    ],
+    "evidence": [
+     {
+      "claim": "Balance is the governed outstanding balance measure.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "Property type is read as the collateral type dimension.",
+      "text": "by property type"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance",
+      "statistic": "sum"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_cdd40a726c829150",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 45,
+   "id": "funded_breakdown_1d_025",
+   "category": "funded_breakdown_1d",
+   "question": "Show balance by occupancy type.",
+   "recorded_at": "2026-09-30T07:28:25.882371+00:00",
+   "raw_model_payload": {
+    "capability": "generic_analysis",
+    "dimensions": [
+     "occupancy_type"
+    ],
+    "evidence": [
+     {
+      "claim": "The figure requested is the outstanding balance.",
+      "text": "Show balance"
+     },
+     {
+      "claim": "The balance is grouped by occupancy type.",
+      "text": "by occupancy type"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "current_outstanding_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_59b51c9a6921c489",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:FIELD_NOT_IN_BOOK"
+   }
+  },
+  {
+   "n": 46,
+   "id": "pipeline_001",
+   "category": "pipeline",
+   "question": "What is the pipeline amount?",
+   "recorded_at": "2026-09-30T07:29:01.742463+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The reader asks for the governed pipeline amount measure.",
+      "text": "the pipeline amount"
+     },
+     {
+      "claim": "No period stated, so the latest reporting state applies.",
+      "text": "What is the pipeline amount?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_b316efefaeead58b",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 47,
+   "id": "pipeline_002",
+   "category": "pipeline",
+   "question": "How many pipeline cases are there?",
+   "recorded_at": "2026-09-30T07:29:30.094643+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The question asks for the count of cases in the pipeline population.",
+      "text": "How many pipeline cases are there?"
+     },
+     {
+      "claim": "No period stated, so the current reporting state applies.",
+      "text": "are there"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_case_count"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_77e34aee13e484bb",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 48,
+   "id": "pipeline_003",
+   "category": "pipeline",
+   "question": "What is the weighted expected funded amount?",
+   "recorded_at": "2026-09-30T07:29:49.067368+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The reader asks for the pipeline's weighted expected funded figure, a pipeline-owned measure.",
+      "text": "weighted expected funded amount"
+     },
+     {
+      "claim": "No period named, so the latest reporting state applies.",
+      "text": "What is the weighted expected funded amount?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_146fbf0528237e93",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 49,
+   "id": "pipeline_004",
+   "category": "pipeline",
+   "question": "What is the pipeline conversion rate?",
+   "recorded_at": "2026-09-30T07:30:28.893264+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the canonical cohort conversion to funding, not a single stage's pull-through.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline_stage_movement",
+    "evidence": [
+     {
+      "claim": "The reader asks for the canonical pipeline conversion rate, which is the KFI cohort conversion.",
+      "text": "the pipeline conversion rate"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "cohort_conversion"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_43c17a7a49f92e41",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 50,
+   "id": "pipeline_005",
+   "category": "pipeline",
+   "question": "What is the pipeline amount by stage?",
+   "recorded_at": "2026-09-30T07:30:56.038068+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline amount.",
+      "text": "What is the pipeline amount"
+     },
+     {
+      "claim": "The breakdown dimension is pipeline funnel stage.",
+      "text": "by stage"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_ca2c01f3b0e9e7ff",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 51,
+   "id": "pipeline_006",
+   "category": "pipeline",
+   "question": "What is the pipeline case count by stage?",
+   "recorded_at": "2026-09-30T07:31:23.115850+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline case count.",
+      "text": "pipeline case count"
+     },
+     {
+      "claim": "Broken down by pipeline funnel stage.",
+      "text": "by stage"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_case_count"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_b6e987a42ad0e3ab",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 52,
+   "id": "pipeline_007",
+   "category": "pipeline",
+   "question": "What is the pipeline amount by broker?",
+   "recorded_at": "2026-09-30T07:31:49.049646+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline amount.",
+      "text": "pipeline amount"
+     },
+     {
+      "claim": "Grouped by broker channel.",
+      "text": "by broker"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_dde52430c868369b",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 53,
+   "id": "pipeline_008",
+   "category": "pipeline",
+   "question": "What is the pipeline amount by region?",
+   "recorded_at": "2026-09-30T07:32:18.301586+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Region stated without whose; the governed reporting taxonomy default applies.",
+      "options": [
+       "reporting_taxonomy",
+       "collateral",
+       "obligor"
+      ],
+      "slot": "geography.basis"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "canonical_region_reporting"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline amount.",
+      "text": "pipeline amount"
+     },
+     {
+      "claim": "Grouping is by region at the reporting level.",
+      "text": "by region"
+     },
+     {
+      "claim": "Population is the pipeline.",
+      "text": "pipeline"
+     }
+    ],
+    "geography": {
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_7be45131497ce18f",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 54,
+   "id": "pipeline_009",
+   "category": "pipeline",
+   "question": "What is the pipeline amount by expected completion month?",
+   "recorded_at": "2026-09-30T07:32:44.113470+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "dimensions": [
+     "expected_completion_month"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the pipeline amount.",
+      "text": "What is the pipeline amount"
+     },
+     {
+      "claim": "Grouped by expected completion month.",
+      "text": "by expected completion month"
+     },
+     {
+      "claim": "Population is the pipeline.",
+      "text": "pipeline amount"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_6aa943b46f520854",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 55,
+   "id": "pipeline_010",
+   "category": "pipeline",
+   "question": "Which broker has the largest pipeline?",
+   "recorded_at": "2026-09-30T07:33:09.905521+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as a ranked breakdown of pipeline amount by broker; the pipeline capability has no 'rank' operation.",
+      "options": [
+       "breakdown",
+       "rank"
+      ],
+      "slot": "operation"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The population is the pipeline and the measure is the pipeline amount.",
+      "text": "largest pipeline"
+     },
+     {
+      "claim": "Grouped by broker to find the largest one.",
+      "text": "Which broker"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_dde52430c868369b",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 56,
+   "id": "pipeline_011",
+   "category": "pipeline",
+   "question": "Which stage has the largest pipeline?",
+   "recorded_at": "2026-09-30T07:33:38.143928+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'largest pipeline' as pipeline amount rather than case count.",
+      "options": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "Breakdown by stage identifies the largest; the pipeline capability offers no rank operation.",
+      "slot": "operation"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The question is about the pipeline population and its amount.",
+      "text": "largest pipeline"
+     },
+     {
+      "claim": "The figure is grouped by pipeline stage to find the largest.",
+      "text": "Which stage"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_ca2c01f3b0e9e7ff",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 57,
+   "id": "pipeline_012",
+   "category": "pipeline",
+   "question": "How much pipeline is expected to complete next month?",
+   "recorded_at": "2026-09-30T07:34:06.522970+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the unweighted pipeline amount, not the probability-weighted expected funded amount.",
+      "options": [
+       "pipeline_amount",
+       "weighted_expected_funded_amount"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The question is about the pipeline population and its amount.",
+      "text": "How much pipeline"
+     },
+     {
+      "claim": "'next month' is the pipeline's expected completion timing, not a reporting period.",
+      "text": "expected to complete next month"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "expected_completion_timing",
+      "value": "next_month"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_63efb348c948f6ed",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 58,
+   "id": "pipeline_013",
+   "category": "pipeline",
+   "question": "How much pipeline is overdue?",
+   "recorded_at": "2026-09-30T07:34:31.591248+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The question asks for a pipeline amount.",
+      "text": "How much pipeline"
+     },
+     {
+      "claim": "'Overdue' is the pipeline's expected completion timing, not loan arrears.",
+      "text": "is overdue"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "expected_completion_timing",
+      "value": "overdue"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_f8af26de64c71dbb",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 59,
+   "id": "pipeline_014",
+   "category": "pipeline",
+   "question": "How much pipeline is current month?",
+   "recorded_at": "2026-09-30T07:34:56.692532+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'current month' as pipeline expected to complete this month, not as a reporting period.",
+      "slot": "filters.expected_completion_timing"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "Asks for the amount of pipeline.",
+      "text": "How much pipeline"
+     },
+     {
+      "claim": "'current month' is the pipeline's expected completion timing, not a reporting period.",
+      "text": "is current month"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "expected_completion_timing",
+      "value": "current_month"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_e53580755f821a46",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 60,
+   "id": "pipeline_015",
+   "category": "pipeline",
+   "question": "Show overdue pipeline cases.",
+   "recorded_at": "2026-09-30T07:35:20.592388+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'cases' as the pipeline case count rather than the pipeline amount.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The population is the open pipeline.",
+      "text": "pipeline cases"
+     },
+     {
+      "claim": "'Overdue' is the pipeline's expected-completion timing, not loan arrears.",
+      "text": "overdue"
+     },
+     {
+      "claim": "Cases asked for, so the pipeline case count is the measure.",
+      "text": "Show overdue pipeline cases"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "expected_completion_timing",
+      "value": "overdue"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_case_count"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_aa44a7232f2970c5",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 61,
+   "id": "pipeline_016",
+   "category": "pipeline",
+   "question": "Show pipeline by expected completion date.",
+   "recorded_at": "2026-09-30T07:35:44.933254+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read the bare 'pipeline' as the pipeline amount rather than case count.",
+      "options": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "expected_completion_month"
+    ],
+    "evidence": [
+     {
+      "claim": "The population and capability are the pipeline.",
+      "text": "Show pipeline"
+     },
+     {
+      "claim": "The breakdown dimension is expected completion month.",
+      "text": "by expected completion date"
+     },
+     {
+      "claim": "The quantity asked for is the pipeline amount.",
+      "text": "Show pipeline"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_6aa943b46f520854",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 62,
+   "id": "pipeline_017",
+   "category": "pipeline",
+   "question": "Show pipeline stage distribution.",
+   "recorded_at": "2026-09-30T07:36:11.719098+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No measure was named; read the pipeline amount as the quantity distributed across stages.",
+      "options": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The question is about the pipeline population.",
+      "text": "pipeline"
+     },
+     {
+      "claim": "Breakdown by pipeline funnel stage is requested.",
+      "text": "stage distribution"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_ca2c01f3b0e9e7ff",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 63,
+   "id": "pipeline_018",
+   "category": "pipeline",
+   "question": "Show pipeline weighted expected amount by stage.",
+   "recorded_at": "2026-09-30T07:36:37.674200+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the pipeline's weighted expected funded amount.",
+      "text": "pipeline weighted expected amount"
+     },
+     {
+      "claim": "It is broken down by pipeline funnel stage.",
+      "text": "by stage"
+     },
+     {
+      "claim": "The population is the pipeline.",
+      "text": "pipeline"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_3f4ae393fbfb0117",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 64,
+   "id": "pipeline_019",
+   "category": "pipeline",
+   "question": "Show pipeline weighted expected amount by broker.",
+   "recorded_at": "2026-09-30T07:37:02.032427+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the pipeline's weighted expected funded amount.",
+      "text": "pipeline weighted expected amount"
+     },
+     {
+      "claim": "Broken down by broker.",
+      "text": "by broker"
+     },
+     {
+      "claim": "Population is the pipeline.",
+      "text": "pipeline"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_4031ec979353e75b",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 65,
+   "id": "pipeline_020",
+   "category": "pipeline",
+   "question": "Show pipeline amount by product.",
+   "recorded_at": "2026-09-30T07:37:31.356765+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'product' as the governed product type dimension rather than sub-product type.",
+      "options": [
+       "erm_product_type",
+       "erm_sub_product_type"
+      ],
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "erm_product_type"
+    ],
+    "evidence": [
+     {
+      "claim": "The measure asked for is the governed pipeline amount.",
+      "text": "Show pipeline amount"
+     },
+     {
+      "claim": "The breakdown dimension is product type.",
+      "text": "by product"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_5b4f35e33e1956ab",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 66,
+   "id": "pipeline_021",
+   "category": "pipeline",
+   "question": "Show pipeline amount by LTV bucket.",
+   "recorded_at": "2026-09-30T07:38:05.338276+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "dimensions": [
+     "ltv_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline amount.",
+      "text": "Show pipeline amount"
+     },
+     {
+      "claim": "The breakdown dimension is the governed LTV band.",
+      "text": "by LTV bucket"
+     },
+     {
+      "claim": "Pipeline amount names the pipeline population.",
+      "text": "pipeline amount"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_31474c49ecdda138",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 67,
+   "id": "pipeline_022",
+   "category": "pipeline",
+   "question": "Show pipeline amount by age bucket.",
+   "recorded_at": "2026-09-30T07:38:32.371098+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'age bucket' as the borrower age band; pipeline case age also bands to age_bucket.",
+      "options": [
+       "age_bucket (borrower age band)",
+       "pipeline case age banded"
+      ],
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "age_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline amount.",
+      "text": "Show pipeline amount"
+     },
+     {
+      "claim": "The breakdown dimension is the age bucket.",
+      "text": "by age bucket"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_361be11d53188751",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:DIMENSION_NOT_SUPPORTED"
+   }
+  },
+  {
+   "n": 68,
+   "id": "pipeline_023",
+   "category": "pipeline",
+   "question": "Show pipeline amount by source file.",
+   "recorded_at": "2026-09-30T07:39:00.018857+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": true,
+      "note": "'Source file' is not a governed dimension; no source portfolio registry is available to resolve it, so the grouping is left empty.",
+      "options": [
+       "source portfolio label",
+       "originator"
+      ],
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The requested measure is the pipeline amount.",
+      "text": "Show pipeline amount"
+     },
+     {
+      "claim": "A grouping by 'source file' is requested but no governed dimension matches it.",
+      "text": "by source file"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "REFUSE",
+    "reason_codes": [
+     "MODEL_FLAGGED_AMBIGUITY",
+     "UNSUPPORTED_COMPOSITION"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "REFUSE_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 69,
+   "id": "pipeline_024",
+   "category": "pipeline",
+   "question": "Show current month pipeline completions expected.",
+   "recorded_at": "2026-09-30T07:39:26.749825+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'completions expected' as the probability-weighted expected funded amount rather than the unweighted pipeline amount.",
+      "options": [
+       "weighted_expected_funded_amount",
+       "pipeline_amount"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The population is the live pipeline.",
+      "text": "pipeline"
+     },
+     {
+      "claim": "'current month' is the pipeline's expected completion timing, not a reporting period.",
+      "text": "current month pipeline"
+     },
+     {
+      "claim": "Expected completions from the pipeline is the weighted expected funded amount.",
+      "text": "completions expected"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "expected_completion_timing",
+      "value": "current_month"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_14583fff2f169ef2",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 70,
+   "id": "pipeline_evolution_001",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline amount evolution by week.",
+   "recorded_at": "2026-09-30T07:42:45.634934+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The measure asked for is the governed pipeline amount.",
+      "text": "pipeline amount"
+     },
+     {
+      "claim": "Evolution over time at weekly grain is a series.",
+      "text": "evolution by week"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "series",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series",
+     "grain": "weekly"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_5d86f03e7580848c",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 71,
+   "id": "pipeline_evolution_002",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline amount evolution by month.",
+   "recorded_at": "2026-09-30T07:46:12.921114+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'by month' as a monthly series grain rather than a breakdown by expected completion month.",
+      "options": [
+       "monthly series grain",
+       "expected_completion_month dimension"
+      ],
+      "slot": "time.grain"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The measure asked for is the governed pipeline amount.",
+      "text": "pipeline amount"
+     },
+     {
+      "claim": "Evolution over time is a series.",
+      "text": "evolution"
+     },
+     {
+      "claim": "The series grain is monthly.",
+      "text": "by month"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "series",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series",
+     "grain": "monthly"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_3abc0fc6a1e5fa7c",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 72,
+   "id": "pipeline_evolution_003",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline case count evolution by week.",
+   "recorded_at": "2026-09-30T07:46:41.978128+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The measure asked for is the pipeline case count, owned by the pipeline capability.",
+      "text": "pipeline case count"
+     },
+     {
+      "claim": "Evolution over time means a series.",
+      "text": "evolution"
+     },
+     {
+      "claim": "The series grain is weekly.",
+      "text": "by week"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_case_count"
+     }
+    ],
+    "operation": "series",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series",
+     "grain": "weekly"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_cb4dc0e4e7e028ec",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 73,
+   "id": "pipeline_evolution_004",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline case count evolution by month.",
+   "recorded_at": "2026-09-30T07:47:07.565873+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'by month' as a monthly series of the pipeline case count, not a breakdown by expected completion month.",
+      "options": [
+       "monthly reporting series",
+       "expected completion month"
+      ],
+      "slot": "time.grain"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The measure asked for is the pipeline case count, owned by the pipeline capability.",
+      "text": "pipeline case count"
+     },
+     {
+      "claim": "Evolution over time at monthly grain is a series.",
+      "text": "evolution by month"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_case_count"
+     }
+    ],
+    "operation": "series",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series",
+     "grain": "monthly"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_427f5f476bc9f53d",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 74,
+   "id": "pipeline_evolution_005",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline amount by stage over time.",
+   "recorded_at": "2026-09-30T07:47:43.576886+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No grain stated; left to the governed default for the pipeline series.",
+      "slot": "time.grain"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The measure asked for is the pipeline amount.",
+      "text": "Show pipeline amount"
+     },
+     {
+      "claim": "Grouped by pipeline funnel stage.",
+      "text": "by stage"
+     },
+     {
+      "claim": "Requested across governed periods, so a series.",
+      "text": "over time"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "series",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "CLARIFY",
+    "reason_codes": [
+     "AMBIGUOUS_PERIOD"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 75,
+   "id": "pipeline_evolution_006",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline cases by stage over time.",
+   "recorded_at": "2026-09-30T07:48:11.048706+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No grain stated; left to the governed default for the pipeline series.",
+      "slot": "time.grain"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The population is the pipeline and the figure is the count of pipeline cases.",
+      "text": "Show pipeline cases"
+     },
+     {
+      "claim": "Grouped by pipeline funnel stage.",
+      "text": "by stage"
+     },
+     {
+      "claim": "Requested as a series across governed periods.",
+      "text": "over time"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_case_count"
+     }
+    ],
+    "operation": "series",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "CLARIFY",
+    "reason_codes": [
+     "AMBIGUOUS_PERIOD"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 76,
+   "id": "pipeline_evolution_007",
+   "category": "pipeline_evolution",
+   "question": "Show expected completions by month.",
+   "recorded_at": "2026-09-30T07:48:35.110831+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'expected completions' as the probability-weighted expected funded amount from the live pipeline.",
+      "options": [
+       "weighted_expected_funded_amount",
+       "pipeline_amount"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "Read 'by month' as expected completion month rather than a reporting period series.",
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "expected_completion_month"
+    ],
+    "evidence": [
+     {
+      "claim": "Expected completions from the live pipeline is the weighted expected funded amount.",
+      "text": "expected completions"
+     },
+     {
+      "claim": "Grouped by expected completion month.",
+      "text": "by month"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_05663269320d702e",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 77,
+   "id": "pipeline_evolution_008",
+   "category": "pipeline_evolution",
+   "question": "Show weighted expected funded amount by month.",
+   "recorded_at": "2026-09-30T07:49:00.975463+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'by month' as expected completion month rather than a time series of reporting periods.",
+      "options": [
+       "expected_completion_month",
+       "monthly series of reporting periods"
+      ],
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "expected_completion_month"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the pipeline's weighted expected funded amount.",
+      "text": "weighted expected funded amount"
+     },
+     {
+      "claim": "'by month' is read as the pipeline's expected completion month.",
+      "text": "by month"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_05663269320d702e",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 78,
+   "id": "pipeline_evolution_009",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline conversion basis over time.",
+   "recorded_at": "2026-09-30T07:49:32.935314+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "'conversion basis' read as the governed cohort conversion measure; the word 'basis' is not a governed concept.",
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "pipeline_stage_movement has no 'series' operation, so the over-time request is carried in time.form; confirm if a per-period series of conversion is required.",
+      "slot": "operation"
+     }
+    ],
+    "capability": "pipeline_stage_movement",
+    "evidence": [
+     {
+      "claim": "The question asks about pipeline conversion, the governed cohort conversion measure.",
+      "text": "pipeline conversion"
+     },
+     {
+      "claim": "It asks for the measure across governed periods, a series.",
+      "text": "over time"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "cohort_conversion"
+     }
+    ],
+    "operation": "transition",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "CLARIFY",
+    "reason_codes": [
+     "AMBIGUOUS_PERIOD"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 79,
+   "id": "pipeline_evolution_010",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline by broker over time.",
+   "recorded_at": "2026-09-30T07:49:59.574721+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read bare 'pipeline' as the pipeline amount rather than case count.",
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "No grain stated; governed default period grain applies.",
+      "slot": "time.grain"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The population and capability are the pipeline.",
+      "text": "Show pipeline"
+     },
+     {
+      "claim": "Broker is the grouping dimension.",
+      "text": "by broker"
+     },
+     {
+      "claim": "A series across governed periods is requested.",
+      "text": "over time"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "series",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "CLARIFY",
+    "reason_codes": [
+     "AMBIGUOUS_PERIOD"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 80,
+   "id": "pipeline_evolution_011",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline by stage for October and November.",
+   "recorded_at": "2026-09-30T07:50:25.865735+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read bare 'pipeline' as the pipeline amount rather than case count.",
+      "options": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "Read October and November as two explicit reporting months.",
+      "slot": "time"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The population is the pipeline.",
+      "text": "Show pipeline"
+     },
+     {
+      "claim": "Break down by funnel stage.",
+      "text": "by stage"
+     },
+     {
+      "claim": "Two named months are requested.",
+      "text": "for October and November"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "explicit_period",
+     "grain": "monthly",
+     "labels": [
+      "October",
+      "November"
+     ]
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_46b5f5b82c33f9cc",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 81,
+   "id": "pipeline_evolution_012",
+   "category": "pipeline_evolution",
+   "question": "Compare October and November pipeline amount.",
+   "recorded_at": "2026-09-30T07:50:53.700783+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as levels for the two months side by side, not a driver attribution.",
+      "options": [
+       "level_comparison",
+       "metric_delta"
+      ],
+      "slot": "change_form"
+     }
+    ],
+    "capability": "pipeline",
+    "change_form": "level_comparison",
+    "evidence": [
+     {
+      "claim": "The pipeline amount is the requested measure.",
+      "text": "pipeline amount"
+     },
+     {
+      "claim": "Two named months are set side by side.",
+      "text": "Compare October and November"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "compare",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "explicit_period",
+     "grain": "monthly",
+     "labels": [
+      "October",
+      "November"
+     ]
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_c8114d21f21ac238",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 82,
+   "id": "pipeline_evolution_013",
+   "category": "pipeline_evolution",
+   "question": "Compare latest pipeline with prior pipeline.",
+   "recorded_at": "2026-09-30T07:51:19.541373+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No measure named; read as the pipeline amount, the capability's headline quantity.",
+      "options": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "change_form": "level_comparison",
+    "evidence": [
+     {
+      "claim": "The population is the pipeline.",
+      "text": "pipeline"
+     },
+     {
+      "claim": "Two reporting states are set side by side, latest against prior.",
+      "text": "Compare latest pipeline with prior pipeline"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "compare",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "relative_pair",
+     "labels": [
+      "latest",
+      "prior"
+     ]
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_86119b4648e04776",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:PERIOD_NOT_SUPPORTED"
+   }
+  },
+  {
+   "n": 83,
+   "id": "pipeline_evolution_014",
+   "category": "pipeline_evolution",
+   "question": "Show pipeline growth from October to November.",
+   "recorded_at": "2026-09-30T07:51:48.941934+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'pipeline growth' as movement in the pipeline amount, the single obvious pipeline quantity, rather than case count.",
+      "options": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "Read as how much the pipeline moved, not what caused it.",
+      "slot": "change_form"
+     }
+    ],
+    "capability": "pipeline",
+    "change_form": "metric_delta",
+    "evidence": [
+     {
+      "claim": "The population is the pipeline.",
+      "text": "pipeline growth"
+     },
+     {
+      "claim": "The reader wants the movement in the pipeline between two named months.",
+      "text": "growth from October to November"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "movement",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "explicit_period",
+     "grain": "monthly",
+     "labels": [
+      "October",
+      "November"
+     ]
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_832461b095fecb81",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 84,
+   "id": "pipeline_evolution_015",
+   "category": "pipeline_evolution",
+   "question": "Show stage migration over time.",
+   "recorded_at": "2026-09-30T07:52:17.813576+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read migration as cases moving between stages; amount moved was not requested.",
+      "options": [
+       "cases_moved",
+       "amount_moved"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "No grain stated; governed default period grain applies.",
+      "slot": "time.grain"
+     }
+    ],
+    "capability": "pipeline_stage_movement",
+    "dimensions": [
+     "origin_stage",
+     "destination_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "Stage migration is pipeline stage-to-stage transition analysis.",
+      "text": "stage migration"
+     },
+     {
+      "claim": "'over time' asks for it across governed periods, not one point.",
+      "text": "over time"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "cases_moved"
+     }
+    ],
+    "operation": "transition",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "series"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "CLARIFY",
+    "reason_codes": [
+     "AMBIGUOUS_PERIOD"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 85,
+   "id": "forecast_001",
+   "category": "forecast",
+   "question": "What is the forecast funded balance?",
+   "recorded_at": "2026-09-30T07:52:52.934710+00:00",
+   "raw_model_payload": {
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the governed forecast funded balance figure.",
+      "text": "What is the forecast funded balance?"
+     },
+     {
+      "claim": "A single figure at the latest reporting state, no breakdown or horizon requested.",
+      "text": "What is"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_37f2e6e737d49665",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 86,
+   "id": "forecast_002",
+   "category": "forecast",
+   "question": "What is funded balance plus weighted pipeline?",
+   "recorded_at": "2026-09-30T07:53:29.412903+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the single governed forecast funded balance figure, not two separate components.",
+      "options": [
+       "forecast_funded_balance",
+       "funded balance and weighted pipeline reported separately"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "Today's funded balance plus the probability-weighted pipeline is the governed forecast funded balance.",
+      "text": "funded balance plus weighted pipeline"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_37f2e6e737d49665",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 87,
+   "id": "forecast_003",
+   "category": "forecast",
+   "question": "What is the expected funded balance?",
+   "recorded_at": "2026-09-30T07:54:09.189071+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the pipeline's weighted expected funded amount rather than the forecast funded balance, which adds today's funded book.",
+      "options": [
+       "weighted_expected_funded_amount",
+       "forecast_funded_balance"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The reader asks for the probability-weighted expected funded amount from the live pipeline.",
+      "text": "expected funded balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_146fbf0528237e93",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 88,
+   "id": "forecast_004",
+   "category": "forecast",
+   "question": "What is the weighted expected pipeline contribution?",
+   "recorded_at": "2026-09-30T07:54:33.781410+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the weighted expected funded amount (the pipeline part of the forecast), not the forecast funded balance.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "Asks for the probability-weighted expected funded amount from the live pipeline.",
+      "text": "weighted expected pipeline contribution"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_146fbf0528237e93",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 89,
+   "id": "forecast_005",
+   "category": "forecast",
+   "question": "What is the forecast loan count?",
+   "recorded_at": "2026-09-30T07:55:00.112476+00:00",
+   "raw_model_payload": {
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the forecast tab's forecast loan count.",
+      "text": "What is the forecast loan count?"
+     },
+     {
+      "claim": "No period stated, so the current reporting state applies.",
+      "text": "What is"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_loan_count"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_4b0770867db7145f",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 90,
+   "id": "forecast_006",
+   "category": "forecast",
+   "question": "Show forecast balance by region.",
+   "recorded_at": "2026-09-30T07:55:53.357647+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Region stated without whose; the governed reporting taxonomy default applies.",
+      "options": [
+       "reporting_taxonomy",
+       "collateral"
+      ],
+      "slot": "geography.basis"
+     }
+    ],
+    "capability": "forecast",
+    "dimensions": [
+     "canonical_region_reporting"
+    ],
+    "evidence": [
+     {
+      "claim": "The reader asks for the forecast funded balance.",
+      "text": "forecast balance"
+     },
+     {
+      "claim": "The figure is to be broken down by region.",
+      "text": "by region"
+     }
+    ],
+    "geography": {
+     "group_by": true,
+     "level": "reporting",
+     "requested": true
+    },
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_436586d2c07d0b17",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 91,
+   "id": "forecast_007",
+   "category": "forecast",
+   "question": "Show forecast balance by broker.",
+   "recorded_at": "2026-09-30T07:56:39.757228+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'forecast balance' as the single forecast funded balance figure, not the month-by-month projection curve.",
+      "options": [
+       "forecast_funded_balance",
+       "projected_funded_balance"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "dimensions": [
+     "broker_channel"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the forecast funded balance.",
+      "text": "forecast balance"
+     },
+     {
+      "claim": "The breakdown dimension is broker.",
+      "text": "by broker"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_4d654f6d97508d81",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:DIMENSION_NOT_SUPPORTED"
+   }
+  },
+  {
+   "n": 92,
+   "id": "forecast_008",
+   "category": "forecast",
+   "question": "Show forecast balance by LTV bucket.",
+   "recorded_at": "2026-09-30T07:57:16.325650+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'forecast balance' as the forecast funded balance figure, not the month-by-month projected curve.",
+      "options": [
+       "forecast_funded_balance",
+       "projected_funded_balance"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "dimensions": [
+     "ltv_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested figure is the forecast funded balance.",
+      "text": "forecast balance"
+     },
+     {
+      "claim": "It is to be broken down by LTV band.",
+      "text": "by LTV bucket"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_65828feb4f528ed3",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 93,
+   "id": "forecast_009",
+   "category": "forecast",
+   "question": "Show forecast balance by expected completion month.",
+   "recorded_at": "2026-09-30T07:57:59.347204+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'forecast balance' as the single forecast funded balance figure, not the month-by-month projected curve.",
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "Expected completion month is a pipeline-owned dimension; applied here to the forecast breakdown.",
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "forecast",
+    "dimensions": [
+     "expected_completion_month"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested figure is the governed forecast funded balance.",
+      "text": "forecast balance"
+     },
+     {
+      "claim": "It is broken down by the pipeline's expected completion month.",
+      "text": "by expected completion month"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_417956d239a690ad",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:DIMENSION_NOT_SUPPORTED"
+   }
+  },
+  {
+   "n": 94,
+   "id": "forecast_010",
+   "category": "forecast",
+   "question": "How much of the forecast comes from funded book?",
+   "recorded_at": "2026-09-30T07:58:25.750606+00:00",
+   "raw_model_payload": {
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the forecast funded balance figure.",
+      "text": "How much of the forecast"
+     },
+     {
+      "claim": "They want only the funded-book part of it, so the forecast component is filtered.",
+      "text": "comes from funded book"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "forecast_component",
+      "value": "funded_book"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_57cf6063821dfd50",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 95,
+   "id": "forecast_011",
+   "category": "forecast",
+   "question": "How much of the forecast comes from pipeline?",
+   "recorded_at": "2026-09-30T07:59:06.798686+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'from pipeline' as the weighted_pipeline component of the forecast funded balance.",
+      "options": [
+       "weighted_pipeline component of forecast",
+       "unweighted pipeline amount"
+      ],
+      "slot": "filters"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the forecast funded balance.",
+      "text": "the forecast"
+     },
+     {
+      "claim": "They want only its pipeline part, which is the weighted_pipeline forecast component.",
+      "text": "comes from pipeline"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "forecast_component",
+      "value": "weighted_pipeline"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_026f103a47459927",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 96,
+   "id": "forecast_012",
+   "category": "forecast",
+   "question": "What is the forecast bridge?",
+   "recorded_at": "2026-09-30T07:59:42.940980+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'forecast bridge' as the governed funded-book vs weighted-pipeline decomposition of the forecast funded balance.",
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "forecast",
+    "dimensions": [
+     "forecast_component"
+    ],
+    "evidence": [
+     {
+      "claim": "The forecast bridge is the forecast funded balance broken down by its components.",
+      "text": "the forecast bridge"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_529f056bed819b79",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 97,
+   "id": "forecast_013",
+   "category": "forecast",
+   "question": "Show funded vs pipeline contribution.",
+   "recorded_at": "2026-09-30T08:00:19.877476+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the forecast funded balance split by forecast component, the catalogue's stated reading of 'funded vs pipeline contribution'.",
+      "options": [
+       "forecast_funded_balance by forecast_component"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "dimensions": [
+     "forecast_component"
+    ],
+    "evidence": [
+     {
+      "claim": "'funded vs pipeline contribution' is the governed forecast component breakdown.",
+      "text": "funded vs pipeline contribution"
+     },
+     {
+      "claim": "The measure broken down by forecast component is the forecast funded balance.",
+      "text": "Show funded vs pipeline contribution"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_529f056bed819b79",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 98,
+   "id": "forecast_014",
+   "category": "forecast",
+   "question": "Show forecast completion basis.",
+   "recorded_at": "2026-09-30T08:01:00.694507+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": true,
+      "note": "'Completion basis' is not a governed term; read as the forecast completion run-rate rather than stage completion rate, cohort conversion or the annualised run-rate.",
+      "options": [
+       "forecast_completion_rate",
+       "annualised_completion_run_rate",
+       "stage_completion_rate",
+       "cohort_conversion"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The question asks for the forecast's completion figure.",
+      "text": "Show forecast completion basis"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_completion_rate"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "CLARIFY",
+    "reason_codes": [
+     "MODEL_FLAGGED_AMBIGUITY"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 99,
+   "id": "forecast_015",
+   "category": "forecast",
+   "question": "Show historical conversion basis.",
+   "recorded_at": "2026-09-30T08:01:26.957888+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'historical conversion basis' as the governed cohort conversion rather than a single stage's pull-through or completion rate.",
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "No period, stage or breakdown was named, so the current governed conversion figure is reported.",
+      "slot": "operation"
+     }
+    ],
+    "capability": "pipeline_stage_movement",
+    "evidence": [
+     {
+      "claim": "The reader asks for the pipeline's conversion measure.",
+      "text": "conversion basis"
+     },
+     {
+      "claim": "Conversion is tracked from the historical KFI cohort, so the cohort conversion is the governed reading.",
+      "text": "historical conversion"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "cohort_conversion"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_43c17a7a49f92e41",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 100,
+   "id": "forecast_016",
+   "category": "forecast",
+   "question": "Which stages use historical rates?",
+   "recorded_at": "2026-09-30T08:01:53.587330+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'historical rates' as the governed stage completion rate assumed per stage; a pull-through reading is also possible.",
+      "options": [
+       "stage_completion_rate",
+       "stage_pull_through"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline_stage_movement",
+    "dimensions": [
+     "origin_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The reader asks about the historical completion rates the forecast applies, by stage.",
+      "text": "historical rates"
+     },
+     {
+      "claim": "Breakdown by the stage the rate is measured from.",
+      "text": "Which stages"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "stage_completion_rate"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_7d8bba2b697a2d09",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 101,
+   "id": "forecast_017",
+   "category": "forecast",
+   "question": "Which stages use config fallback rates?",
+   "recorded_at": "2026-09-30T08:02:22.839222+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": true,
+      "note": "No governed concept expresses whether a stage's rate comes from a configured fallback rather than observed history; this is methodology metadata Trakt does not carry as a semantic concept.",
+      "options": [
+       "stage_completion_rate",
+       "stage_pull_through"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline_stage_movement",
+    "dimensions": [
+     "origin_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The question is about pipeline funnel stages.",
+      "text": "Which stages"
+     },
+     {
+      "claim": "It asks about the provenance of the completion rate assumption per stage, not a portfolio figure.",
+      "text": "use config fallback rates"
+     }
+    ],
+    "operation": "breakdown",
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "CLARIFY",
+    "reason_codes": [
+     "MODEL_FLAGGED_AMBIGUITY",
+     "MISSING_REQUIRED_SLOT",
+     "MISSING_REQUIRED_SLOT"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 102,
+   "id": "forecast_018",
+   "category": "forecast",
+   "question": "How much active pipeline is excluded from weighting?",
+   "recorded_at": "2026-09-30T08:02:51.547595+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "'Active pipeline' read as the live pipeline population, not a separate status filter.",
+      "options": [
+       "pipeline population",
+       "account status filter"
+      ],
+      "slot": "population.base"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the pipeline amount carrying no forecast weight.",
+      "text": "pipeline is excluded from weighting"
+     },
+     {
+      "claim": "The population is the live pipeline.",
+      "text": "active pipeline"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighting_excluded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_d854c5888f68ff71",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 103,
+   "id": "forecast_019",
+   "category": "forecast",
+   "question": "How much pipeline is excluded because of missing probability?",
+   "recorded_at": "2026-09-30T08:03:28.554461+00:00",
+   "raw_model_payload": {
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "Asks for the pipeline amount given no forecast weight.",
+      "text": "How much pipeline is excluded"
+     },
+     {
+      "claim": "Restricts the exclusion reason to missing probability.",
+      "text": "because of missing probability"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "weighting_exclusion_reason",
+      "value": "missing_probability"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighting_excluded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_1489801a10e232e9",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 104,
+   "id": "forecast_020",
+   "category": "forecast",
+   "question": "How much pipeline is excluded because of withdrawn status?",
+   "recorded_at": "2026-09-30T08:04:06.141690+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the excluded amount, not the excluded case count, since the question asks 'how much'.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "Asks for the pipeline amount carrying no forecast weight.",
+      "text": "How much pipeline is excluded"
+     },
+     {
+      "claim": "Restricts the exclusion reason to withdrawn.",
+      "text": "because of withdrawn status"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "weighting_exclusion_reason",
+      "value": "withdrawn"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighting_excluded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_c1ebdee79869f1e1",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 105,
+   "id": "forecast_021",
+   "category": "forecast",
+   "question": "Show forecast balance by stage.",
+   "recorded_at": "2026-09-30T08:04:53.112927+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'stage' as the pipeline funnel stage rather than an origin or destination stage of a movement.",
+      "options": [
+       "pipeline_stage",
+       "origin_stage",
+       "destination_stage"
+      ],
+      "slot": "dimensions"
+     },
+     {
+      "blocking": false,
+      "note": "Read 'forecast balance' as the single forecast funded balance figure, not the month-by-month projected curve.",
+      "options": [
+       "forecast_funded_balance",
+       "projected_funded_balance"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "dimensions": [
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested figure is the forecast funded balance.",
+      "text": "forecast balance"
+     },
+     {
+      "claim": "It is to be broken down by pipeline funnel stage.",
+      "text": "by stage"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_96875e1dc4a21dfe",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:DIMENSION_NOT_SUPPORTED"
+   }
+  },
+  {
+   "n": 106,
+   "id": "forecast_022",
+   "category": "forecast",
+   "question": "Show forecast balance by broker and stage.",
+   "recorded_at": "2026-09-30T08:05:30.843396+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'forecast balance' as the forecast funded balance figure, not the month-by-month projected curve.",
+      "options": [
+       "forecast_funded_balance",
+       "projected_funded_balance"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "Read 'stage' as the governed pipeline funnel stage.",
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "forecast",
+    "dimensions": [
+     "broker_channel",
+     "pipeline_stage"
+    ],
+    "evidence": [
+     {
+      "claim": "The figure asked for is the forecast funded balance.",
+      "text": "Show forecast balance"
+     },
+     {
+      "claim": "It is broken down by broker and by pipeline stage.",
+      "text": "by broker and stage"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_funded_balance"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_82bd977ee9eb9d04",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:DIMENSION_NOT_SUPPORTED"
+   }
+  },
+  {
+   "n": 107,
+   "id": "forecast_scale_001",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a325m funded balance?",
+   "recorded_at": "2026-09-30T08:06:00.814323+00:00",
+   "raw_model_payload": {
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The question asks when a funded-balance level is reached, a forecast milestone.",
+      "text": "When do we reach"
+     },
+     {
+      "claim": "The milestone target is a funded balance of \u00a325m.",
+      "text": "\u00a325m funded balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "forecast_milestone",
+    "schema_version": "candidate_intent/1.0",
+    "target": {
+     "comparator": "gte",
+     "concept": "forecast_funded_balance",
+     "value": 25000000
+    },
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_22e7ded8c29ae394",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 108,
+   "id": "forecast_scale_002",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a350m funded balance?",
+   "recorded_at": "2026-09-30T08:06:26.644573+00:00",
+   "raw_model_payload": {
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks when a funded-balance threshold is reached, a forecast milestone.",
+      "text": "When do we reach"
+     },
+     {
+      "claim": "The milestone target is \u00a350m of funded balance.",
+      "text": "\u00a350m funded balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "forecast_milestone",
+    "schema_version": "candidate_intent/1.0",
+    "target": {
+     "comparator": "gte",
+     "concept": "forecast_funded_balance",
+     "value": 50000000
+    },
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_7f3da8f39ab80e36",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 109,
+   "id": "forecast_scale_003",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a375m funded balance?",
+   "recorded_at": "2026-09-30T08:06:54.280007+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read '\u00a375m' as 75,000,000 GBP.",
+      "slot": "target.value"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "Asks for the month a stated funded-balance level is reached \u2014 a forecast milestone.",
+      "text": "When do we reach"
+     },
+     {
+      "claim": "The milestone target is \u00a375m of funded balance.",
+      "text": "\u00a375m funded balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "forecast_milestone",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "target": {
+     "comparator": "gte",
+     "concept": "forecast_funded_balance",
+     "value": 75000000
+    },
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_8c7685b255b41955",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 110,
+   "id": "forecast_scale_004",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a3100m funded balance?",
+   "recorded_at": "2026-09-30T08:07:26.731977+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read '\u00a3100m' as one hundred million pounds.",
+      "options": [
+       "100000000"
+      ],
+      "slot": "target.value"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks when a funded-balance threshold is reached, a forecast milestone.",
+      "text": "When do we reach"
+     },
+     {
+      "claim": "The milestone target is a funded balance of \u00a3100m.",
+      "text": "\u00a3100m funded balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "forecast_milestone",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "target": {
+     "comparator": "gte",
+     "concept": "forecast_funded_balance",
+     "value": 100000000
+    },
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_e1c5f2da7caec181",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 111,
+   "id": "forecast_scale_005",
+   "category": "forecast_scale",
+   "question": "When do we reach \u00a3150m funded balance?",
+   "recorded_at": "2026-09-30T08:07:54.483025+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read '\u00a3150m' as 150,000,000 GBP, the client's base currency.",
+      "slot": "target.value"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks when a funded-balance threshold is reached \u2014 a forecast milestone.",
+      "text": "When do we reach"
+     },
+     {
+      "claim": "The milestone target is \u00a3150m of funded balance.",
+      "text": "\u00a3150m funded balance"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "forecast_milestone",
+    "schema_version": "candidate_intent/1.0",
+    "target": {
+     "comparator": "gte",
+     "concept": "forecast_funded_balance",
+     "value": 150000000
+    },
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_2519ff18d5ed20d2",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 112,
+   "id": "forecast_scale_006",
+   "category": "forecast_scale",
+   "question": "What is the current completion run rate?",
+   "recorded_at": "2026-09-30T08:08:21.874204+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the monthly completion run-rate, not the annualised figure.",
+      "options": [
+       "forecast_completion_rate",
+       "annualised_completion_run_rate"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the completion run-rate, the forecast's monthly completion amount.",
+      "text": "completion run rate"
+     },
+     {
+      "claim": "Current reporting state.",
+      "text": "current"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_completion_rate"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_89cd79d43d78512a",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:AMBIGUOUS_READING"
+   }
+  },
+  {
+   "n": 113,
+   "id": "forecast_scale_007",
+   "category": "forecast_scale",
+   "question": "What is the annualised completion run rate?",
+   "recorded_at": "2026-09-30T08:08:46.180691+00:00",
+   "raw_model_payload": {
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the forecast's annualised completion run-rate.",
+      "text": "annualised completion run rate"
+     },
+     {
+      "claim": "No period named, so the current reporting state applies.",
+      "text": "What is the annualised completion run rate?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "annualised_completion_run_rate"
+     }
+    ],
+    "operation": "point_in_time",
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_e8e492d6ddfb8648",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 114,
+   "id": "forecast_scale_008",
+   "category": "forecast_scale",
+   "question": "Show the funded balance extrapolation curve.",
+   "recorded_at": "2026-09-30T08:09:10.905777+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No horizon stated; the governed projection horizon applies.",
+      "slot": "time.periods_ahead"
+     },
+     {
+      "blocking": false,
+      "note": "No scenario named, so all scenario lines of the curve are left unrestricted.",
+      "slot": "forecast_scenario"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The extrapolation curve is the month-by-month projected funded balance.",
+      "text": "funded balance extrapolation curve"
+     },
+     {
+      "claim": "A projection forward is requested, so the forecast capability projects it.",
+      "text": "Show the ... extrapolation curve"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "projected_funded_balance"
+     }
+    ],
+    "operation": "forecast_projection",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_93fdc33a1f57766c",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 115,
+   "id": "forecast_scale_009",
+   "category": "forecast_scale",
+   "question": "Show the scale-up forecast.",
+   "recorded_at": "2026-09-30T08:09:41.769008+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No horizon stated; the forecast capability's default projection horizon applies.",
+      "options": [],
+      "slot": "time.periods_ahead"
+     },
+     {
+      "blocking": false,
+      "note": "No scenario named, so all published scenario bands are in scope.",
+      "options": [
+       "downside",
+       "base",
+       "upside"
+      ],
+      "slot": "filters.forecast_scenario"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The scale-up forecast is the month-by-month projected funded balance curve.",
+      "text": "scale-up forecast"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "projected_funded_balance"
+     }
+    ],
+    "operation": "forecast_projection",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_93fdc33a1f57766c",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 116,
+   "id": "forecast_scale_010",
+   "category": "forecast_scale",
+   "question": "What is the downside forecast?",
+   "recorded_at": "2026-09-30T08:10:14.447613+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'the downside forecast' as the scale-up projected funded balance curve on the downside scenario, not the single forecast funded balance figure.",
+      "options": [
+       "projected_funded_balance",
+       "forecast_completion_rate"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "No horizon stated; the forecast's governed horizon applies.",
+      "slot": "time.periods_ahead"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The scenario band asked for is the downside.",
+      "text": "downside"
+     },
+     {
+      "claim": "A forecast of the funded balance is requested.",
+      "text": "forecast"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "forecast_scenario",
+      "value": "downside"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "projected_funded_balance"
+     }
+    ],
+    "operation": "forecast_projection",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_b7bd29308df271f9",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 117,
+   "id": "forecast_scale_011",
+   "category": "forecast_scale",
+   "question": "What is the base forecast?",
+   "recorded_at": "2026-09-30T08:10:46.531595+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the projected funded balance curve under the base scenario rather than the single forecast funded balance figure, since scenarios attach to the projection.",
+      "options": [
+       "projected_funded_balance",
+       "forecast_funded_balance"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "No horizon stated; the governed forecast horizon applies.",
+      "slot": "time.periods_ahead"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the scale-up forecast's base scenario.",
+      "text": "base forecast"
+     },
+     {
+      "claim": "'base' is a governed forecast scenario value.",
+      "text": "base"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "forecast_scenario",
+      "value": "base"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "projected_funded_balance"
+     }
+    ],
+    "operation": "forecast_projection",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_d631b045e4a43e24",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 118,
+   "id": "forecast_scale_012",
+   "category": "forecast_scale",
+   "question": "What is the upside forecast?",
+   "recorded_at": "2026-09-30T08:11:19.288662+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'the upside forecast' as the scale-up projected funded balance curve, since scenario bands belong to that projection.",
+      "options": [
+       "projected_funded_balance",
+       "forecast_funded_balance"
+      ],
+      "slot": "measures"
+     },
+     {
+      "blocking": false,
+      "note": "No horizon stated; none recorded.",
+      "slot": "time.periods_ahead"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The upside scenario band of the scale-up forecast is requested.",
+      "text": "upside forecast"
+     },
+     {
+      "claim": "A forecast projection of the funded balance is asked for.",
+      "text": "What is the upside forecast?"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "forecast_scenario",
+      "value": "upside"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "projected_funded_balance"
+     }
+    ],
+    "operation": "forecast_projection",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_9af1eb833649da2f",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 119,
+   "id": "forecast_scale_013",
+   "category": "forecast_scale",
+   "question": "How much pipeline is needed to reach \u00a3100m?",
+   "recorded_at": "2026-09-30T08:11:51.281147+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Registry has no 'pipeline needed to reach a target' measure; read as the governed milestone against a \u00a3100m funded-balance target.",
+      "options": [
+       "forecast_milestone_date",
+       "a pipeline amount required (not governed)"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The question sets a \u00a3100m funded-balance goal.",
+      "text": "to reach \u00a3100m"
+     },
+     {
+      "claim": "It asks about the pipeline required to get there.",
+      "text": "How much pipeline is needed"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "forecast_milestone",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "target": {
+     "comparator": "gte",
+     "concept": "forecast_funded_balance",
+     "value": 100000000
+    },
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_214329b24c7014ad",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:POPULATION_NOT_MEASURED"
+   }
+  },
+  {
+   "n": 120,
+   "id": "forecast_scale_014",
+   "category": "forecast_scale",
+   "question": "What happens if completion run rate falls by 25%?",
+   "recorded_at": "2026-09-30T08:12:19.834099+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": true,
+      "note": "A user-invented 25% cut to the run-rate is not a governed scenario band (downside/base/upside), so no governed reading of this 'what if' exists.",
+      "options": [
+       "downside",
+       "base",
+       "upside"
+      ],
+      "slot": "forecast_scenario"
+     },
+     {
+      "blocking": false,
+      "note": "Read as the projected funded balance curve, since the question asks what happens to the forecast; no horizon was stated.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The question asks about the forecast projection driven by the completion run-rate.",
+      "text": "What happens if completion run rate falls by 25%?"
+     },
+     {
+      "claim": "A hypothetical reduction in the run-rate is posed, implying a forward-looking projection.",
+      "text": "falls by 25%"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "projected_funded_balance"
+     }
+    ],
+    "operation": "forecast_projection",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "CLARIFY",
+    "reason_codes": [
+     "MODEL_FLAGGED_AMBIGUITY"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "CLARIFY_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 121,
+   "id": "forecast_scale_015",
+   "category": "forecast_scale",
+   "question": "What completion rate is assumed from KFI to completion?",
+   "recorded_at": "2026-09-30T08:12:52.470970+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the forecast's assumed stage completion rate from KFI, not cohort conversion or pull-through.",
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline_stage_movement",
+    "evidence": [
+     {
+      "claim": "The assumed completion rate from a stage is the governed stage completion rate.",
+      "text": "What completion rate is assumed ... to completion?"
+     },
+     {
+      "claim": "KFI is the origin stage the rate is measured from.",
+      "text": "from KFI"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "origin_stage",
+      "value": "KFI"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "stage_completion_rate"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_95478ef78b7cb4c1",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 122,
+   "id": "forecast_scale_016",
+   "category": "forecast_scale",
+   "question": "What is the expected time to securitisation scale?",
+   "recorded_at": "2026-09-30T08:13:16.368693+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "No figure stated; the portfolio's own scale threshold is applied downstream.",
+      "options": [],
+      "slot": "target.value"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks when the book reaches securitisation scale, a forecast milestone.",
+      "text": "expected time to securitisation scale"
+     },
+     {
+      "claim": "No amount is named, so the target value is the governed word 'scale'.",
+      "text": "securitisation scale"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "forecast_milestone",
+    "schema_version": "candidate_intent/1.0",
+    "target": {
+     "comparator": "gte",
+     "concept": "forecast_funded_balance",
+     "value": "scale"
+    },
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_006927ac75ff4a31",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:SCALE_NOT_CONFIGURED"
+   }
+  },
+  {
+   "n": 123,
+   "id": "forecast_scale_017",
+   "category": "forecast_scale",
+   "question": "Show milestone dates to funding thresholds.",
+   "recorded_at": "2026-09-30T08:13:40.594516+00:00",
+   "raw_model_payload": {
+    "capability": "forecast",
+    "dimensions": [
+     "funding_threshold"
+    ],
+    "evidence": [
+     {
+      "claim": "Asks for projected milestone dates.",
+      "text": "milestone dates"
+     },
+     {
+      "claim": "Broken down by the governed ladder of funding thresholds, with no single target named.",
+      "text": "to funding thresholds"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_c82feefad07e5f6d",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 124,
+   "id": "forecast_scale_018",
+   "category": "forecast_scale",
+   "question": "Compare current weighted pipeline forecast with run-rate extrapolation.",
+   "recorded_at": "2026-09-30T08:14:12.517190+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as a side-by-side comparison of two governed forecast measures, not a change between periods.",
+      "options": [
+       "compare",
+       "series"
+      ],
+      "slot": "operation"
+     },
+     {
+      "blocking": false,
+      "note": "No horizon was stated for the extrapolation curve, so none is recorded.",
+      "slot": "outputs.run_rate_extrapolation"
+     }
+    ],
+    "capability": "forecast",
+    "comparison": {
+     "kind": "none"
+    },
+    "evidence": [
+     {
+      "claim": "The first side is the pipeline-weighted forecast figure on the Forecast tab.",
+      "text": "current weighted pipeline forecast"
+     },
+     {
+      "claim": "The second side is the run-rate extrapolation curve of projected funded balance.",
+      "text": "run-rate extrapolation"
+     },
+     {
+      "claim": "The reader wants the two set side by side.",
+      "text": "Compare"
+     }
+    ],
+    "operation": "compare",
+    "outputs": [
+     {
+      "id": "weighted_pipeline_forecast",
+      "measures": [
+       {
+        "concept": "forecast_funded_balance"
+       }
+      ]
+     },
+     {
+      "id": "run_rate_extrapolation",
+      "measures": [
+       {
+        "concept": "projected_funded_balance"
+       }
+      ]
+     }
+    ],
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "REFUSE",
+    "reason_codes": [
+     "UNSUPPORTED_OPERATION"
+    ],
+    "plan_id": null,
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "REFUSE_NOT_SERVED_IN_THIS_SLICE"
+   }
+  },
+  {
+   "n": 125,
+   "id": "forecast_scale_019",
+   "category": "forecast_scale",
+   "question": "What is the 8-week completion run rate?",
+   "recorded_at": "2026-09-30T08:14:54.378205+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "'8-week' names the observation window of the run-rate, which the forecast capability owns; no governed way to restate it as a reporting period was bound.",
+      "options": [
+       "window owned by the forecast capability",
+       "an explicit 8-week reporting range"
+      ],
+      "slot": "time"
+     },
+     {
+      "blocking": false,
+      "note": "Read as the pipeline-derived completion run-rate reported by the forecast.",
+      "slot": "population.base"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the completion run-rate, the forecast's \u00a3 per month completions measure.",
+      "text": "completion run rate"
+     },
+     {
+      "claim": "An 8-week observation window is named for the run-rate.",
+      "text": "8-week"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_completion_rate"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_6d5545222792802f",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:POPULATION_NOT_MEASURED"
+   }
+  },
+  {
+   "n": 126,
+   "id": "forecast_scale_020",
+   "category": "forecast_scale",
+   "question": "What is the 12-week completion run rate?",
+   "recorded_at": "2026-09-30T08:15:20.015052+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "'12-week' names the observation window the forecast uses; the forecast capability owns that window, so no period was imposed.",
+      "options": [
+       "capability-owned lookback window",
+       "an explicit 12-week range"
+      ],
+      "slot": "time"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the completion run-rate, the forecast's \u00a3 per month completion rate.",
+      "text": "completion run rate"
+     },
+     {
+      "claim": "The run-rate is derived from the pipeline's observed completions.",
+      "text": "completion run rate"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_completion_rate"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_6d5545222792802f",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:POPULATION_NOT_MEASURED"
+   }
+  },
+  {
+   "n": 127,
+   "id": "forecast_scale_021",
+   "category": "forecast_scale",
+   "question": "Project funded balance over the next twelve months.",
+   "recorded_at": "2026-09-30T08:15:42.581724+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read as the scale-up forecast curve, not the single forecast funded balance figure.",
+      "options": [
+       "projected_funded_balance",
+       "forecast_funded_balance"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "The reader asks for the month-by-month projected funded balance curve.",
+      "text": "Project funded balance"
+     },
+     {
+      "claim": "Horizon is twelve monthly periods ahead.",
+      "text": "over the next twelve months"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "projected_funded_balance"
+     }
+    ],
+    "operation": "forecast_projection",
+    "population": {
+     "base": "forecast"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "forward_looking",
+     "grain": "monthly",
+     "labels": [
+      "the next twelve months"
+     ],
+     "periods_ahead": 12
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_568d0aaddb8e8c79",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 128,
+   "id": "forecast_scale_022",
+   "category": "forecast_scale",
+   "question": "When does the book reach scale?",
+   "recorded_at": "2026-09-30T08:16:09.319210+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'the book' as the whole funded book projected forward by the forecast.",
+      "slot": "population.base"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "Asks when a milestone is reached, so it is a forecast milestone date.",
+      "text": "When does the book reach"
+     },
+     {
+      "claim": "No amount named; 'scale' is the governed scale threshold applied after interpretation.",
+      "text": "reach scale"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "forecast_milestone_date"
+     }
+    ],
+    "operation": "forecast_milestone",
+    "schema_version": "candidate_intent/1.0",
+    "target": {
+     "comparator": "gte",
+     "concept": "forecast_funded_balance",
+     "value": "scale"
+    },
+    "time": {
+     "form": "forward_looking"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_006927ac75ff4a31",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:SCALE_NOT_CONFIGURED"
+   }
+  },
+  {
+   "n": 129,
+   "id": "pipeline_strat_001",
+   "category": "pipeline",
+   "question": "Show pipeline amount by product.",
+   "recorded_at": "2026-09-30T08:16:37.300287+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'product' as the governed product type dimension rather than sub-product type.",
+      "options": [
+       "erm_product_type",
+       "erm_sub_product_type"
+      ],
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "erm_product_type"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline amount.",
+      "text": "Show pipeline amount"
+     },
+     {
+      "claim": "Grouping is by product type.",
+      "text": "by product"
+     },
+     {
+      "claim": "The pipeline population is named.",
+      "text": "pipeline amount"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_5b4f35e33e1956ab",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 130,
+   "id": "pipeline_strat_002",
+   "category": "pipeline",
+   "question": "Show pipeline amount by LTV band.",
+   "recorded_at": "2026-09-30T08:17:05.835195+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'LTV band' as the current-LTV bucket rather than the original-LTV bucket.",
+      "options": [
+       "ltv_bucket",
+       "original_ltv_bucket"
+      ],
+      "slot": "dimensions"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "ltv_bucket"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline amount.",
+      "text": "Show pipeline amount"
+     },
+     {
+      "claim": "The breakdown dimension is the governed LTV band.",
+      "text": "by LTV band"
+     },
+     {
+      "claim": "The population is the pipeline.",
+      "text": "pipeline amount"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_31474c49ecdda138",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 131,
+   "id": "pipeline_strat_003",
+   "category": "pipeline",
+   "question": "What is the pipeline case count by product?",
+   "recorded_at": "2026-09-30T08:17:35.561666+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "dimensions": [
+     "erm_product_type"
+    ],
+    "evidence": [
+     {
+      "claim": "The requested measure is the governed pipeline case count.",
+      "text": "pipeline case count"
+     },
+     {
+      "claim": "Grouped by product type.",
+      "text": "by product"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_case_count"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_75f0180f0be24f04",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 132,
+   "id": "forecast_runoff_001",
+   "category": "forecast",
+   "question": "What is the weighted expected pipeline?",
+   "recorded_at": "2026-09-30T08:17:59.894798+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline",
+    "evidence": [
+     {
+      "claim": "The reader asks for the probability-weighted pipeline figure.",
+      "text": "weighted expected pipeline"
+     },
+     {
+      "claim": "A single current figure, no grouping or period comparison.",
+      "text": "What is the weighted expected pipeline?"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighted_expected_funded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_146fbf0528237e93",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 133,
+   "id": "forecast_runoff_002",
+   "category": "forecast",
+   "question": "How much of the pipeline has lapsed past its stage window?",
+   "recorded_at": "2026-09-30T08:18:31.345859+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'how much' as an amount rather than a case count.",
+      "options": [
+       "weighting_excluded_amount",
+       "weighting_excluded_case_count"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "forecast",
+    "evidence": [
+     {
+      "claim": "Asks for an amount of pipeline excluded from forecast weighting.",
+      "text": "How much of the pipeline"
+     },
+     {
+      "claim": "The exclusion reason is lapsed past the stage validity window.",
+      "text": "has lapsed past its stage window"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "weighting_exclusion_reason",
+      "value": "lapsed"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "weighting_excluded_amount"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_4e3a0568ab3c2d6e",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 134,
+   "id": "forecast_runoff_003",
+   "category": "forecast",
+   "question": "What is the offer to completion pull-through rate?",
+   "recorded_at": "2026-09-30T08:19:17.877671+00:00",
+   "raw_model_payload": {
+    "capability": "pipeline_stage_movement",
+    "evidence": [
+     {
+      "claim": "The reader asks for the pull-through rate, a governed pipeline stage movement measure.",
+      "text": "pull-through rate"
+     },
+     {
+      "claim": "The rate is measured from the offer stage.",
+      "text": "offer to completion"
+     }
+    ],
+    "filters": [
+     {
+      "comparator": "eq",
+      "concept": "origin_stage",
+      "value": "OFFER"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "stage_pull_through"
+     }
+    ],
+    "operation": "point_in_time",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0"
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_2d5d25db794150d9",
+    "serving_decision": "NEW",
+    "serving_reason": ""
+   }
+  },
+  {
+   "n": 135,
+   "id": "forecast_runoff_004",
+   "category": "forecast",
+   "question": "When are pipeline cases expected to complete?",
+   "recorded_at": "2026-09-30T08:19:46.667181+00:00",
+   "raw_model_payload": {
+    "ambiguity": [
+     {
+      "blocking": false,
+      "note": "Read 'cases' as the pipeline case count, with pipeline amount alongside it as the governed pipeline figure.",
+      "options": [
+       "pipeline_case_count only",
+       "pipeline_case_count and pipeline_amount"
+      ],
+      "slot": "measures"
+     }
+    ],
+    "capability": "pipeline",
+    "dimensions": [
+     "expected_completion_month"
+    ],
+    "evidence": [
+     {
+      "claim": "The population is the live pipeline.",
+      "text": "pipeline cases"
+     },
+     {
+      "claim": "Grouping is by expected completion month.",
+      "text": "expected to complete"
+     },
+     {
+      "claim": "Cases are the unit asked about, so case count is reported.",
+      "text": "pipeline cases"
+     }
+    ],
+    "measures": [
+     {
+      "concept": "pipeline_amount"
+     },
+     {
+      "concept": "pipeline_case_count"
+     }
+    ],
+    "operation": "breakdown",
+    "population": {
+     "base": "pipeline"
+    },
+    "schema_version": "candidate_intent/1.0",
+    "time": {
+     "form": "current"
+    }
+   },
+   "recorded": {
+    "compile_outcome": "PLAN",
+    "reason_codes": [],
+    "plan_id": "plan_d826bb83995d789f",
+    "serving_decision": "LEGACY_FALLBACK",
+    "serving_reason": "INELIGIBLE:MEASURE_NOT_SUPPORTED"
+   }
+  }
+ ]
+}

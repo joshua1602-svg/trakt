@@ -64,7 +64,13 @@ class TestExpectedCompletionClassification(unittest.TestCase):
             "Status": ["Offer"] * n, "Loan Amount": [100000.0] * n,
             "Date Funds Released": (["2025-10-15"] * 3 + ["2025-11-15"] * 3 + ["2025-12-15"] * 3),
         })
-        prep, rep = prepare_pipeline_mi_dataset(df, as_of_date="2025-11-01")
+        # D21: the Offer stage's rate and validity window MEASURED by a
+        # history (here stated directly), so each case is live and dated.
+        measured = {"available": True, "stage_rates": {"OFFER": 0.75},
+                    "runoff": {"available": False, "stages": {
+                        "OFFER": {"windowDays": 400, "windowBasis": "measured"}}}}
+        prep, rep = prepare_pipeline_mi_dataset(df, as_of_date="2025-11-01",
+                                                historical_model=measured)
         semantics = yaml.safe_load(
             (_REPO_ROOT / "mi_agent" / "mi_semantics_field_registry.yaml").read_text())
         snap = pc.compute_pipeline_snapshot(prep, rep, semantics, client_id="client_001",
@@ -82,3 +88,30 @@ class TestExpectedCompletionClassification(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestAnUndeterminedLapseIsNotCounted(unittest.TestCase):
+    """D21: with no measured Offer window, whether a case has lapsed is
+    unknown — its month keeps its place on the chart, but no count or amount
+    is stated for it, and neither is any bucket it falls in."""
+
+    def test_months_stay_figures_are_not_stated(self):
+        warnings.simplefilter("ignore")
+        n = 6
+        df = pd.DataFrame({
+            "Account Number": [f"A{i}" for i in range(n)],
+            "KFI Number": [f"K{i}" for i in range(n)],
+            "Status": ["Offer"] * n, "Loan Amount": [100000.0] * n,
+            "Date Funds Released": ["2025-10-15"] * 3 + ["2025-12-15"] * 3,
+        })
+        prep, rep = prepare_pipeline_mi_dataset(df, as_of_date="2025-11-01")
+        rows = pc._expected_completion_breakdown(prep)
+        self.assertEqual([r["month"] for r in rows], ["2025-10", "2025-12"])
+        for r in rows:
+            self.assertIsNone(r["caseCount"])
+            self.assertIsNone(r["expectedFundedAmount"])
+            self.assertIsNone(r["weightedExpectedFundedAmount"])
+        summary = pc._expected_completion_summary(rows, "2025-11-01")
+        self.assertIsNone(summary["overdueExpectedCompletionCount"])
+        self.assertIsNone(summary["nextExpectedCompletionAmount"])
+        self.assertEqual(summary["currentMonthExpectedCompletionCount"], 0)

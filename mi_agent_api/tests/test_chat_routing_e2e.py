@@ -53,6 +53,12 @@ def _env(tmp_path, monkeypatch):
     warnings.simplefilter("ignore")
     monkeypatch.chdir(_REPO_ROOT)  # so config/clients/client_001/... resolves
     root = tmp_path / "onboarding_output"
+    # Four governed funded runs: the pipeline history as at November holds
+    # four whole weeks, short of the run-rate's five (D22), so the forecast
+    # reads its funded-growth signal — which needs three month-on-month
+    # observations. With fewer, the forecast is honestly unavailable.
+    _write_run(root, "mi_2025_08", "2025-08-31", 50, 0.8)
+    _write_run(root, "mi_2025_09", "2025-09-30", 55, 0.9)
     _write_run(root, "mi_2025_10", "2025-10-31", 60, 1.0)
     _write_run(root, "mi_2025_11", "2025-11-30", 70, 1.15)
     monkeypatch.setenv("MI_AGENT_ONBOARDING_OUTPUT_ROOT", str(root))
@@ -112,7 +118,7 @@ def test_funded_balance_evolution_e2e():
     assert r["ok"] is True and r["metadata"]["route"] == "evolution"
     chart = next(a for a in r["artifacts"] if a["type"] == "chart")
     assert chart["chartType"] == "line"
-    assert len(chart["rows"]) == 2  # two governed funded runs
+    assert len(chart["rows"]) == 4  # four governed funded runs
     assert chart["valueFormat"] == "gbp"
 
 

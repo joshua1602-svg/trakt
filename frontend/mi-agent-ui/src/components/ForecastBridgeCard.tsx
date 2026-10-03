@@ -1,7 +1,7 @@
 import { ArrowRight, Plus, TrendingUp } from "lucide-react";
 import type { ForecastBridge } from "@/domain";
 import { Badge } from "@/components/ui";
-import { cn, formatGBP } from "@/lib/utils";
+import { cn, formatGBP, formatGBPOrNA } from "@/lib/utils";
 
 const READINESS_TONE: Record<ForecastBridge["forecastReadiness"]["status"], "mint" | "amber" | "rose"> = {
   ready: "mint",
@@ -40,12 +40,18 @@ export function ForecastBridgeCard({ bridge }: { bridge: ForecastBridge | null }
         <BridgeTerm label="Current funded balance" value={formatGBP(bridge.fundedBalance)}
           hint={`${bridge.fundedLoanCount.toLocaleString("en-GB")} loans`} />
         <Operator icon={<Plus size={16} />} />
-        <BridgeTerm label="Weighted expected pipeline" value={formatGBP(bridge.weightedExpectedFundedAmount)}
+        <BridgeTerm label="Weighted expected pipeline" value={formatGBPOrNA(bridge.weightedExpectedFundedAmount)}
           hint={`${bridge.pipelineCaseCount.toLocaleString("en-GB")} pipeline cases`} />
         <Operator icon={<ArrowRight size={16} />} />
-        <BridgeTerm label="Forecast funded balance" value={formatGBP(bridge.forecastFundedBalance)}
+        <BridgeTerm label="Forecast funded balance" value={formatGBPOrNA(bridge.forecastFundedBalance)}
           hint={`${bridge.forecastLoanCount.toLocaleString("en-GB")} forecast loans`} emphasis />
       </div>
+      {bridge.forecastWithheldReason && (
+        /* D21: the forecast is not stated, and this is why — never a zero. */
+        <p className="mt-2 text-[11px] text-amber-300/80">
+          Forecast not stated: {bridge.forecastWithheldReason}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-500">
         <span>

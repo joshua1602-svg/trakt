@@ -146,6 +146,9 @@ class PeriodBinding:
     labels: Tuple[str, ...] = ()
     grain: Optional[str] = None
     periods_back: Optional[int] = None
+    #: The forward horizon a forward-looking question stated, in periods of
+    #: `grain` (`SemanticTime.periods_ahead`). None when none was stated.
+    periods_ahead: Optional[int] = None
     #: WHETHER THE READING STATED A TEMPORAL FORM AT ALL. Carried from
     #: `SemanticTime.stated`, so an ABSENT slot and an EXPLICIT `current` stay
     #: distinguishable at the governed boundary even though `form` reads the same.
@@ -176,6 +179,18 @@ class TargetBinding:
     value: Any
     canonical_field: Optional[str] = None
     capability_owner: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class RankingBinding:
+    """Which end of a ranking over ONE grouping, and how many. The reader's
+    order and number, carried to the runtime that orders the breakdown;
+    `defaulted` when a `rank` operation named no end ("which is largest" is
+    the default reading of a ranking, highest first)."""
+
+    order: str
+    limit: Optional[int] = None
+    defaulted: bool = False
 
 
 @dataclass(frozen=True)
@@ -246,6 +261,7 @@ class GovernedQueryPlan:
     filters: Tuple[FilterBinding, ...] = ()
     geography: Optional[GeographyBinding] = None
     target: Optional[TargetBinding] = None
+    ranking: Optional[RankingBinding] = None
     provenance: PlanProvenance = field(default_factory=PlanProvenance)
 
     @property
@@ -320,6 +336,17 @@ class GovernedQueryPlan:
         if "form" in period:
             period["labels"] = list(identity_labels(
                 str(period.get("form") or ""), period.get("labels") or ()))
+        # A horizon is authorised content when stated. When it is not, it is
+        # left out, which keeps every plan_id recorded before the horizon
+        # existed exactly as it was — the sign-off corpus still replays.
+        if period.get("periods_ahead") is None:
+            period.pop("periods_ahead", None)
+        # A ranking is authorised content when STATED. Absent — or the default
+        # reading of a `rank` that named no end (highest first, every group),
+        # which authorises nothing a rank did not already mean — it is left
+        # out, so every plan_id recorded before the slot existed is unchanged.
+        if self.ranking is None or self.ranking.defaulted:
+            body.pop("ranking", None)
         return body
 
     @classmethod

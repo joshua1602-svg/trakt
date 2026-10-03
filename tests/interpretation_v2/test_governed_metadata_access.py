@@ -231,53 +231,51 @@ def test_the_metadata_service_cannot_mutate_anything(vocabulary):
 
 
 # --------------------------------------------------------------------------- #
-# 3 · the retrieval loop
+# 3 · the catalogue, in the prompt (one call — P0 design §21)
 # --------------------------------------------------------------------------- #
 
-class RetrievingClient:
-    """A client that retrieves metadata first, the way a live model does."""
+def test_the_catalogue_carries_exactly_what_the_tools_return(vocabulary):
+    """The model is handed the tools' own views, not a second description.
 
-    def __init__(self, payload, *, lookups=("balance",)):
-        self.payload = payload
-        self.lookups = lookups
-        self.dispatched = []
+    Every governed concept is in the catalogue once, with the same fields
+    `get_concept_metadata` returns and, where Trakt governs a value list, the
+    same values `get_allowed_values` returns — built by the same service over
+    the same index the compiler binds against. The one note every
+    capability-owned concept used to repeat is said once, in the prompt.
+    """
+    from mi_agent.interpretation_v2.metadata import governed_catalogue
 
-    def emit_intent(self, *, system, user, tool_schema, tool_name,
-                    metadata_tools=(), dispatch=None):
-        results = []
-        for word in self.lookups:
-            results.append(dispatch("search_concepts", {"query": word}))
-        results.append(dispatch("get_allowed_values",
-                                {"concept_id": "erm_product_type"}))
-        self.dispatched = results
-        return ModelResponse(payload=self.payload, model_id="scripted",
-                             metadata_calls=tuple(
-                                 {"tool": "search_concepts", "arguments": {"query": w}}
-                                 for w in self.lookups))
+    service = GovernedMetadataService(vocabulary)
+    catalogue = governed_catalogue(vocabulary)
+    rows = {row["concept_id"]: row for row in catalogue["concepts"]}
+    assert set(rows) == set(vocabulary.concepts)
+    for concept_id, row in rows.items():
+        view = service.get_concept_metadata(concept_id)
+        for key, value in row.items():
+            if key in ("allowed_values", "named_portfolio_route"):
+                continue
+            assert view[key] == value, (concept_id, key)
+        values = service.get_allowed_values(concept_id)
+        assert row.get("allowed_values") == (
+            values["values"] if values.get("has_governed_values") else None)
+    assert {c["capability"] for c in catalogue["capabilities"]} == \
+        set(vocabulary.capabilities)
 
 
-def test_the_interpreter_hands_the_model_a_working_dispatcher(vocabulary, compiler):
-    client = RetrievingClient(intent_payload())
-    interpreter = OpusInterpreter(client, vocabulary=vocabulary)
-    outcome = interpreter.interpret("What is our total balance?")
+def test_the_interpreter_makes_one_call_with_the_catalogue(vocabulary, compiler):
+    """No lookup tool, no dispatcher, no retrieval provenance: one call."""
+    from .conftest import ScriptedClient
 
+    client = ScriptedClient(intent_payload())
+    outcome = OpusInterpreter(client, vocabulary=vocabulary).interpret(
+        "What is our total balance?")
     assert outcome.ok
-    assert client.dispatched, "the dispatcher was never callable"
-    assert client.dispatched[0]["concepts"], "search returned nothing"
-    assert client.dispatched[-1]["has_governed_values"] is True
-    assert outcome.metadata_calls, "retrievals must be recorded as provenance"
-
-
-def test_metadata_retrievals_are_recorded_on_the_plans_provenance(vocabulary,
-                                                                  compiler):
-    client = RetrievingClient(intent_payload(), lookups=("balance", "ltv"))
-    interpreter = OpusInterpreter(client, vocabulary=vocabulary)
-    outcome = interpreter.interpret("What is our total balance?")
-    result = compiler.compile(outcome.intent)
-    assert result.outcome == OUTCOME_PLAN
-    # The intent carries what was retrieved, so an audit can see what the model
-    # looked at before it decided.
-    assert len(outcome.metadata_calls) == 2
+    assert client.calls == 1
+    assert list(client.last_metadata_tools) == [] and client.last_dispatch is None
+    assert outcome.metadata_calls == ()
+    assert any(block["text"].startswith("GOVERNED CATALOGUE")
+               and block.get("cache_control") for block in client.last_system)
+    assert compiler.compile(outcome.intent).outcome == OUTCOME_PLAN
 
 
 def test_a_dispatcher_is_never_required_for_the_compiler(compiler):

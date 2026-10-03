@@ -1,0 +1,118 @@
+name: Production bank — read back the recorded plans
+
+# READ ONLY. It asks no question, calls no model, touches no MI endpoint,
+# changes no configuration and writes nothing to the service.
+#
+#     LIVE_MODEL_CALLS = 0    LIVE_MI_QUERY_CALLS = 0    DEPLOYMENTS = 0
+#
+# WHAT IT READS. The evidence sink `plan_serving_canary` writes on every request
+# it handles — /home/LogFiles/mi-plan-shadow/evidence.jsonl on the App Service,
+# through Kudu VFS with the publish profile — and, for each of the 135 questions
+# in due_diligence/evidence/qb_plan_readback/qb_questions.json (the owner's
+# production run, qb_full.txt), the most recent record of it: the governed plan
+# the compiler made, the eligibility decision and the serving decision.
+#
+# WHY. qb_full.txt records answers, not plans, and the next P0 steps depend on
+# how the model encoded particular questions ([80]-[84] pipeline evolution
+# first). Those plans were written to the sink when the questions were asked.
+#
+# THE PROJECTION IS REDACTED by the post-mortem reader's rules: row-bearing
+# keys dropped, row-length lists dropped, long strings truncated. The publish
+# profile is scrubbed and the output rescanned for it before it is written.
+#
+# WHEN IT RUNS. Once on a push that changes this file, the reader, or
+# READBACK_REQUEST.json — the branch-local trigger this repository's workflows
+# use, because a workflow_dispatch button only appears once a workflow is on the
+# default branch — and on demand thereafter. `since` (ISO timestamp) ignores
+# records written before it: the dispatch input when given, otherwise the
+# request file's. To read back a new bank run, commit its start time there.
+
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths:
+      - '.github/workflows/qb-plan-readback.yml'
+      - 'due_diligence/evidence/qb_plan_readback/readback.py'
+      - 'due_diligence/evidence/qb_plan_readback/qb_questions.json'
+      - 'due_diligence/evidence/qb_plan_readback/READBACK_REQUEST.json'
+  workflow_dispatch:
+    inputs:
+      evidence_path:
+        default: /home/LogFiles/mi-plan-shadow/evidence.jsonl
+        required: true
+      since:
+        description: 'Optional ISO timestamp, e.g. 2026-09-28T00:00:00'
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qb-plan-readback
+  cancel-in-progress: false
+
+env:
+  READBACK_DIR: due_diligence/evidence/qb_plan_readback
+
+jobs:
+  readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The held-out variants are read back with the bank (P0 design §25);
+      # their file is YAML.
+      - name: Install the YAML reader
+        run: python -m pip install --quiet pyyaml
+
+      - name: The question list must be the 135
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib
+          bank = json.loads(pathlib.Path("due_diligence/evidence/qb_plan_readback/qb_questions.json").read_text())
+          assert bank["question_count"] == 135 == len(bank["questions"]), "question list changed"
+          print("question list: 135 questions")
+          PY
+
+      - name: Refuse to run without the publish profile
+        env:
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AZURE_MI_API_PUBLISH_PROFILE:-}" ]; then
+            echo "::error::AZURE_MI_API_PUBLISH_PROFILE is not set"; exit 1
+          fi
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      - name: Read back the plans
+        env:
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          python "${READBACK_DIR}/readback.py" \
+            --evidence-path "${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}" \
+            --since "${{ inputs.since }}" \
+            --request "${READBACK_DIR}/READBACK_REQUEST.json" \
+            --out qb_plan_readback.json
+
+      - name: The projection, gzip+base64
+        run: |
+          set -euo pipefail
+          echo "----BEGIN qb_plan_readback.json.gz.b64----"
+          gzip -9 -c qb_plan_readback.json | base64 -w 200
+          echo "----END qb_plan_readback.json.gz.b64----"
+
+      - name: Publish the projection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-plan-readback
+          path: qb_plan_readback.json
+          if-no-files-found: warn

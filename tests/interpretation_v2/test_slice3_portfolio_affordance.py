@@ -135,6 +135,32 @@ _MIGRATED_BY_CHANGE_FORM_COMPLETENESS: Mapping[str, str] = {
 _MIGRATION_CODE = MISSING_REQUIRED_SLOT
 _MIGRATION_SUBJECT = "change_form"
 
+#: THE SECOND AUTHORISED MIGRATION: normalisation rule 6 (P0 Change 2a). Under
+#: the forecast capability a stated or defaulted `funded` base is a spelling of
+#: `forecast`, so these five still compile to a PLAN, with a new identity and one
+#: changed slot. Four land exactly on a plan a SIBLING already had at sign-off —
+#: Q23C and NL2A on Q23A's, Q24B on Q24A's — which is the convergence the rule
+#: exists for. NL4A and NL4C move together and stay identical to each other.
+#:
+#: Pinned to the rule, not just the ids: each must stay a PLAN, the rewrite must
+#: be recorded, and re-compiling the RECORDED payload with its base set to
+#: `forecast` must give the same plan — proving the base is the only thing that
+#: moved.
+#: Design §40: a distribution of one figure over groupings is a breakdown
+#: (normalisation 7). "Plot portfolio balance across LTV buckets and
+#: borrower-age buckets" was recorded as a two-way `distribution`; it is the
+#: two-way breakdown, and only that note may move it.
+_MIGRATED_BY_GROUPED_DISTRIBUTION = frozenset({"Q12C"})
+
+_MIGRATED_BY_DERIVED_POPULATION = frozenset({"Q23C", "Q24B", "NL2A", "NL4A",
+                                             "NL4C"})
+
+#: D20 (owner decision 2026-09-30, P0 design §32.1): a series stating no span,
+#: grain or count is every reporting date the owner holds — no longer a request
+#: to ask back (AMBIGUOUS_PERIOD). "Are direct and acquired balances developing
+#: differently over time?" read exactly that.
+_MIGRATED_BY_OVER_TIME = frozenset({"NL8C"})
+
 
 def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
     """Every recorded payload, re-parsed and re-compiled by this code.
@@ -167,9 +193,50 @@ def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
         if now == was:
             # A case on the migration list that did NOT move is also wrong: it
             # would mean the gate stopped covering a request it is meant to.
-            if question_id in _MIGRATED_BY_CHANGE_FORM_COMPLETENESS:
+            if (question_id in _MIGRATED_BY_CHANGE_FORM_COMPLETENESS
+                    or question_id in _MIGRATED_BY_DERIVED_POPULATION):
                 unexpected.append((question_id, "expected to migrate, did not",
                                    was, now))
+            continue
+
+        if question_id in _MIGRATED_BY_DERIVED_POPULATION:
+            spelled = dict(row["raw_payload"])
+            spelled["population"] = dict(spelled.get("population") or {},
+                                         base="forecast")
+            respelled = compiler.compile(parse_candidate_intent(spelled)).plan
+            applied = (plan.provenance.compiler_bindings["normalisation"]
+                       ["applied"] if plan is not None else ())
+            if (now[0] != was[0] or plan.population.base != "forecast"
+                    or not any(a.startswith("derived_population:")
+                               for a in applied)
+                    or respelled is None or respelled.plan_id != now[1]):
+                unexpected.append((question_id, "moved, but not only by "
+                                                "rule 6", was, now))
+            else:
+                migrated[question_id] = (was[0], now[0])
+            continue
+
+        if question_id in _MIGRATED_BY_GROUPED_DISTRIBUTION:
+            applied = (plan.provenance.compiler_bindings["normalisation"]
+                       ["applied"] if plan is not None else ())
+            if (was[0] != "PLAN" or now[0] != "PLAN"
+                    or plan.to_dict()["operation"] != "breakdown"
+                    or not any(a.startswith("grouped_figure: operation "
+                                            "'distribution'") for a in applied)):
+                unexpected.append((question_id, "moved, but not only by "
+                                                "rule 7", was, now))
+            else:
+                migrated[question_id] = (was[0], now[0])
+            continue
+
+        if question_id in _MIGRATED_BY_OVER_TIME:
+            period = plan.to_dict()["period"] if plan is not None else {}
+            if (was[0] != OUTCOME_CLARIFY or now[0] != "PLAN"
+                    or period.get("default_method") != "every_reporting_date"):
+                unexpected.append((question_id, "moved, but not only by D20",
+                                   was, now))
+            else:
+                migrated[question_id] = (was[0], now[0])
             continue
 
         expected_was = _MIGRATED_BY_CHANGE_FORM_COMPLETENESS.get(question_id)
@@ -194,9 +261,11 @@ def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
             migrated[question_id] = (was[0], now[0])
 
     assert unexpected == [], f"UNEXPECTED_MOVES: {unexpected}"
-    assert set(migrated) == set(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS), (
-        f"expected {sorted(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS)}, "
-        f"migrated {sorted(migrated)}")
+    authorised = (set(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS)
+                  | _MIGRATED_BY_DERIVED_POPULATION | _MIGRATED_BY_OVER_TIME
+                  | _MIGRATED_BY_GROUPED_DISTRIBUTION)
+    assert set(migrated) == authorised, (
+        f"expected {sorted(authorised)}, migrated {sorted(migrated)}")
 
 
 def test_the_signed_off_evidence_itself_is_never_rewritten():
@@ -384,7 +453,8 @@ def test_every_population_slot_now_tells_the_model_what_it_is_for():
     assert set(slots["base"]["enum"]) == set(POPULATION_BASES)
     assert set(slots["lens"]["enum"]) == set(POPULATION_LENSES)
     assert "ATOMIC" in slots["source_reference"]["description"]
-    assert "get_source_portfolios" in slots["source_reference"]["description"]
+    # The names are in the prompt's per-request CLIENT CONTEXT (§21).
+    assert "CLIENT CONTEXT" in slots["source_reference"]["description"]
 
 
 def test_the_value_list_guidance_no_longer_dead_ends_a_named_book(vocabulary):
@@ -430,12 +500,17 @@ def test_the_registry_is_per_call_and_never_remembered(vocabulary, registry):
 
     class Recording(ScriptedClient):
         def emit_intent(self, **kwargs):
-            dispatch = kwargs.get("dispatch")
-            seen.append(dispatch.__self__.source_registry)
+            # The client's books reach the model in the per-request CLIENT
+            # CONTEXT block, after the cached prefix (P0 design §21).
+            client = json.loads(kwargs["system"][-1]["text"].split("\n", 1)[1])
+            seen.append([row["name"] for row in
+                         client["source_portfolios"]["portfolios"]])
             return super().emit_intent(**kwargs)
 
+    names = [record.display_label for record in registry]
+    assert names, "premise: the registry names books"
     interpreter = OpusInterpreter(Recording(intent_payload()), vocabulary=vocabulary)
     interpreter.interpret("total balance", source_registry=registry)
     interpreter.interpret("total balance")
-    assert seen == [registry, None], (
+    assert seen == [names, []], (
         "the interpreter carried a registry between questions")

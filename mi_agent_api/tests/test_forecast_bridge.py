@@ -43,9 +43,18 @@ def _funded_df(n: int = 73, per: float = 120000.0) -> pd.DataFrame:
     })
 
 
-def _pipeline(path: Path = _NOV):
+def _history():
+    """The fixture book's own history, measured at test-book scale (D21): the
+    forecast weights the pipeline by measured stage rates and windows only."""
+    from tests.measured_history import measured_history
+    return measured_history(str(_FIXTURE_PACK))
+
+
+def _pipeline(path: Path = _NOV, *, measured: bool = True):
     df = pd.read_csv(path)
-    return prepare_pipeline_mi_dataset(df, source_file=path.name)
+    return prepare_pipeline_mi_dataset(
+        df, source_file=path.name,
+        historical_model=_history() if measured else None)
 
 
 def _bridge_for(funded_df, pipeline_df, pipeline_report, *, run_id="mi_2025_11"):
@@ -156,7 +165,8 @@ class TestForecastReadiness(unittest.TestCase):
 
     def test_blocked_when_amount_missing(self):
         raw = pd.read_csv(_NOV).drop(columns=["Loan Amount", "Facility"])
-        pdf, prep = prepare_pipeline_mi_dataset(raw, source_file=_NOV.name)
+        pdf, prep = prepare_pipeline_mi_dataset(raw, source_file=_NOV.name,
+                                                historical_model=_history())
         b = _bridge_for(_funded_df(), pdf, prep)["forecastBridge"]
         self.assertEqual(b["forecastReadiness"]["status"], "blocked")
         self.assertIn("expected_amount", b["forecastReadiness"]["missingRequiredFields"])
@@ -165,7 +175,8 @@ class TestForecastReadiness(unittest.TestCase):
         raw = pd.read_csv(_NOV)
         raw["Loan Amount"] = raw["Loan Amount"].astype(object)
         raw.loc[0, "Loan Amount"] = ""  # one row without an amount -> warning
-        pdf, prep = prepare_pipeline_mi_dataset(raw, source_file=_NOV.name)
+        pdf, prep = prepare_pipeline_mi_dataset(raw, source_file=_NOV.name,
+                                                historical_model=_history())
         b = _bridge_for(_funded_df(), pdf, prep)["forecastBridge"]
         self.assertEqual(b["forecastReadiness"]["status"], "partial")
 
@@ -191,26 +202,38 @@ class TestSeparation(unittest.TestCase):
 # 6. Probability governance
 # --------------------------------------------------------------------------- #
 class TestProbabilityGovernance(unittest.TestCase):
-    def test_basis_is_stage_config_and_matches_config_values(self):
-        import yaml
-        cfg = yaml.safe_load((_REPO_ROOT / "config" / "client"
-                              / "pipeline_expected_funding.yaml").read_text())
-        probs = {k.upper(): float(v) for k, v in cfg["stage_probabilities"].items()}
+    def test_every_weight_is_measured_never_configured(self):
+        """D21 (owner decision 2026-09-30): a stage's probability is measured
+        from the client's own history, or there is none."""
         pdf, prep = _pipeline()
         b = _bridge_for(_funded_df(), pdf, prep)["forecastBridge"]
-        self.assertEqual(b["completionProbabilityBasis"], "stage_config")
+        self.assertEqual(b["completionProbabilityBasis"], "historical_observed")
         # A KFI is top of funnel: open pipeline with no forecast weight.
         kfi = pdf[pdf["pipeline_stage"] == "KFI"]
         self.assertTrue((kfi["completion_probability"] == 0.0).all())
         self.assertTrue((kfi["completion_probability_source"] == "not_forecast_kfi").all())
-        # Forecast stages carry exactly the configured value — not a frontend/
-        # ad-hoc one — unless they have lapsed past the stage validity window.
-        live = pdf[pdf["completion_probability_source"] == "configured_stage_rate"]
-        self.assertFalse(live.empty)
-        for _, row in live.iterrows():
-            self.assertEqual(row["completion_probability"], probs[row["pipeline_stage"]])
+        # Every weighted case carries a MEASURED probability.
+        weighted = pdf[pdf["completion_probability"] > 0]
+        self.assertFalse(weighted.empty)
+        self.assertTrue(weighted["completion_probability_source"].isin(
+            {"historical_runoff", "historical_stage_rate"}).all())
+        self.assertNotIn("configured_stage_rate",
+                         set(pdf["completion_probability_source"]))
         # Weighted < unweighted because non-completed stages discount.
         self.assertLess(b["weightedExpectedFundedAmount"], b["pipelineAmount"])
+
+    def test_without_measured_rates_the_forecast_is_not_stated(self):
+        """D21: read with the production thresholds, this small book measures
+        no stage — the weighted pipeline and the forecast on it are not
+        stated, with the reason, and never taken as zero."""
+        pdf, prep = _pipeline(measured=False)
+        b = _bridge_for(_funded_df(), pdf, prep)["forecastBridge"]
+        self.assertEqual(b["completionProbabilityBasis"], "insufficient_history")
+        self.assertIsNone(b["weightedExpectedFundedAmount"])
+        self.assertIsNone(b["forecastFundedBalance"])
+        self.assertIn("no configured value is used", b["forecastWithheldReason"])
+        self.assertIn("D21", b["forecastWithheldReason"])
+        self.assertFalse(prep["weighting_complete"])
 
     def test_endpoint_takes_no_probability_input(self):
         # The forecast endpoint accepts only SCOPE identifiers from the CALLER —
@@ -252,6 +275,14 @@ class TestEndToEndApi(unittest.TestCase):
     def setUp(self):
         os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"] = str(self.root)
         os.environ["MI_AGENT_PIPELINE_ROOT"] = str(_FIXTURE_PACK)
+        # D21: the tab weights by the book's own history, measured at
+        # test-book scale (the fixture is far below production thresholds).
+        from unittest import mock
+        from mi_agent_api import app as app_mod
+        patcher = mock.patch.object(app_mod, "_pipeline_history",
+                                    lambda client_id: _history())
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         for k in ("MI_AGENT_ONBOARDING_OUTPUT_ROOT", "MI_AGENT_PIPELINE_ROOT"):

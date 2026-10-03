@@ -20,6 +20,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+from mi_agent import answer_standard as _standard
+
 # Technical diagnostics that are useful for engineers but must NOT appear in the
 # normal user-facing MI card. They are retained in API metadata/diagnostics and
 # logged backend-side instead. Business-facing warnings (missing data, unavailable
@@ -149,7 +151,8 @@ def _infer_col_format(col: str, resolved: Dict[str, Any]) -> str:
         return "pct"
     # strip common aggregation suffixes to match a resolved canonical field
     base = col
-    for suffix in ("_sum", "_avg", "_weighted_avg", "_median", "_count", "_count_distinct"):
+    for suffix in ("_sum", "_avg", "_weighted_avg", "_median", "_min", "_max",
+                   "_count", "_count_distinct"):
         if base.endswith(suffix):
             base = base[: -len(suffix)]
             break
@@ -175,8 +178,8 @@ def _kpi_label(key: str, resolved: Dict[str, Any]) -> str:
     # `current_loan_to_value_weighted_avg` lost only "_avg" and read
     # "Average Current Loan To Value Weighted".
     base, agg = key, ""
-    for suffix in sorted(("_sum", "_avg", "_weighted_avg", "_median",
-                          "_count", "_count_distinct"), key=len, reverse=True):
+    for suffix in sorted(("_sum", "_avg", "_weighted_avg", "_median", "_min",
+                          "_max", "_count", "_count_distinct"), key=len, reverse=True):
         if base.endswith(suffix):
             base, agg = base[: -len(suffix)], suffix[1:]
             break
@@ -192,17 +195,15 @@ def _kpi_label(key: str, resolved: Dict[str, Any]) -> str:
 
 
 def _format_kpi_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
+    """A figure as a DASHBOARD TILE shows it ("£87.1MM"), in the request's
+    reporting currency — the platform's one money formatter with the tiles'
+    suffixes. An answer SENTENCE states money with the chat suffixes instead
+    (`_prose_value`)."""
     if not isinstance(value, (int, float)):
         return str(value)
     if fmt == "gbp":
-        v = float(value)
-        if abs(v) >= 1e9:
-            return f"£{v / 1e9:.2f}BN"
-        if abs(v) >= 1e6:
-            return f"£{v / 1e6:.1f}MM"
-        if abs(v) >= 1e3:
-            return f"£{v / 1e3:.0f}K"
-        return f"£{v:,.0f}"
+        from mi_agent_api import currency as currency_mod
+        return currency_mod.format_money(float(value), suffixes=("BN", "MM", "K"))
     if fmt == "pct":
         # Apply the storage scale from the dataset contract: a fraction (0.51)
         # displays as 51.0%, points (51) display as 51.0%. Never guessed.
@@ -589,6 +590,16 @@ def _interpreted_string(interpreted: Any) -> str:
     return ""
 
 
+def _prose_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
+    """A figure as an answer SENTENCE states it: money by the answer standard
+    ("£87.1m", `mi_agent.answer_standard.money`), anything else exactly as the
+    tile and table show it. The same figure, the same formatter owner — only
+    the magnitude suffixes differ, as the platform's convention says."""
+    if fmt == "gbp" and isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _standard.money(value)
+    return _format_kpi_value(value, fmt, scale)
+
+
 def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional[str],
             hints: Optional[Dict[str, Any]] = None,
             spec: Optional[Mapping[str, Any]] = None) -> str:
@@ -618,7 +629,9 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
                             spec)
         if line:
             return line
-    ranked = _ranked_lead(rows, (qr or {}).get("resolved_fields") or {}, hints, spec)
+    ranked = _ranked_lead(rows, (qr or {}).get("resolved_fields") or {}, hints, spec,
+                          ranked_of=((qr or {}).get("metadata") or {}).get(
+                              "groups_before_top_n"))
     if ranked:
         return ranked
     # A SINGLE ROW IS A SINGLE FIGURE, whatever chart was chosen for it.
@@ -634,11 +647,19 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
     # line would have said "covering 1 group", it comes AFTER the ranked lead
     # so no ranked answer changes, and it uses the same row, labels and
     # formatters as the KPI artifact — a rendering, not a second calculation.
+    series = _series_lead(rows, (qr or {}).get("resolved_fields") or {}, hints,
+                          spec)
+    if series:
+        return series
     if len(rows) == 1:
         line = _scalar_line(rows[0], (qr or {}).get("resolved_fields") or {},
                             hints, spec)
         if line:
             return line
+    breakdown = _breakdown_lead(rows, (qr or {}).get("resolved_fields") or {},
+                                hints, spec)
+    if breakdown:
+        return breakdown
     noun = "result" if chart_type in (None, "none") else chart_type
     if n is not None:
         groups = "1 group" if n == 1 else f"{n:,} groups"
@@ -648,7 +669,8 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
 
 def _ranked_lead(rows, resolved: Mapping[str, Any],
                  hints: Optional[Dict[str, Any]],
-                 spec: Optional[Mapping[str, Any]]) -> str:
+                 spec: Optional[Mapping[str, Any]],
+                 ranked_of: Optional[int] = None) -> str:
     """"Scotland has the highest Total Balance: £28.9MM (7 groups)."
 
     A RANKING QUESTION IS ANSWERED BY NAMING THE GROUP. "Which region has the
@@ -687,14 +709,175 @@ def _ranked_lead(rows, resolved: Mapping[str, Any],
     if ranked_key is None:
         return ""
     h = _hint(hints, ranked_key)
-    shown = _format_kpi_value(row.get(ranked_key),
-                              h.get("format") or _infer_col_format(ranked_key, resolved),
-                              h.get("scale"))
+    shown = _prose_value(row.get(ranked_key),
+                         h.get("format") or _infer_col_format(ranked_key, resolved),
+                         h.get("scale"))
     superlative = ("lowest" if str(spec.get("sort_direction") or "desc").lower() == "asc"
                    else "highest")
-    measure = _kpi_label(ranked_key, resolved)
-    groups = "1 group" if len(rows) == 1 else f"{len(rows):,} groups"
+    counted = str(spec.get("aggregation") or "").lower() == "count"
+    measure = "number of loans" if counted else _kpi_label(ranked_key, resolved)
+    top_n = spec.get("top_n")
+    if isinstance(top_n, int) and top_n > 1 and len(rows) > 1:
+        # "THE FIVE ..." — the number the reader named, every one of them, in
+        # the executor's order (the direction they asked for), in the answer
+        # standard's breakdown shape.
+        def _shown_row(r):
+            return _prose_value(r.get(ranked_key),
+                                h.get("format") or _infer_col_format(ranked_key, resolved),
+                                h.get("scale"))
+        listed = ", ".join(f"{str(r.get(dimension) or '').strip()} {_shown_row(r)}"
+                           for r in rows)
+        of = (f" of {ranked_of:,} groups"
+              if isinstance(ranked_of, int) and ranked_of > len(rows) else "")
+        return (f"{measure[:1].upper()}{measure[1:]} by "
+                f"{_label_for(dimension, resolved)} — the {len(rows):,} "
+                f"{superlative}{of}: {listed}.")
+    # How many groups were COMPARED: the executor's count before it cut the
+    # ranking to the number asked for, where it cut one.
+    compared = (ranked_of if isinstance(ranked_of, int) and ranked_of > len(rows)
+                else None)
+    groups = (f"of {compared:,} groups" if compared
+              else "1 group" if len(rows) == 1 else f"{len(rows):,} groups")
     return f"{label} has the {superlative} {measure}: {shown} ({groups})."
+
+
+#: How many groups a breakdown's sentence names: the answer standard's.
+_LEAD_GROUPS = _standard.LEAD_GROUPS
+
+
+def _lead_value_key(row: Mapping[str, Any], axes: List[str],
+                    resolved: Mapping[str, Any], hints: Optional[Dict[str, Any]],
+                    spec: Mapping[str, Any]) -> Tuple[Optional[str], str, Any]:
+    """`(column, format, scale)` of the figure a lead sentence states: the
+    spec's own measure as the executor named its column, else the first figure
+    that is not a count or a share. The same format the table uses."""
+    aggregation = str(spec.get("aggregation") or "").lower()
+    metric = str(spec.get("metric") or "")
+    numeric = [k for k in row
+               if k not in axes and isinstance(row.get(k), (int, float))
+               and not isinstance(row.get(k), bool)]
+    if aggregation == "count":
+        key = next((k for k in numeric if str(k).endswith("_count")), None)
+    else:
+        key = next((k for k in numeric if metric and str(k).startswith(metric)),
+                   next((k for k in numeric
+                         if not str(k).endswith(("_count", "_pct"))), None))
+    if key is None:
+        return None, "", None
+    h = _hint(hints, key)
+    return key, (h.get("format") or _infer_col_format(key, resolved)), h.get("scale")
+
+
+def _lead_measure(key: str, resolved: Mapping[str, Any],
+                  spec: Mapping[str, Any]) -> str:
+    """The measure's words: its label with its statistic, or "Number of loans"."""
+    if str(spec.get("aggregation") or "").lower() == "count":
+        return "Number of loans"
+    return _kpi_label(key, resolved)
+
+
+
+def _breakdown_lead(rows, resolved: Mapping[str, Any],
+                    hints: Optional[Dict[str, Any]],
+                    spec: Optional[Mapping[str, Any]]) -> str:
+    """"Balance by Region — largest: South East £4.2MM, London £3.9MM, Wales
+    £3.1MM, and 7 more (10 groups)." — a breakdown, in words.
+
+    A BREAKDOWN IS ANSWERED BY NAMING THE MEASURE, THE AXIS AND THE LEADERS.
+    It used to read "Here is the bar for your query, covering 10 groups" —
+    true, and it named neither what was measured nor what it was grouped by, so
+    a text-first channel (and the evidence a bank run is judged on) carried no
+    answer at all. Owner instruction, 2026-09-29: fix it before the proof stage.
+
+    The same rows, labels and formatters the table and chart are built from:
+    the groups are the executor's, ordered by their own figure for the
+    sentence (the table keeps every row); nothing is computed. "Largest" for a
+    total or a count, "highest" for an average or a ratio.
+    """
+    if not rows or len(rows) < 2 or not isinstance(spec, Mapping):
+        return ""
+    axes = [str(d) for d in (spec.get("dimensions") or [spec.get("dimension")])
+            if d]
+    axes = [a for a in axes if a in rows[0]]
+    if not axes:
+        return ""
+    aggregation = str(spec.get("aggregation") or "").lower()
+    key, fmt, scale = _lead_value_key(rows[0], axes, resolved, hints, spec)
+    if key is None:
+        return ""
+
+    def _value(row) -> Optional[float]:
+        v = row.get(key)
+        return (float(v) if isinstance(v, (int, float)) and not isinstance(v, bool)
+                and v == v else None)
+
+    def _group(row) -> str:
+        return " / ".join(str(row.get(a)) for a in axes)
+
+    ranked = sorted((r for r in rows if _value(r) is not None),
+                    key=lambda r: _value(r), reverse=True)
+    if not ranked:
+        return ""
+    measure = _lead_measure(key, resolved, spec)
+    axis_words = " and ".join(_label_for(a, resolved) for a in axes)
+    word = "largest" if aggregation in ("sum", "count", "balance_sum") else "highest"
+    lead = _standard.breakdown_lead(
+        measure, axis_words,
+        [(_group(r), _prose_value(r.get(key), fmt, scale))
+         for r in ranked[:_LEAD_GROUPS]],
+        total=len(rows), word=word,
+        noun="groups" if len(axes) == 1 else "combinations")
+    return f"{lead}."
+
+
+#: The column a governed series stacks its periods by (the temporal runtime's
+#: `REPORTING_DATE`, the governed header's own reporting date).
+_SERIES_DATE = "reporting_date"
+
+
+def _series_lead(rows, resolved: Mapping[str, Any],
+                 hints: Optional[Dict[str, Any]],
+                 spec: Optional[Mapping[str, Any]]) -> str:
+    """"Balance over 5 reporting dates, 2025-07-31 to 2025-11-30: from £9.4MM
+    to £12.1MM." — a series, in words, start to end.
+
+    A SERIES IS READ IN TIME ORDER. Ranked like a breakdown it would mix
+    periods ("largest: 2025-11 £12.1MM, 2025-10 …"), which answers a question
+    nobody asked. So the ungrouped series states its first and last figures;
+    a grouped one states its span and the leaders at the latest date. The rows
+    are the stacked series the temporal runtime built from each snapshot's own
+    execution — read here, never recomputed.
+    """
+    if not rows or not isinstance(spec, Mapping):
+        return ""
+    axes = [str(d) for d in (spec.get("dimensions") or [spec.get("dimension")]) if d]
+    if _SERIES_DATE not in rows[0] or _SERIES_DATE in axes:
+        return ""
+    key, fmt, scale = _lead_value_key(rows[0], axes + [_SERIES_DATE], resolved,
+                                      hints, spec)
+    if key is None:
+        return ""
+    dates = sorted({str(r.get(_SERIES_DATE)) for r in rows if r.get(_SERIES_DATE)})
+    if not dates:
+        return ""
+    measure = _lead_measure(key, resolved, spec)
+    span = (f"{len(dates)} reporting dates, {dates[0]} to {dates[-1]}"
+            if len(dates) > 1 else f"the reporting date {dates[0]}")
+    if not axes:
+        by_date = {str(r.get(_SERIES_DATE)): r.get(key) for r in rows}
+        first, last = by_date.get(dates[0]), by_date.get(dates[-1])
+        if len(dates) == 1:
+            return f"{measure} at {span}: {_prose_value(last, fmt, scale)}."
+        return (f"{measure} over {span}: from {_prose_value(first, fmt, scale)} "
+                f"to {_prose_value(last, fmt, scale)}.")
+    latest = [r for r in rows if str(r.get(_SERIES_DATE)) == dates[-1]]
+    lead = _breakdown_lead(latest, resolved, hints, spec)
+    if not lead:
+        return ""
+    if len(dates) == 1:
+        return f"{lead[:-1]}, at {dates[-1]}."
+    return (f"{lead[:-1]}, at {dates[-1]} — the latest of {len(dates)} "
+            f"reporting dates from {dates[0]}.")
 
 
 def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
@@ -751,7 +934,7 @@ def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
     for key, value in items:
         h = _hint(hints, key)
         fmt = h.get("format") or _infer_col_format(key, resolved)
-        shown = _format_kpi_value(value, fmt, h.get("scale"))
+        shown = _prose_value(value, fmt, h.get("scale"))
         if shown in (None, ""):
             continue
         label = _kpi_label(key, resolved)
@@ -763,6 +946,18 @@ def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
         else:
             parts.append(f"{label}: {shown}")
     return " · ".join(parts) + "." if parts else ""
+
+
+def _with_notes(answer: str, workflow: Dict[str, Any], refused: bool) -> str:
+    """The disclosures the serving path attached (`answer_notes`), stated after
+    the lead and before the receipt — what the figure rests on and what it
+    leaves out, e.g. which location its regions are (the answer standard's
+    `region_note`). A refusal carries none."""
+    notes = [str(n).strip().rstrip(".") for n in (workflow.get("answer_notes") or ())
+             if str(n).strip()]
+    if refused or not notes or not answer:
+        return answer
+    return " ".join([answer.rstrip()] + [f"{n}." for n in notes])
 
 
 def _with_receipt(answer: str, workflow: Dict[str, Any]) -> str:
@@ -892,6 +1087,9 @@ def adapt_workflow_result(
     reconciliation = (workflow.get("reconciliation")
                       or (workflow.get("metadata") or {}).get("reconciliation"))
     source_notes = _source_notes(qr, spec)
+    for note in workflow.get("answer_notes") or ():
+        source_notes = list(source_notes or []) + [
+            {"field": "disclosure", "note": str(note)}]
 
     artifacts: List[Dict[str, Any]] = []
     chart_type = cr.get("chart_type") if cr else None
@@ -1001,9 +1199,11 @@ def adapt_workflow_result(
         # sentence gave "Here is the result for your query" on a refusal — a
         # success-shaped answer to a question that was not answered.
         "answer": _with_receipt(
-            workflow.get("answer")
-            or (workflow.get("error") if refused else None)
-            or _answer(workflow.get("interpreted"), qr, chart_type, hints, spec),
+            _with_notes(
+                workflow.get("answer")
+                or (workflow.get("error") if refused else None)
+                or _answer(workflow.get("interpreted"), qr, chart_type, hints, spec),
+                workflow, refused),
             workflow),
         # P0: the machine-derived statement of what was ACTUALLY executed —
         # measure, aggregation, filters that really narrowed the frame,

@@ -42,6 +42,13 @@ function currencySymbol(): string {
  * magnitudes (e.g. £124.6MM). Named for its original GBP-only behaviour, which
  * it still produces for a GBP book.
  */
+/** A money figure the backend may withhold (D21: a weighted figure with no
+ *  measured stage rate). Withheld is "n/a" — never formatted as a zero. */
+export function formatGBPOrNA(value: number | null | undefined,
+                              opts?: { compact?: boolean }): string {
+  return value == null ? "n/a" : formatGBP(value, opts);
+}
+
 export function formatGBP(value: number, opts?: { compact?: boolean }): string {
   const symbol = currencySymbol();
   if (opts?.compact ?? true) {

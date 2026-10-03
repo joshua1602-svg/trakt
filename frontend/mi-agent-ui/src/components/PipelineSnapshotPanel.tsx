@@ -6,7 +6,7 @@ import { BarList, MeasureToggle, StatTile, BAR_MEASURE_FORMAT,
   type BarDatum, type BarMeasure, type DeltaIntent } from "@/components/pipeline/bits";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { cleanBucketLabel, sortStratBars } from "@/lib/stratOrder";
-import { cn, formatGBP } from "@/lib/utils";
+import { cn, formatGBP, formatGBPOrNA } from "@/lib/utils";
 
 /**
  * Week-on-week movement for a pipeline tile. Returns "No prior week" (neutral)
@@ -93,7 +93,10 @@ export function PipelineSnapshotPanel({
 
   const amount = snapshot.pipelineAmount ?? 0;
   const cases = snapshot.pipelineRowCount;
-  const weighted = snapshot.weightedExpectedFundedAmount ?? 0;
+  // D21: null when a live case's stage has no measured rate — shown as n/a
+  // with the reason, never as a zero.
+  const weighted = snapshot.weightedExpectedFundedAmount ?? null;
+  const weightingNote = snapshot.weightingIncompleteReason ?? null;
   const avg = cases > 0 ? amount / cases : 0;
 
   // Week-on-week deltas from the prior weekly extract, when the backend supplies
@@ -105,7 +108,9 @@ export function PipelineSnapshotPanel({
       : null;
   const casesDelta = weeklyDelta(cases, prior?.pipelineRowCount, "count");
   const amountDelta = weeklyDelta(amount, prior?.pipelineAmount, "gbp");
-  const weightedDelta = weeklyDelta(weighted, prior?.weightedExpectedFundedAmount, "gbp");
+  const weightedDelta = weighted == null
+    ? { delta: undefined, deltaIntent: undefined }
+    : weeklyDelta(weighted, prior?.weightedExpectedFundedAmount, "gbp");
   const avgDelta = weeklyDelta(avg, priorAvg, "gbp");
   const profile = snapshot.profile ?? null;
   const excluded = snapshot.excludedFromOpenPipeline ?? null;
@@ -117,7 +122,7 @@ export function PipelineSnapshotPanel({
     ? snapshot.expectedCompletionBreakdown.find((m) => m.month === nextMonth) ?? null
     : null;
   const overdueCount = summary?.overdueExpectedCompletionCount ?? 0;
-  const overdueWeighted = summary?.overdueExpectedCompletionWeightedAmount ?? 0;
+  const overdueWeighted = summary?.overdueExpectedCompletionWeightedAmount ?? null;
   const dq = dataQualityStatus(snapshot);
 
   const stageByAmount: BarDatum[] = snapshot.stageBreakdown.map((s) => ({
@@ -132,8 +137,14 @@ export function PipelineSnapshotPanel({
   const completionByMonth: BarDatum[] = snapshot.expectedCompletionBreakdown.map((m) => ({
     label: m.month,
     value: m.weightedExpectedFundedAmount ?? 0,
-    count: m.caseCount,
+    count: m.caseCount ?? undefined,
   }));
+  // D21: a month whose weighted amount is withheld is not charted as zero —
+  // the weighted view says why instead (the case counts still chart).
+  const completionWithheld = snapshot.expectedCompletionBreakdown.some(
+    (m) => m.weightedExpectedFundedAmount == null);
+  const countsWithheld = snapshot.expectedCompletionBreakdown.some(
+    (m) => m.caseCount == null);
   const byBroker: BarDatum[] = (snapshot.brokerBreakdown ?? []).map((b) => ({
     label: b.key,
     value: b.pipelineAmount,
@@ -194,9 +205,9 @@ export function PipelineSnapshotPanel({
           delta={casesDelta.delta} deltaIntent={casesDelta.deltaIntent} />
         <StatTile label="Total pipeline amount" value={formatGBP(amount)}
           delta={amountDelta.delta} deltaIntent={amountDelta.deltaIntent} />
-        <StatTile label="Weighted expected funded" value={formatGBP(weighted)}
+        <StatTile label="Weighted expected funded" value={formatGBPOrNA(weighted)}
           delta={weightedDelta.delta} deltaIntent={weightedDelta.deltaIntent}
-          hint="probability-weighted" />
+          hint={weighted == null && weightingNote ? weightingNote : "probability-weighted"} />
         <StatTile label="Average case amount" value={formatGBP(avg)}
           delta={avgDelta.delta} deltaIntent={avgDelta.deltaIntent} />
         {/* The credit profile, tile for tile with the funded snapshot, so the
@@ -226,14 +237,14 @@ export function PipelineSnapshotPanel({
         )}
         {nextCompletion ? (
           <StatTile label="Next expected completions" value={nextCompletion.month}
-            hint={`${nextCompletion.caseCount} cases · ${formatGBP(nextCompletion.weightedExpectedFundedAmount ?? 0)} weighted`} />
+            hint={`${nextCompletion.caseCount ?? "n/a"} cases · ${formatGBPOrNA(nextCompletion.weightedExpectedFundedAmount)} weighted`} />
         ) : (
           <StatTile label="Next expected completions" value="None"
             hint="no future expected completions" />
         )}
         {overdueCount > 0 && (
           <StatTile label="Overdue expected completions" value={overdueCount.toLocaleString("en-GB")}
-            hint={`${formatGBP(overdueWeighted)} weighted · before as-of month`} />
+            hint={`${formatGBPOrNA(overdueWeighted)} weighted · before as-of month`} />
         )}
       </div>
 
@@ -277,8 +288,14 @@ export function PipelineSnapshotPanel({
           <Panel title={measure === "count"
             ? "Expected completions by month · cases"
             : "Weighted expected funded by completion month"}>
-            <BarList data={asMeasure(completionByMonth, measure)}
-              format={BAR_MEASURE_FORMAT[measure]} />
+            {(measure === "count" ? countsWithheld : completionWithheld) ? (
+              <p className="text-[11px] text-ink-400">
+                Not stated{weightingNote ? `: ${weightingNote}` : "."}
+              </p>
+            ) : (
+              <BarList data={asMeasure(completionByMonth, measure)}
+                format={BAR_MEASURE_FORMAT[measure]} />
+            )}
           </Panel>
         )}
         {byBroker.length > 0 && (
@@ -289,6 +306,13 @@ export function PipelineSnapshotPanel({
         {byRegion.length > 0 && (
           <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by region`}>
             <BarList data={asMeasure(byRegion, measure)} format={BAR_MEASURE_FORMAT[measure]} />
+            {(snapshot.regionBasis?.unmappedCaseCount ?? 0) > 0 && (
+              <p className="mt-2 text-xs text-ink-500">
+                {snapshot.regionBasis!.unmappedCaseCount.toLocaleString()} case(s) (
+                {formatGBP(snapshot.regionBasis!.unmappedAmount)}) have a region with
+                no governed mapping and are not shown.
+              </p>
+            )}
           </Panel>
         )}
         {byProduct.length > 0 && (

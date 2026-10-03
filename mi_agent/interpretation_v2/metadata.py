@@ -759,6 +759,77 @@ class GovernedMetadataService:
         }
 
 
+#: The note every capability-owned concept used to carry, word for word. The
+#: catalogue states it once, in its header, instead of 51 times.
+_OWNED_NOTE_PREFIX = "Owned by a capability."
+
+
+def governed_catalogue(vocabulary) -> Dict[str, Any]:
+    """EVERYTHING the retrieval tools can return that is the same for every
+    question and every client, as one document — the semantic model the
+    interpreter reads before it answers (P0 design §21).
+
+    WHY A CATALOGUE AND NOT A TOOL LOOP. The tools were introduced when the
+    alternative was a 24k-token flat vocabulary sent at full price on every
+    question, and that vocabulary under-described every concept. Two things
+    have changed since: the prompt prefix is CACHED (a cached token costs a
+    tenth of one read fresh, and is read faster), and this catalogue is not a
+    flat vocabulary — it is the tools' own full views, concept by concept, with
+    every governed value inline. The 2026-09-29 full bank measured what the
+    loop costs: about three sequential model calls per question, each paying
+    the whole prefix again plus the tool results, for metadata that never
+    changes between questions.
+
+    ONE SOURCE. Every row is built by this service's own methods — the same
+    views `get_concept_metadata`, `get_allowed_values` and
+    `get_capability_metadata` return — over the same index the compiler binds
+    against. The catalogue can therefore advertise nothing the tools could not,
+    and `test_model_sees_no_data` walks it exactly as it walks the tools.
+
+    NOTHING PER-CLIENT. A client's source portfolio NAMES are not in here: this
+    document is cached and shared across requests, and a registry belongs to
+    one client (`client_context` carries them, per request).
+    """
+    service = GovernedMetadataService(vocabulary)
+    concepts: List[Dict[str, Any]] = []
+    for concept in sorted(vocabulary.concepts.values(),
+                          key=lambda c: c.concept_id):
+        row = {k: v for k, v in service.get_concept_metadata(
+                   concept.concept_id).items()
+               if k not in ("found", "has_governed_values")
+               and v not in (None, "", [], {})}
+        if str(row.get("note") or "").startswith(_OWNED_NOTE_PREFIX):
+            row.pop("note")
+        values = service.get_allowed_values(concept.concept_id)
+        if values.get("has_governed_values"):
+            row["allowed_values"] = values["values"]
+        if values.get("named_portfolio_route"):
+            row["named_portfolio_route"] = values["named_portfolio_route"]
+        concepts.append(row)
+    capabilities = service.search_capabilities(limit=40)
+    return {
+        "metadata_version": METADATA_VERSION,
+        "concepts": concepts,
+        "capabilities": capabilities["intent_capabilities"],
+        "registered_analytical_capabilities":
+            capabilities["registered_analytical_capabilities"],
+        "asset": service.get_asset_metadata(),
+        # Whether THIS client names any books is the client context's to say;
+        # a shared, cached document cannot know.
+        "portfolio_context": {k: v for k, v in
+                              service.get_portfolio_semantic_context().items()
+                              if k != "named_source_portfolios_available"},
+    }
+
+
+def client_context(vocabulary, source_registry: Any = None) -> Dict[str, Any]:
+    """What THIS request's client declares: its source portfolios' governed
+    NAMES (`get_source_portfolios`), and nothing else. Per request, never
+    cached, never another client's."""
+    return {"source_portfolios": GovernedMetadataService(
+        vocabulary, source_registry=source_registry).get_source_portfolios()}
+
+
 def _match_score(needle: str, concept) -> int:
     """How well a search term matches a concept. Deterministic, no fuzziness.
 

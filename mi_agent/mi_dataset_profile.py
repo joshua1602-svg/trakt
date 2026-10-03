@@ -303,7 +303,7 @@ def display_hint_for(profile: Dict[str, Any], column: str) -> Dict[str, Any]:
         return {"format": "pct", "scale": PERCENT_POINTS}
     base = column
     for suffix in ("_weighted_avg", "_count_distinct", "_sum", "_avg",
-                   "_median", "_count"):
+                   "_median", "_min", "_max", "_count"):
         if base.endswith(suffix):
             base = base[: -len(suffix)]
             break

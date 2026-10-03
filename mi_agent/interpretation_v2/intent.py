@@ -319,6 +319,11 @@ class SemanticTime:
     labels: Tuple[str, ...] = ()
     grain: Optional[str] = None
     periods_back: Optional[int] = None
+    #: THE FORWARD HORIZON, the mirror of `periods_back`: how many periods AHEAD
+    #: a forward-looking question covers ("the next twelve months" = 12 with a
+    #: monthly grain). Without it a horizon could only be stated in words, and
+    #: a projection answered for a different horizon reads like the right one.
+    periods_ahead: Optional[int] = None
     #: WHETHER THE READING ACTUALLY STATED A TEMPORAL FORM. Provenance, not
     #: semantics — deliberately absent from `key()`, so it cannot change a plan's
     #: identity or make two readings of one question look divergent.
@@ -335,7 +340,12 @@ class SemanticTime:
     stated: bool = False
 
     def key(self) -> Tuple[Any, ...]:
-        return (self.form, tuple(self.labels), self.grain, self.periods_back)
+        base = (self.form, tuple(self.labels), self.grain, self.periods_back)
+        # Appended only when stated, so every key recorded before the horizon
+        # existed is unchanged.
+        if self.periods_ahead is None:
+            return base
+        return base + (("periods_ahead", self.periods_ahead),)
 
 
 @dataclass(frozen=True)
@@ -381,6 +391,31 @@ class SemanticTarget:
 
     def key(self) -> Tuple[Any, ...]:
         return (self.concept, self.comparator, self.value)
+
+
+#: Which end of a ranking a question asks for.
+RANKING_ORDERS = frozenset({"highest", "lowest"})
+#: The most entries a "top N" names; a larger request is the whole breakdown.
+RANKING_LIMIT_MAX = 50
+
+
+@dataclass(frozen=True)
+class SemanticRanking:
+    """WHICH END of a ranking the question asks for, and how many.
+
+    "Which region has the largest balance?", "the five smallest brokers by
+    loan count", "lowest LTV band" — a ranking over ONE grouping, ordered by
+    the figure. The order is the reader's word (highest / largest / top, or
+    lowest / smallest / bottom); the limit is the number they named, if any.
+    It names no field and no column: the figure and the grouping are the
+    intent's own measure and dimension (twins run 2026-10-01: ranking had
+    nowhere to say which end was meant)."""
+
+    order: str = "highest"
+    limit: Optional[int] = None
+
+    def key(self) -> Tuple[Any, ...]:
+        return (self.order, self.limit)
 
 
 @dataclass(frozen=True)
@@ -458,6 +493,8 @@ class CandidateIntent:
     time: SemanticTime = field(default_factory=SemanticTime)
     comparison: SemanticComparison = field(default_factory=SemanticComparison)
     target: Optional[SemanticTarget] = None
+    #: Which end of a ranking, and how many — set only for a ranking.
+    ranking: Optional[SemanticRanking] = None
     outputs: Tuple[RequestedOutput, ...] = ()
     ambiguity: Tuple[Ambiguity, ...] = ()
     evidence: Tuple[SourceSpan, ...] = ()
@@ -497,6 +534,7 @@ class CandidateIntent:
             self.time.key(),
             self.comparison.key(),
             self.target.key() if self.target else None,
+            self.ranking.key() if self.ranking else None,
             tuple(sorted(o.key() for o in self.effective_outputs())),
         )
 
@@ -510,13 +548,14 @@ class CandidateIntent:
 
 _INTENT_KEYS = ("schema_version", "capability", "operation", "change_form",
                 "population", "measures", "dimensions", "filters", "geography",
-                "time", "comparison", "target", "outputs", "ambiguity",
-                "evidence")
+                "time", "comparison", "target", "ranking", "outputs",
+                "ambiguity", "evidence")
 _TARGET_KEYS = ("concept", "value", "comparator")
+_RANKING_KEYS = ("order", "limit")
 _MEASURE_KEYS = ("concept", "statistic", "weight")
 _FILTER_KEYS = ("concept", "comparator", "value")
 _GEO_KEYS = ("requested", "basis", "level", "group_by", "values")
-_TIME_KEYS = ("form", "labels", "grain", "periods_back")
+_TIME_KEYS = ("form", "labels", "grain", "periods_back", "periods_ahead")
 _POP_KEYS = ("base", "lens", "seasoning", "source_reference")
 _CMP_KEYS = ("kind", "left", "right")
 _OUTPUT_KEYS = ("id", "measures", "dimensions", "filters", "geography")
@@ -628,12 +667,19 @@ def _parse_time(raw: Any, *, slot: str) -> SemanticTime:
                 or not 0 <= periods_back <= 120:
             raise IntentParseError("INTENT_SCHEMA_INVALID", f"{slot}.periods_back",
                                    "expected an integer between 0 and 120")
+    periods_ahead = raw.get("periods_ahead")
+    if periods_ahead is not None:
+        if not isinstance(periods_ahead, int) or isinstance(periods_ahead, bool) \
+                or not 1 <= periods_ahead <= 120:
+            raise IntentParseError("INTENT_SCHEMA_INVALID", f"{slot}.periods_ahead",
+                                   "expected an integer between 1 and 120")
     return SemanticTime(
         form=_enum(raw.get("form", "current"), TIME_FORMS, slot=f"{slot}.form"),
         labels=tuple(labels),
         grain=_enum(raw.get("grain"), TIME_GRAINS, slot=f"{slot}.grain",
                     optional=True),
         periods_back=periods_back,
+        periods_ahead=periods_ahead,
         # A `time` block that states a grain or a label but no FORM has not stated
         # the temporal semantic either, so presence turns on the form key alone.
         stated="form" in raw,
@@ -713,6 +759,25 @@ def _parse_target(raw: Any, *, slot: str) -> Optional[SemanticTarget]:
         comparator=_enum(raw.get("comparator", "gte"), COMPARATORS,
                          slot=f"{slot}.comparator"),
     )
+
+
+def _parse_ranking(raw: Any, *, slot: str) -> Optional[SemanticRanking]:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise IntentParseError("INTENT_SCHEMA_INVALID", slot, "expected an object")
+    _known_keys(raw, _RANKING_KEYS, slot=slot)
+    limit = raw.get("limit")
+    if limit is not None:
+        if (isinstance(limit, bool) or not isinstance(limit, int)
+                or not 1 <= limit <= RANKING_LIMIT_MAX):
+            raise IntentParseError(
+                "INTENT_SCHEMA_INVALID", f"{slot}.limit",
+                f"a whole number from 1 to {RANKING_LIMIT_MAX}, or absent")
+    return SemanticRanking(
+        order=_enum(raw.get("order", "highest"), RANKING_ORDERS,
+                    slot=f"{slot}.order"),
+        limit=limit)
 
 
 def _parse_output(raw: Any, *, slot: str, index: int) -> RequestedOutput:
@@ -797,6 +862,7 @@ def parse_candidate_intent(payload: Any, *,
         time=_parse_time(payload.get("time"), slot="time"),
         comparison=_parse_comparison(payload.get("comparison"), slot="comparison"),
         target=_parse_target(payload.get("target"), slot="target"),
+        ranking=_parse_ranking(payload.get("ranking"), slot="ranking"),
         outputs=tuple(_parse_output(o, slot=f"outputs[{i}]", index=i)
                       for i, o in enumerate(payload.get("outputs") or ())),
         ambiguity=tuple(ambiguity),
@@ -932,8 +998,8 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                         "maxLength": _MAX_SOURCE_REFERENCE,
                         "description":
                             "WHICH BOOK by name, when the question names one. "
-                            "Call get_source_portfolios for the governed names "
-                            "this client declares, and put the reader's own "
+                            "CLIENT CONTEXT lists the governed names this "
+                            "client declares; put the reader's own "
                             "phrase here verbatim — never an id, a path, a "
                             "dataset or a run. The deterministic registry "
                             "resolves the phrase and refuses what it cannot. "
@@ -959,6 +1025,13 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                                        "or a snapshot id."}},
                     "grain": {"type": "string", "enum": sorted(TIME_GRAINS)},
                     "periods_back": {"type": "integer", "minimum": 0, "maximum": 120},
+                    "periods_ahead": {
+                        "type": "integer", "minimum": 1, "maximum": 120,
+                        "description": "For a forward_looking question, how "
+                                       "many periods AHEAD it covers: 'the "
+                                       "next twelve months' is 12 with grain "
+                                       "'monthly'. Omit when no horizon is "
+                                       "stated."},
                 },
             },
             "comparison": {
@@ -983,6 +1056,24 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                     "value": {"description": "The threshold figure from the "
                                              "question."},
                     "comparator": {"type": "string", "enum": sorted(COMPARATORS)},
+                },
+            },
+            "ranking": {
+                "type": "object", "additionalProperties": False,
+                "description": "Set ONLY for a ranking over one grouping — "
+                               "the group with the most or least of a figure, "
+                               "or the N groups with the most or least — "
+                               "with operation `rank`: `order` is which end "
+                               "the reader asked for (highest, largest, most, "
+                               "top -> highest; lowest, smallest, least, "
+                               "bottom -> lowest) and `limit` how many they "
+                               "named (omit it when they named no number). "
+                               "The figure ranked is the measure; what is "
+                               "ranked is the one dimension.",
+                "properties": {
+                    "order": {"type": "string", "enum": sorted(RANKING_ORDERS)},
+                    "limit": {"type": "integer", "minimum": 1,
+                              "maximum": RANKING_LIMIT_MAX},
                 },
             },
             "outputs": {

@@ -1,0 +1,835 @@
+# CONVERSATION BANK, FIRST SET (P0 design §34, D24). Drafted 2026-10-01,
+# before the conversational agent is built: it is the build's specification
+# and, once built, its proof — as D13's buckets are for single questions.
+#
+# 40 conversations, 98 follow-ups (every turn after the first). Groups:
+#   A  one change per follow-up              14 conversations, 42 follow-ups
+#   B  chains where changes pile up           5 conversations, 20 follow-ups
+#   C  the agent asks back, the reply fills   6 conversations,  8 follow-ups
+#   D  unclear follow-ups: ask, never guess   4 conversations,  6 follow-ups
+#   E  must start fresh, not carry            5 conversations, 10 follow-ups
+#   F  must refuse or not carry               6 conversations, 12 follow-ups
+# 123 turns the model reads (run: live), 15 enforced in code (run: code).
+# 27 twins are new (no bank_id): run them on their own first. cv_F04 was
+# revised 2026-10-01 after fix 4 answered its twin ("Just the Offers" now
+# carries; the refusal it tested moved to a closed stage).
+#
+# HOW A TURN IS SCORED — THE STAND-ALONE TWIN. Every follow-up that is
+# answered has a twin: the same question asked in full, on its own. The
+# follow-up passes when its governed plan and its figures are the twin's, and
+# its answer states what it carried over. Nothing is scored by hand, and no
+# golden figure is needed. A twin the agent declines on its own is declined
+# the same way as a follow-up: a follow-up never answers something broader
+# than its twin.
+#
+#   expect: answer    an opening question, answered as on its own
+#           carry     read against the previous answer; matches its twin
+#           ask_back  asks for the one missing detail; no figure
+#           fill      the reply to an ask-back; matches its twin
+#           fresh     carries nothing; matches its own stand-alone reading.
+#                     notice: lapsed — the answer says earlier context lapsed
+#           decline   declines in words with the reason; no figure
+#
+#   run:    live      the model reads it (costs a model call)
+#           code      memory mechanics, enforced in code: tested without the
+#                     model on every build; must pass 100%
+#
+#   twin.bank_id      the twin IS that production-bank question, word for
+#                     word, so its stand-alone outcome is already measured.
+#                     A twin with no bank_id is new: run the twins on their
+#                     own first (one cheap pass) to record their outcomes.
+#
+# PASS MARK (D25): no wrong answer — every follow-up matches its twin or asks
+# back — and every E (start fresh) and F (refuse) case passes. An unnecessary
+# ask-back is a miss to fix, not a failure.
+#
+# READING CONVENTIONS THE TWINS ASSUME (settled: D24, D25):
+#   * Memory is the previous answer only, plus an open ask-back, for 5
+#     minutes idle counted from delivery of the agent's last answer or
+#     question; it ends on a change of book or a cleared chat (D24).
+#   * A complete question never inherits: only a message that cannot stand
+#     alone is read against the previous answer (D24, owner 2026-10-01).
+#   * A follow-up keeps everything from the previous answer except what it
+#     changes. A new grouping ("by broker?", "and by stage?") REPLACES the
+#     previous one; "split that further by" adds a second axis (D25).
+#   * Narrowing to one value of the current grouping ("just the 75-80
+#     band") filters to it, and the grouping on that same axis falls away.
+#   * A declined follow-up does not replace the memory: the next follow-up
+#     is read against the last answered plan (D25).
+#   * D23 applies to follow-ups as to questions: "how many" is the count,
+#     "how much" the amount.
+#
+# The rules every bank keeps: nothing may be tuned against a row; a fixed
+# finding spends the file; `test_no_bank_question_is_in_the_models_view.py`
+# keeps every sentence here out of what the model sees.
+version: 1
+client: ERE
+memory_minutes: 5
+conversations:
+
+# --------------------------------------------------------------------------- #
+# A — one change per follow-up
+# --------------------------------------------------------------------------- #
+
+- id: cv_A01
+  group: A
+  area: funded
+  turns:
+  - {question: "What is the funded balance?", expect: answer, run: live, bank_id: funded_kpi_001}
+  - question: "How many loans is that?"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "How many funded loans are there?", bank_id: funded_kpi_004}
+  - question: "And the average loan size?"
+    expect: carry
+    run: live
+    change: statistic
+    twin: {question: "What is the average loan balance?", bank_id: funded_kpi_013}
+  - question: "What about the median?"
+    expect: carry
+    run: live
+    change: statistic
+    twin: {question: "What is the median loan balance?", bank_id: funded_kpi_014}
+
+- id: cv_A02
+  group: A
+  area: funded
+  turns:
+  - {question: "What is the weighted average current LTV?", expect: answer, run: live, bank_id: funded_kpi_006}
+  - question: "By region?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show WA LTV by region.", bank_id: funded_breakdown_1d_006}
+  - question: "And the simple average?"
+    expect: carry
+    run: live
+    change: statistic
+    twin: {question: "Show the simple average current LTV by region."}
+  - question: "Now by age band instead"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show the simple average current LTV by borrower age bucket."}
+
+- id: cv_A03
+  group: A
+  area: funded
+  turns:
+  - {question: "Show balance by region.", expect: answer, run: live, bank_id: funded_breakdown_1d_001}
+  - question: "How many loans?"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "Show loan count by region.", bank_id: funded_breakdown_1d_004}
+  - question: "And the average loan balance?"
+    expect: carry
+    run: live
+    change: statistic
+    twin: {question: "Show average loan balance by region.", bank_id: funded_breakdown_1d_005}
+  - question: "Which region is highest?"
+    expect: carry
+    run: live
+    change: ranking
+    twin: {question: "Which region has the highest average loan balance?"}
+
+- id: cv_A04
+  group: A
+  area: funded
+  turns:
+  - {question: "Show balance by LTV bucket.", expect: answer, run: live, bank_id: funded_breakdown_1d_014}
+  - question: "Loan count instead"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "Show loan count by LTV bucket.", bank_id: funded_breakdown_1d_015}
+  - question: "Only lifetime mortgages"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "Show loan count by LTV bucket for lifetime mortgages."}
+  - question: "All products again"
+    expect: carry
+    run: live
+    change: widen_back
+    twin: {question: "Show loan count by LTV bucket.", bank_id: funded_breakdown_1d_015}
+
+- id: cv_A05
+  group: A
+  area: forecast
+  turns:
+  - {question: "What is the current completion run rate?", expect: answer, run: live, bank_id: forecast_scale_006}
+  - question: "Over 8 weeks?"
+    expect: carry
+    run: live
+    change: window
+    twin: {question: "What is the 8-week completion run rate?", bank_id: forecast_scale_019}
+  - question: "And 12?"
+    expect: carry
+    run: live
+    change: window
+    twin: {question: "What is the 12-week completion run rate?", bank_id: forecast_scale_020}
+  - question: "Back to the standard window"
+    expect: carry
+    run: live
+    change: widen_back
+    twin: {question: "What is the current completion run rate?", bank_id: forecast_scale_006}
+
+- id: cv_A06
+  group: A
+  area: funded
+  turns:
+  - {question: "What is the total original balance?", expect: answer, run: live, bank_id: funded_kpi_017}
+  - question: "And today's balance?"
+    expect: carry
+    run: live
+    change: measure
+    twin: {question: "What is total current outstanding balance?", bank_id: funded_kpi_003}
+  - question: "By account status?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show balance by account status.", bank_id: funded_breakdown_1d_022}
+  - question: "Just the active loans"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "What is the current outstanding balance of active loans?"}
+
+- id: cv_A07
+  group: A
+  area: stage_movement
+  turns:
+  - {question: "What is the offer to completion pull-through rate?", expect: answer, run: live, bank_id: forecast_runoff_003}
+  - question: "And from application?"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "What is the application to completion pull-through rate?"}
+  - question: "And from KFI?"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "What is the KFI to completion pull-through rate?"}
+  - question: "So when should the live cases complete?"
+    expect: carry
+    run: live
+    change: measure
+    twin: {question: "When are pipeline cases expected to complete?", bank_id: forecast_runoff_004}
+
+- id: cv_A08
+  group: A
+  area: funded
+  turns:
+  - {question: "What is the funded balance?", expect: answer, run: live, bank_id: funded_kpi_001}
+  - question: "How has that changed since last month?"
+    expect: carry
+    run: live
+    change: date_compare
+    twin: {question: "How much has the funded balance changed since last month?"}
+  - question: "What drove it?"
+    expect: carry
+    run: live
+    change: change_form
+    twin: {question: "What drove the change in the funded balance since last month?"}
+  - question: "By region?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "What drove the change in the funded balance since last month, by region?"}
+
+- id: cv_A09
+  group: A
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount?", expect: answer, run: live, bank_id: pipeline_001}
+  - question: "By stage?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "What is the pipeline amount by stage?", bank_id: pipeline_005}
+  - question: "How many cases?"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "What is the pipeline case count by stage?", bank_id: pipeline_006}
+  - question: "Over time?"
+    expect: carry
+    run: live
+    change: date_series
+    twin: {question: "Show pipeline cases by stage over time.", bank_id: pipeline_evolution_006}
+
+- id: cv_A10
+  group: A
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount by broker?", expect: answer, run: live, bank_id: pipeline_007}
+  - question: "Which is largest?"
+    expect: carry
+    run: live
+    change: ranking
+    twin: {question: "Which broker has the largest pipeline?", bank_id: pipeline_010}
+  - question: "And by stage?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Which stage has the largest pipeline?", bank_id: pipeline_011}
+  - question: "And on the weighted amount?"
+    expect: carry
+    run: live
+    change: measure
+    twin: {question: "Which stage has the largest weighted expected funded amount?"}
+
+- id: cv_A11
+  group: A
+  area: pipeline
+  turns:
+  - {question: "Show pipeline amount by product.", expect: answer, run: live, bank_id: pipeline_strat_001}
+  - question: "By LTV band?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show pipeline amount by LTV band.", bank_id: pipeline_strat_002}
+  - question: "Which band is largest?"
+    expect: carry
+    run: live
+    change: ranking
+    twin: {question: "Which LTV band has the largest pipeline amount?"}
+  - question: "And by region?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Which region has the largest pipeline amount?"}
+
+- id: cv_A12
+  group: A
+  area: pipeline
+  turns:
+  - {question: "How much pipeline is expected to complete next month?", expect: answer, run: live, bank_id: pipeline_012}
+  - question: "And this month?"
+    expect: carry
+    run: live
+    change: date
+    twin: {question: "How much pipeline is current month?", bank_id: pipeline_014}
+  - question: "And overdue?"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "How much pipeline is overdue?", bank_id: pipeline_013}
+  - question: "All of it, by expected month"
+    expect: carry
+    run: live
+    change: widen_back
+    twin: {question: "What is the pipeline amount by expected completion month?", bank_id: pipeline_009}
+
+- id: cv_A13
+  group: A
+  area: forecast
+  turns:
+  - {question: "What is the base forecast?", expect: answer, run: live, bank_id: forecast_scale_011}
+  - question: "And the downside?"
+    expect: carry
+    run: live
+    change: scenario
+    twin: {question: "What is the downside forecast?", bank_id: forecast_scale_010}
+  - question: "Upside?"
+    expect: carry
+    run: live
+    change: scenario
+    twin: {question: "What is the upside forecast?", bank_id: forecast_scale_012}
+  - question: "When does that reach £100m?"
+    expect: carry
+    run: live
+    change: target
+    twin: {question: "When does the upside forecast reach £100m funded balance?"}
+
+- id: cv_A14
+  group: A
+  area: forecast
+  turns:
+  - {question: "When do we reach £100m funded balance?", expect: answer, run: live, bank_id: forecast_scale_004}
+  - question: "And £150m?"
+    expect: carry
+    run: live
+    change: target
+    twin: {question: "When do we reach £150m funded balance?", bank_id: forecast_scale_005}
+  - question: "What about £50m?"
+    expect: carry
+    run: live
+    change: target
+    twin: {question: "When do we reach £50m funded balance?", bank_id: forecast_scale_002}
+  - question: "Show me all the milestones"
+    expect: carry
+    run: live
+    change: widen_back
+    twin: {question: "Show milestone dates to funding thresholds.", bank_id: forecast_scale_017}
+
+# --------------------------------------------------------------------------- #
+# B — chains where changes pile up (and one is taken off again)
+# --------------------------------------------------------------------------- #
+
+- id: cv_B01
+  group: B
+  area: funded
+  turns:
+  - {question: "Show balance by LTV bucket.", expect: answer, run: live, bank_id: funded_breakdown_1d_014}
+  - question: "Number of loans instead"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "Show loan count by LTV bucket.", bank_id: funded_breakdown_1d_015}
+  - question: "Only borrowers aged 75-80"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "Show loan count by LTV bucket for borrowers aged 75-80."}
+  - question: "By region rather than LTV"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show loan count by region for borrowers aged 75-80."}
+  - question: "All ages again"
+    expect: carry
+    run: live
+    change: widen_back
+    twin: {question: "Show loan count by region.", bank_id: funded_breakdown_1d_004}
+
+- id: cv_B02
+  group: B
+  area: funded
+  turns:
+  - {question: "What is the weighted average interest rate?", expect: answer, run: live, bank_id: funded_kpi_008}
+  - question: "Split by LTV bucket"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show WA interest rate by LTV bucket.", bank_id: funded_breakdown_1d_016}
+  - question: "Just the 40-50% band"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "What is the weighted average interest rate for loans in the 40-50% LTV bucket?"}
+  - question: "And how much balance is that?"
+    expect: carry
+    run: live
+    change: measure
+    twin: {question: "What is the current outstanding balance of loans in the 40-50% LTV bucket?"}
+  - question: "By age band"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show balance by borrower age bucket for loans in the 40-50% LTV bucket."}
+
+- id: cv_B03
+  group: B
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount?", expect: answer, run: live, bank_id: pipeline_001}
+  - question: "Month by month?"
+    expect: carry
+    run: live
+    change: date_series
+    twin: {question: "Show pipeline amount evolution by month.", bank_id: pipeline_evolution_002}
+  - question: "Case count instead"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "Show pipeline case count evolution by month.", bank_id: pipeline_evolution_004}
+  - question: "Weekly"
+    expect: carry
+    run: live
+    change: date_series
+    twin: {question: "Show pipeline case count evolution by week.", bank_id: pipeline_evolution_003}
+  - question: "And the amount again"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "Show pipeline amount evolution by week.", bank_id: pipeline_evolution_001}
+
+- id: cv_B04
+  group: B
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount by stage?", expect: answer, run: live, bank_id: pipeline_005}
+  - question: "Compare with the previous extract"
+    expect: carry
+    run: live
+    change: date_compare
+    twin: {question: "Compare the latest pipeline amount by stage with the previous extract."}
+  - question: "October and November instead"
+    expect: carry
+    run: live
+    change: date
+    twin: {question: "Show pipeline by stage for October and November.", bank_id: pipeline_evolution_011}
+  - question: "Just the totals"
+    expect: carry
+    run: live
+    change: widen_back
+    twin: {question: "Compare October and November pipeline amount.", bank_id: pipeline_evolution_012}
+  - question: "And the growth?"
+    expect: carry
+    run: live
+    change: change_form
+    twin: {question: "Show pipeline growth from October to November.", bank_id: pipeline_evolution_014}
+
+- id: cv_B05
+  group: B
+  area: forecast
+  turns:
+  - {question: "What is the forecast funded balance?", expect: answer, run: live, bank_id: forecast_001}
+  - question: "How much of that comes from the pipeline?"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "How much of the forecast comes from pipeline?", bank_id: forecast_011}
+  - question: "And from the funded book?"
+    expect: carry
+    run: live
+    change: narrow
+    twin: {question: "How much of the forecast comes from funded book?", bank_id: forecast_010}
+  - question: "How many loans in total?"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "What is the forecast loan count?", bank_id: forecast_005}
+  - question: "Split that further by region"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show the forecast loan count by region."}
+
+# --------------------------------------------------------------------------- #
+# C — the agent asks back; the reply fills the one missing detail
+# --------------------------------------------------------------------------- #
+
+- id: cv_C01
+  group: C
+  area: funded
+  turns:
+  - question: "Show balance by NUTS3 region."
+    expect: ask_back
+    run: live
+    slot: geography.basis
+    note: "At NUTS3 the borrower's and the property's region are different answers."
+  - question: "The property's"
+    expect: fill
+    run: live
+    twin: {question: "Show balance by property region at NUTS3."}
+
+- id: cv_C02
+  group: C
+  area: forecast
+  turns:
+  - question: "Show the completion run rate over the last few weeks."
+    expect: ask_back
+    run: live
+    slot: time
+    note: "How many weeks is not stated."
+  - question: "8"
+    expect: fill
+    run: live
+    twin: {question: "What is the 8-week completion run rate?", bank_id: forecast_scale_019}
+  - question: "And 12?"
+    expect: carry
+    run: live
+    change: window
+    twin: {question: "What is the 12-week completion run rate?", bank_id: forecast_scale_020}
+
+- id: cv_C03
+  group: C
+  area: pipeline
+  turns:
+  - question: "Compare the pipeline amount."
+    expect: ask_back
+    run: live
+    slot: time
+    note: "Compare with what is not stated."
+  - question: "With the previous extract"
+    expect: fill
+    run: live
+    twin: {question: "Compare latest pipeline with prior pipeline.", bank_id: pipeline_evolution_013}
+
+- id: cv_C04
+  group: C
+  area: forecast
+  turns:
+  - question: "When do we hit the target?"
+    expect: ask_back
+    run: live
+    slot: target
+    note: "Which funded-balance threshold is not stated."
+  - question: "£100m"
+    expect: fill
+    run: live
+    twin: {question: "When do we reach £100m funded balance?", bank_id: forecast_scale_004}
+
+- id: cv_C05
+  group: C
+  area: funded
+  turns:
+  - question: "How has the balance changed?"
+    expect: ask_back
+    run: live
+    slot: change_form
+    note: "The size of the change, or what drove it, is not stated."
+  - question: "Just the size of the change since last month"
+    expect: fill
+    run: live
+    twin: {question: "How much has the funded balance changed since last month?"}
+
+- id: cv_C06
+  group: C
+  area: funded
+  turns:
+  - question: "Show balance by region at ITL3."
+    expect: ask_back
+    run: live
+    slot: geography.basis
+    note: "At ITL3 the borrower's and the property's region are different answers."
+  - question: "The borrower's"
+    expect: fill
+    run: live
+    twin: {question: "Show balance by borrower region at ITL3."}
+  - question: "And the property's?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show balance by property region at ITL3."}
+
+# --------------------------------------------------------------------------- #
+# D — unclear follow-ups: ask back, never guess
+# --------------------------------------------------------------------------- #
+
+- id: cv_D01
+  group: D
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount by broker?", expect: answer, run: live, bank_id: pipeline_007}
+  - question: "And them?"
+    expect: ask_back
+    run: live
+    note: "Nothing in the previous answer is 'them'."
+
+- id: cv_D02
+  group: D
+  area: forecast
+  turns:
+  - {question: "What is the base forecast?", expect: answer, run: live, bank_id: forecast_scale_011}
+  - question: "And the other one?"
+    expect: ask_back
+    run: live
+    slot: forecast_scenario
+    note: "The downside or the upside: offered as the two choices."
+  - question: "The downside"
+    expect: fill
+    run: live
+    twin: {question: "What is the downside forecast?", bank_id: forecast_scale_010}
+
+- id: cv_D03
+  group: D
+  area: funded
+  turns:
+  - {question: "Show balance by region.", expect: answer, run: live, bank_id: funded_breakdown_1d_001}
+  - question: "And that one?"
+    expect: ask_back
+    run: live
+    note: "Which region is not stated."
+  - question: "The largest"
+    expect: fill
+    run: live
+    twin: {question: "Which region has the largest funded balance?"}
+
+- id: cv_D04
+  group: D
+  area: funded
+  turns:
+  - {question: "What is the weighted average current LTV?", expect: answer, run: live, bank_id: funded_kpi_006}
+  - question: "Is that good?"
+    expect: decline
+    run: live
+    note: "No governed benchmark for 'good'; declined in words, never a judgement or a figure invented."
+
+# --------------------------------------------------------------------------- #
+# E — must start fresh, not carry
+# --------------------------------------------------------------------------- #
+
+- id: cv_E01
+  group: E
+  area: switch
+  turns:
+  - {question: "What is the pipeline amount by broker?", expect: answer, run: live, bank_id: pipeline_007}
+  - question: "What is the weighted average current LTV?"
+    expect: fresh
+    run: live
+    note: "A complete question: inherits neither the pipeline nor the broker grouping."
+    twin: {question: "What is the weighted average current LTV?", bank_id: funded_kpi_006}
+  - question: "By region?"
+    expect: carry
+    run: live
+    change: breakdown
+    twin: {question: "Show WA LTV by region.", bank_id: funded_breakdown_1d_006}
+
+- id: cv_E02
+  group: E
+  area: switch
+  turns:
+  - {question: "What is the base forecast?", expect: answer, run: live, bank_id: forecast_scale_011}
+  - question: "Show balance by LTV bucket."
+    expect: fresh
+    run: live
+    note: "A new topic, stated in full: nothing of the forecast carries."
+    twin: {question: "Show balance by LTV bucket.", bank_id: funded_breakdown_1d_014}
+  - question: "Loan count?"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "Show loan count by LTV bucket.", bank_id: funded_breakdown_1d_015}
+
+- id: cv_E03
+  group: E
+  area: memory
+  turns:
+  - {question: "What is the pipeline amount by stage?", expect: answer, run: code, bank_id: pipeline_005}
+  - question: "By broker?"
+    expect: fresh
+    run: code
+    setup: {idle_minutes_before: 6}
+    notice: lapsed
+    note: "Over 5 minutes idle: memory lapsed and the answer says so. On its own the message is incomplete, so it is asked back."
+  - question: "By broker?"
+    expect: carry
+    run: code
+    setup: {idle_minutes_before: 4, previous_answer_took_minutes: 5}
+    change: breakdown
+    note: "The clock runs from delivery of the answer, not from the question: a slow answer does not use up the 5 minutes."
+    twin: {question: "What is the pipeline amount by broker?", bank_id: pipeline_007}
+
+- id: cv_E04
+  group: E
+  area: memory
+  turns:
+  - {question: "Show balance by region.", expect: answer, run: code, bank_id: funded_breakdown_1d_001}
+  - question: "Loan count?"
+    expect: fresh
+    run: code
+    setup: {book_changed_before: true}
+    notice: lapsed
+    note: "The book changed: nothing carries across books, and the answer says so."
+  - question: "By broker?"
+    expect: fresh
+    run: code
+    setup: {chat_cleared_before: true}
+    note: "Clearing the chat ends the memory on the server too."
+
+- id: cv_E05
+  group: E
+  area: switch
+  turns:
+  - {question: "What is the funded balance?", expect: answer, run: live, bank_id: funded_kpi_001}
+  - question: "What is the pipeline amount?"
+    expect: fresh
+    run: live
+    note: "A complete question: a new population, nothing carries."
+    twin: {question: "What is the pipeline amount?", bank_id: pipeline_001}
+  - question: "How many cases?"
+    expect: carry
+    run: live
+    change: amount_to_count
+    twin: {question: "How many pipeline cases are there?", bank_id: pipeline_002}
+
+# --------------------------------------------------------------------------- #
+# F — must refuse or not carry
+# --------------------------------------------------------------------------- #
+
+- id: cv_F01
+  group: F
+  area: memory
+  turns:
+  - {question: "Show balance by region.", expect: answer, run: code, bank_id: funded_breakdown_1d_001}
+  - question: "Loan count?"
+    expect: fresh
+    run: code
+    setup: {memory_token: edited_to_another_book}
+    note: "An edited memory token is refused: nothing from it is read, and the message is treated as new."
+  - question: "Loan count?"
+    expect: fresh
+    run: code
+    setup: {memory_token: scope_widened}
+    note: "A token whose book scope was widened is refused the same way."
+
+- id: cv_F02
+  group: F
+  area: access
+  turns:
+  - {question: "What is the funded balance?", expect: answer, run: code, bank_id: funded_kpi_001}
+  - question: "And for another client's book?"
+    expect: decline
+    run: code
+    note: "Access is checked on every turn: a follow-up never widens what the user may see."
+  - question: "And for a book I am not given?"
+    expect: decline
+    run: code
+    note: "Declined exactly as the same question asked in full would be."
+
+- id: cv_F03
+  group: F
+  area: memory
+  turns:
+  - {question: "What is the pipeline amount by broker?", expect: answer, run: live, bank_id: pipeline_007}
+  - question: "Show balance by region."
+    expect: fresh
+    run: live
+    note: "A complete question: the broker grouping does not carry."
+    twin: {question: "Show balance by region.", bank_id: funded_breakdown_1d_001}
+  - question: "Compare it with the one before last"
+    expect: decline
+    run: live
+    note: "Memory holds one answer: the agent says so rather than guessing."
+
+- id: cv_F04
+  group: F
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount by stage?", expect: answer, run: live, bank_id: pipeline_005}
+  - question: "Just the Offers"
+    expect: carry
+    run: live
+    change: narrow
+    note: "Was a decline when drafted; its twin is answered since fix 4 (2026-10-01): one stage is the by-stage breakdown's own value."
+    twin: {question: "What is the pipeline amount at Offer stage?"}
+  - question: "Just the completed ones"
+    expect: decline
+    run: live
+    note: "The live pipeline is not published for a closed stage: declined as its twin is, never answered with the unfiltered figure or the Offers still in memory."
+    twin: {question: "What is the live pipeline amount at Completed stage?"}
+
+- id: cv_F05
+  group: F
+  area: memory
+  turns:
+  - {question: "What is the funded balance?", expect: answer, run: code, bank_id: funded_kpi_001}
+  - question: "How many loans?"
+    expect: fresh
+    run: code
+    setup: {memory_token: presented_by_another_user}
+    note: "A memory token belongs to the user it was issued to."
+  - question: "How many loans?"
+    expect: fresh
+    run: code
+    setup: {memory_token: replayed_after_chat_cleared}
+    note: "A cleared conversation's token is not accepted again."
+
+- id: cv_F06
+  group: F
+  area: pipeline
+  turns:
+  - {question: "What is the pipeline amount by broker?", expect: answer, run: live, bank_id: pipeline_007}
+  - question: "Show me the borrowers' names"
+    expect: decline
+    run: live
+    note: "No borrower row or identity is ever returned."
+  - question: "And their addresses?"
+    expect: decline
+    run: live
+    note: "Declined the same way; the decline does not replace the memory."

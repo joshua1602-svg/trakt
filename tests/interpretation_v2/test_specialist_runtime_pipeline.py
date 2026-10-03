@@ -103,6 +103,16 @@ def _funded_plan(**over):
         parse_candidate_intent(body)).plan.to_dict()
 
 
+def _dashboard_tiles():
+    """The Pipeline tab's own snapshot for the fixture extract — the figures an
+    agent answer must equal (the dashboard and the agent use one pipeline)."""
+    from mi_agent_api.pipeline_contract import (compute_pipeline_snapshot,
+                                                 load_prepared_pipeline)
+    frame, report = load_prepared_pipeline(_SOURCE)
+    return compute_pipeline_snapshot(frame, report, {}, client_id=_CLIENT,
+                                     run_id="fixture", source=_SOURCE)
+
+
 # --------------------------------------------------------------------------- #
 # A — current pipeline, the slice 1 shapes
 # --------------------------------------------------------------------------- #
@@ -113,10 +123,12 @@ def test_C1_pipeline_balance_executes_from_the_plan():
     assert pipeline_rt.check_eligibility(plan)[0] is True
     out = pipeline_rt.execute_current(plan, source=_SOURCE)
     assert out.ok, out.detail
-    # The figure is the Pipeline owner's own, read back from the same report.
-    from mi_agent_api.pipeline_contract import load_prepared_pipeline
-    _frame, report = load_prepared_pipeline(_SOURCE)
-    assert out.value == pytest.approx(float(report["total_pipeline_amount"]))
+    # The figure is the Pipeline tab's own amount tile, computed by the same
+    # function on the same file: the LIVE pipeline (owner decision 2026-09-29).
+    tile = _dashboard_tiles()
+    assert out.value == pytest.approx(float(tile["pipelineAmount"]))
+    assert out.receipt["execution_owner"] == pipeline_rt.OWNER_OPEN_TOTALS
+    assert out.receipt["pipeline_scope"]["population"] == "open"
     assert out.receipt["capability"] == "pipeline"
     assert out.receipt["population_base"] == "pipeline"
     assert out.receipt["measure_concept"] == "pipeline_amount"
@@ -128,9 +140,7 @@ def test_C2_pipeline_case_count_executes_from_the_plan():
     plan = _plan(operation="point_in_time", measures=[{"concept": "loan"}])
     out = pipeline_rt.execute_current(plan, source=_SOURCE)
     assert out.ok, out.detail
-    from mi_agent_api.pipeline_contract import load_prepared_pipeline
-    _frame, report = load_prepared_pipeline(_SOURCE)
-    assert out.value == pytest.approx(float(report["row_count"]))
+    assert out.value == pytest.approx(float(_dashboard_tiles()["pipelineRowCount"]))
     assert out.receipt["measure_kind"] == "count"
 
 
@@ -139,10 +149,9 @@ def test_C3_pipeline_by_stage_executes_and_the_receipt_proves_the_axis():
                  dimensions=["pipeline_stage"])
     out = pipeline_rt.execute_current(plan, source=_SOURCE)
     assert out.ok, out.detail
-    from mi_agent_api.pipeline_contract import load_prepared_pipeline
-    _frame, report = load_prepared_pipeline(_SOURCE)
+    # The Pipeline tab's stage breakdown: live stages only.
     assert {c["pipeline_stage"]: c["value"] for c in out.cells} == {
-        str(k): float(v) for k, v in report["stage_counts"].items()}
+        r["stage"]: float(r["caseCount"]) for r in _dashboard_tiles()["stageBreakdown"]}
     assert out.receipt["group_field_keys"] == ["pipeline_stage"]
     assert out.receipt["result_shape"] == "grouped"
 
@@ -161,7 +170,11 @@ def test_T1_pipeline_evolution_by_stage_uses_the_weekly_owner():
     assert out.ok, out.detail
     from mi_agent_api import evolution as evolution_mod
     series = evolution_mod.pipeline_evolution(_HISTORY_ROOT, _CLIENT, None)
-    assert len(out.cells) == len(series["byStage"])
+    from mi_agent_api.pipeline_prep import OPEN_STAGES
+    live = [r for r in series["byStage"] if r["stage"].upper() in OPEN_STAGES]
+    assert len(live) < len(series["byStage"]), "fixture must carry closed stages"
+    assert len(out.cells) == len(live)
+    assert {c["pipeline_stage"] for c in out.cells} <= set(OPEN_STAGES)
     assert out.receipt["group_field_keys"] == ["pipeline_stage"]
     assert out.receipt["grain"] == "weekly"
     assert out.receipt["temporal_basis"] == "governed_weekly_pipeline_extracts"
@@ -345,8 +358,9 @@ def test_the_pipeline_runtime_never_reads_the_question():
 
 
 def test_unsupported_pipeline_shapes_refuse_rather_than_approximate():
-    # a filtered pipeline question
-    filtered = _plan(filters=[{"concept": "erm_product_type", "comparator": "eq",
+    # a filtered pipeline question that is not one value of a published
+    # breakdown (a negation narrows the figure; the tab publishes no such one)
+    filtered = _plan(filters=[{"concept": "erm_product_type", "comparator": "ne",
                                "value": "drawdown"}])
     assert pipeline_rt.check_eligibility(filtered)[1] == (
         pipeline_rt.FILTERS_NOT_SUPPORTED)
@@ -427,10 +441,11 @@ def test_serve_dispatches_a_pipeline_plan_to_the_pipeline_runtime(monkeypatch):
     assert receipt["capability"] == "pipeline"
     assert receipt["population_base"] == "pipeline"
 
-    from mi_agent_api.pipeline_contract import load_prepared_pipeline
-    _frame, report = load_prepared_pipeline(_SOURCE)
     figure = payload["artifacts"][0]["kpis"][0]["rawValue"]
-    assert figure == pytest.approx(float(report["total_pipeline_amount"]))
+    assert figure == pytest.approx(float(_dashboard_tiles()["pipelineAmount"]))
+    # the answer says which pipeline it is, and what it leaves out
+    assert payload["answer"].startswith("The live pipeline amount is ")
+    assert "Live pipeline (KFI, Application, Offer)" in payload["answer"]
 
     # and the served envelope reconciles through the governed coverage owner
     from mi_agent_api.mi_service import _governed_plan_coverage
@@ -500,8 +515,11 @@ def _legacy_amount_by_stage():
     """
     from mi_agent.mi_agent_workflow import run_mi_agent_query
     frame, _ = _pipeline_mod().load_prepared_pipeline(_EXTRACT)
+    # `dataset="pipeline"` is what production passes (mi_service: dataset=view),
+    # and it is what makes the legacy answer the live pipeline too.
     out = run_mi_agent_query("Show pipeline amount by stage.",
-                             data=frame, semantics=_semantics())
+                             data=frame, semantics=_semantics(),
+                             dataset="pipeline")
     assert out["ok"], out.get("error")
     spec, result = out["spec"], out["query_result"]
     assert spec["dimension"] == "pipeline_stage", spec
@@ -525,17 +543,15 @@ def test_a_current_pipeline_amount_by_stage_matches_the_accepted_answer():
 
 
 def test_the_grouped_amounts_reconcile_to_the_pipeline_owners_own_total():
-    # The stage figures and `total_pipeline_amount` must be the SAME definition
-    # of "the pipeline amount", not two that happen to agree. They share a field
-    # by construction: `pipeline_prep.PIPELINE_AMOUNT_FIELD` is the column the
-    # report sums, and the measure binding names that constant.
-    _frame, report = _pipeline_mod().load_prepared_pipeline(_EXTRACT)
+    # The stage figures and the Pipeline tab's amount tile must be the SAME
+    # definition of "the pipeline amount", not two that happen to agree: the
+    # live pipeline, summed over `pipeline_prep.PIPELINE_AMOUNT_FIELD`.
     outcome = pipeline_rt.execute_current(
         _amount_by_stage_plan(), source={"source_file": _EXTRACT},
         semantics=_semantics())
     assert outcome.ok, f"{outcome.reason}: {outcome.detail}"
     total = round(sum(c["value"] for c in outcome.cells), 2)
-    assert total == report["total_pipeline_amount"]
+    assert total == _dashboard_tiles()["pipelineAmount"]
 
 
 def test_the_receipt_proves_the_measure_the_axis_and_the_owner():
@@ -572,8 +588,8 @@ def test_a_grouped_amount_without_a_field_registry_refuses_rather_than_guesses()
 
 
 def test_counts_by_stage_are_unchanged_by_the_amount_wiring():
-    # The count path still reads the Pipeline owner's own `stage_counts`, and is
-    # deliberately untouched here.
+    # The count path still reads the Pipeline owner's own `stage_counts`, for
+    # the live stages (owner decision 2026-09-29).
     plan = _plan(operation="breakdown",
                  measures=[{"concept": "pipeline_case_count"}],
                  dimensions=["pipeline_stage"])
@@ -581,8 +597,10 @@ def test_counts_by_stage_are_unchanged_by_the_amount_wiring():
                                           semantics=_semantics())
     assert outcome.ok, f"{outcome.reason}: {outcome.detail}"
     _frame, report = _pipeline_mod().load_prepared_pipeline(_EXTRACT)
+    from mi_agent_api.pipeline_prep import OPEN_STAGES
     served = {c["pipeline_stage"]: c["value"] for c in outcome.cells}
-    assert served == {str(k): float(v) for k, v in report["stage_counts"].items()}
+    assert served == {str(k): float(v) for k, v in report["stage_counts"].items()
+                      if str(k).upper() in OPEN_STAGES}
     assert outcome.receipt["execution_owner"] == pipeline_rt.OWNER_REPORT
 
 

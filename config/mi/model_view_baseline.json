@@ -1,0 +1,68 @@
+{
+  "what_this_is": "The signed-off build every later change is measured against (owner, 2026-10-02: 'start with the guard and baseline'). A change that alters the model's view fails test_the_models_view_is_the_baselines until the sign-off set is re-run on it and matches or beats the results below; only then is this file moved to the new build.",
+  "commit": "91c550c4107e73e22edd196046378278838550d1",
+  "deployed": "2026-10-02T13:57Z, deploy run 37015696086",
+  "vocabulary": "2.23.0",
+  "model": "claude-opus-5-5",
+  "model_view_fingerprint": "2affd8d99ea9cf2cfde57bea127fb835faac72d976ceb1728ce6c62f873ba207",
+  "run": {
+    "selection": "run_production_bank.sh <principal> signoff",
+    "started": "2026-10-02T14:01:27Z",
+    "files": "/home/qb_signoff_20261002T140127Z.{log,jsonl}",
+    "questions": 216
+  },
+  "results": {
+    "bank": {
+      "asked": 135,
+      "answered": 116
+    },
+    "must_answer": {
+      "questions": 88,
+      "answered": 88
+    },
+    "nice_to_have": {
+      "questions": 31,
+      "answered": 25
+    },
+    "fine_to_decline": {
+      "questions": 16,
+      "declined": 13,
+      "answered": 3
+    },
+    "wrong_answers": 0,
+    "variants": {
+      "asked": 81,
+      "same": 78,
+      "declined_as_bank": 1,
+      "different_reading": 2
+    },
+    "median_seconds": 8.8
+  },
+  "promoted": {
+    "what_this_is": "How this baseline replaced the one before it (design §40.3): recorded as the named candidate, deployed, and measured by the sign-off set before it was relied on.",
+    "change": "Claude Opus 5.5: model claude-opus-5-5; effort low (Opus 5.5 always thinks; the signed-off build ran with the intent tool forced, so no thinking); the intent tool asked for in the prompt, not forced (Opus 5.5 rejects a forced call), and asked once more if a response has no call; server-side fallback on a safety-classifier decline; max_tokens 16000 for the thinking. The prompts, the catalogue and the tool schema are unchanged.",
+    "compared_with_previous": "Every must-answer and held-out must-answer answer (163) word for word the previous baseline's; the variants scored the same (78 / 1 / 2, the two different readings the ones accepted at the previous sign-off); 14 differences, all fine-to-decline or nice-to-have: forecast_015 and forecast_016 asked back rather than answered, the 12-week completion run rate answered (§40.2), and the rest declines or ask-backs in other words. Median 8.8s a question (9.1s).",
+    "contract_fixes_measured_with_it": "§40.1 named periods and grouped distribution; §40.2 the completion run-rate on the pipeline base"
+  },
+  "previous": {
+    "what_this_is": "The baseline this one replaced. Claude Opus 5 stays supported (retirement not before 2027-07-24); returning to it is a change of view like any other, measured the same way.",
+    "commit": "42fc3768f1283b560c5ddb2b7322140fb4b73d86",
+    "model": "claude-opus-5",
+    "model_view_fingerprint": "b545927775e09aa8ae4515325a12702ccc9f97a9580fe6d73c3f7ed6714e0f15",
+    "run_started": "2026-10-01T21:02:55Z",
+    "must_answer": {
+      "questions": 88,
+      "answered": 88
+    },
+    "wrong_answers": 0,
+    "median_seconds": 9.1
+  },
+  "conversation_reader": {
+    "what_this_is": "The conversation reader's view (design §39): everything it is shown for every message. It turns a follow-up or a reply into one complete question for the interpreter above, whose view is unchanged. Pinned like the interpreter's: a change to it fails test_the_models_view_is_the_baselines until the conversation bank is re-run on it and matches or beats the results recorded here.",
+    "fingerprint": "24933398fed82f748426db5e6076a5eba37adf96903cb044532716f4dc4b52a5",
+    "measured_by": null,
+    "results": null,
+    "model": "claude-opus-5-5",
+    "rules": "1.1.0 (§39.1): a new grouping replaces the earlier one however the message opens, and is added only when the message says so (D25); a change taken back is the earlier question without it; the reader asks only what a message refers to, never what it means"
+  }
+}

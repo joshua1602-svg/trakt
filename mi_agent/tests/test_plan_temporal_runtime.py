@@ -127,7 +127,9 @@ def test_a_temporal_plan_is_still_refused_by_slice_one(compiler):
      adapter.CAPABILITY_NOT_GENERIC),
     # ...and the operation guard stays covered by a generic operation that is not
     # temporal and is not change-oriented, so it reaches the perimeter as before.
-    (dict(operation="distribution", dimensions=["ltv_bucket"],
+    # (`distribution` over a grouping served here until design §40 made it a
+    # breakdown, which is temporal; `rank` is the operation that is not.)
+    (dict(operation="rank", dimensions=["ltv_bucket"],
           time={"form": "relative_pair", "grain": "monthly", "periods_back": 1}),
      temporal.OPERATION_NOT_TEMPORAL),
     # a series over a period PAIR states two windows at once

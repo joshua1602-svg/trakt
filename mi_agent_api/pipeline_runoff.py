@@ -15,8 +15,16 @@ Offer->Completion 70%, 18-week offer validity, timing curves by week). With
 case-level weekly snapshots they can be MEASURED instead, which is what this
 module does:
 
-  * the validity window of a stage is the ``window_quantile`` (95th
-    percentile) of the days cases that advanced spent in it;
+  * the validity window of a stage is the day by which ``window_quantile``
+    (95%) of the cases that will ever advance from it have advanced —
+    measured with the cases still waiting counted (a competing-risks,
+    Aalen-Johansen estimate, censored at the last snapshot and left-truncated
+    at the first), so slow cases still open do not shorten it;
+  * a case still sitting in a stage past that window has LAPSED: it counts as
+    fallen out of the stage's pull-through (owner decision D26), as it
+    already carries no forecast weight (D17) — so a stage whose extracts
+    never record a withdrawal (KFIs that do not proceed simply stay open) is
+    not reported as converting every case that leaves it;
   * weekly advance and fall-out hazards by weeks-in-stage are estimated from
     every case observed in the stage, with cases still open treated as
     censored and cases already in the stage when observation began entering
@@ -36,6 +44,7 @@ the forward forecast — the workbook treats the KFI stage as reference only.
 
 from __future__ import annotations
 
+import bisect
 import math
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -82,6 +91,49 @@ def _quantile(values: List[int], q: float) -> Optional[int]:
     return int(vs[idx])
 
 
+def _advance_window(sample: List[Tuple[int, int, str]], q: float
+                    ) -> Optional[int]:
+    """The day by which ``q`` of the eventual advances from a stage happen.
+
+    The cumulative incidence of advancing, with falling out as the competing
+    outcome (the Aalen-Johansen estimator): cases still open at the last
+    snapshot are censored, and cases already in the stage at the first enter
+    the risk set late (left truncation). The cases still waiting are counted
+    in every risk set they belong to, which a percentile of the completed
+    advances alone leaves out — that would shorten the window by exactly the
+    slow cases still in progress. ``sample`` holds (entry day, exit day,
+    outcome) per case, days counted from the case's entry to the stage.
+    """
+    events = sorted({x for _, x, o in sample if o in ("advance", "fallout")})
+    if not events:
+        return None
+    entries = sorted(e for e, _, _ in sample)
+    exits = sorted(x for _, x, _ in sample)
+    advance_at: Dict[int, int] = {}
+    leave_at: Dict[int, int] = {}
+    for _, x, o in sample:
+        if o in ("advance", "fallout"):
+            leave_at[x] = leave_at.get(x, 0) + 1
+            if o == "advance":
+                advance_at[x] = advance_at.get(x, 0) + 1
+    survive, incidence = 1.0, 0.0
+    curve: List[Tuple[int, float]] = []
+    for t in events:
+        at_risk = bisect.bisect_right(entries, t) - bisect.bisect_left(exits, t)
+        if at_risk <= 0:
+            continue
+        incidence += survive * advance_at.get(t, 0) / at_risk
+        survive *= max(0.0, 1.0 - leave_at[t] / at_risk)
+        curve.append((t, incidence))
+    total = curve[-1][1] if curve else 0.0
+    if total <= 0:
+        return None
+    for t, cumulative in curve:
+        if cumulative >= q * total - 1e-12:
+            return int(t)
+    return int(curve[-1][0])
+
+
 def _stage_exit(case: Dict[str, Any], stage: str
                 ) -> Tuple[Optional[str], Optional[pd.Timestamp]]:
     """``(outcome, date)`` for a case leaving ``stage``: ``advance``,
@@ -119,8 +171,6 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
     """
     cfg = dict(DEFAULTS)
     cfg.update({k: v for k, v in (settings or {}).items() if v is not None})
-    fallback = dict(DEFAULTS["fallback_validity_days"])
-    fallback.update(cfg.get("fallback_validity_days") or {})
     min_events = int(cfg["min_events"])
     q = float(cfg["window_quantile"])
     max_weeks = int(cfg["max_weeks"])
@@ -129,11 +179,17 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
 
     stages: Dict[str, Any] = {}
     for stage in STAGES:
-        dwell_adv: List[int] = []           # measured window evidence
-        at_risk = [0] * (max_weeks + 1)
-        adv_ev = [0] * (max_weeks + 1)
-        out_ev = [0] * (max_weeks + 1)
-        advanced = fell_out = censored = 0
+        # THE SAMPLE: exits observed inside the snapshot window, and cases
+        # still open at its end; entry into the risk set is delayed to the
+        # first snapshot for cases already in the stage then. One sample
+        # serves the window, the hazards and the pull-through counts.
+        sample: List[Tuple[int, int, str]] = []     # (entry, exit, outcome)
+        # THE WINDOW'S SAMPLE adds every advance whose dates the record
+        # carries, however long ago: its time in the stage is known exactly,
+        # so it is evidence of how long advancing takes even when it happened
+        # before the first snapshot. Falling out and still waiting are only
+        # known from the snapshots, so they enter as the sample above does.
+        window_sample: List[Tuple[int, int, str]] = []
         for case in cases:
             entry = _ts(case.get(_ENTRY_FIELD[stage])) or _ts(
                 case.get("first_seen", {}).get(stage))
@@ -143,12 +199,9 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
             if outcome is None:
                 continue
             if outcome == "advance":
-                d = _days(entry, when)
-                if d is not None and d >= 0:
-                    dwell_adv.append(d)
-            # Hazard sample: exits observed inside the snapshot window, and
-            # cases still open at its end; entry into the risk set is delayed
-            # to the first snapshot for cases already in the stage then.
+                dwell = _days(entry, when)
+                if dwell is not None and dwell >= 0:
+                    window_sample.append((0, dwell, "advance"))
             if outcome == "open":
                 exit_day = _days(entry, obs_end)
             else:
@@ -161,6 +214,20 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
             late = max(0, _days(entry, obs_start) or 0) if obs_start is not None else 0
             if late > exit_day:
                 continue
+            sample.append((late, exit_day, outcome))
+            if outcome != "advance":
+                window_sample.append((late, exit_day, outcome))
+
+        advance_events = sum(1 for _, _, o in window_sample if o == "advance")
+        measured_window = _advance_window(window_sample, q)
+        window_measured = advance_events >= min_events and measured_window is not None
+        window = int(measured_window) if window_measured else None
+
+        at_risk = [0] * (max_weeks + 1)
+        adv_ev = [0] * (max_weeks + 1)
+        out_ev = [0] * (max_weeks + 1)
+        advanced = fell_out = lapsed = censored = 0
+        for late, exit_day, outcome in sample:
             k_in, k_out = late // 7, min(exit_day // 7, max_weeks)
             for k in range(k_in, k_out + 1):
                 at_risk[k] += 1
@@ -170,29 +237,52 @@ def fit_runoff(cases: Iterable[Dict[str, Any]], window_start: Optional[str],
             elif outcome == "fallout":
                 out_ev[k_out] += 1
                 fell_out += 1
+            elif window is not None and exit_day > window:
+                # D26: still open past the stage's measured window — lapsed,
+                # so fallen out of the pull-through. The hazards keep it as
+                # censored: its outcome is not observed, only overdue.
+                lapsed += 1
             else:
                 censored += 1
-        measured_window = _quantile(dwell_adv, q)
-        window_measured = len(dwell_adv) >= min_events and measured_window is not None
         sufficient = advanced >= min_events
+        exits = advanced + fell_out + lapsed
+        hazard_advance = [round(adv_ev[k] / at_risk[k], 6) if at_risk[k] else 0.0
+                          for k in range(max_weeks + 1)]
+        hazard_fallout = [round(out_ev[k] / at_risk[k], 6) if at_risk[k] else 0.0
+                          for k in range(max_weeks + 1)]
+        # D27: THE PULL-THROUGH IS THE MODEL'S OWN — the chance a case new to
+        # the stage advances, from the weekly hazards: a case still waiting is
+        # counted as waiting, a case already in the stage at the first extract
+        # enters late, and a case past the window (lapsed, D26) has stopped
+        # advancing. A count ratio leaves the waiting out and keeps the old
+        # cases that never advanced while dropping the old ones that did, so
+        # it reads low. This is the probability the forecast gives such a case.
+        p_advance, _ = advance_from({"hazardAdvance": hazard_advance,
+                                     "hazardFallout": hazard_fallout}, 0)
         stages[stage] = {
-            "windowDays": int(measured_window if window_measured else fallback[stage]),
-            "windowBasis": "measured" if window_measured else "fallback",
+            # D21 (owner decision 2026-09-30): measured, or none — no
+            # configured window stands in for history that is not there.
+            "windowDays": window,
+            "windowBasis": "measured" if window_measured else "insufficient_history",
             "windowQuantile": q,
-            "windowEvidence": len(dwell_adv),
-            "fallbackWindowDays": int(fallback[stage]),
+            "windowEvidence": advance_events,
             "sufficient": bool(sufficient),
             "advanced": advanced,
             "fellOut": fell_out,
+            # D26: how many of the fall-outs are lapsed rather than recorded
+            # as withdrawn; None while the window is unmeasured, when a case
+            # open past it cannot be told from one still within it.
+            "lapsed": lapsed if window is not None else None,
             "stillOpen": censored,
-            "pullThrough": (round(advanced / (advanced + fell_out), 4)
-                            if advanced + fell_out else None),
-            "hazardAdvance": [round(adv_ev[k] / at_risk[k], 6) if at_risk[k] else 0.0
-                              for k in range(max_weeks + 1)],
-            "hazardFallout": [round(out_ev[k] / at_risk[k], 6) if at_risk[k] else 0.0
-                              for k in range(max_weeks + 1)],
+            "pullThrough": (round(p_advance, 4) if exits else None),
+            "hazardAdvance": hazard_advance,
+            "hazardFallout": hazard_fallout,
             "casesObserved": max(at_risk) if at_risk else 0,
         }
+    for stage in STAGES:
+        rate, enough = completion_from_entry(stages, stage)
+        stages[stage]["completionFromEntry"] = rate
+        stages[stage]["completionFromEntrySufficient"] = enough
     offer = stages["OFFER"]
     app = stages["APPLICATION"]
     return {
@@ -219,10 +309,31 @@ def evidence(model: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "offerToCompletionPullThrough": m.get("offerToCompletionPullThrough"),
         "stages": {
             st: {k: sm.get(k) for k in ("windowDays", "windowBasis", "windowQuantile",
-                                        "fallbackWindowDays", "sufficient", "advanced",
-                                        "fellOut", "stillOpen", "pullThrough")}
+                                        "sufficient", "advanced",
+                                        "fellOut", "lapsed", "stillOpen",
+                                        "pullThrough")}
             for st, sm in (m.get("stages") or {}).items()},
     }
+
+
+def completion_from_entry(stages: Dict[str, Any], stage: str
+                          ) -> Tuple[Optional[float], bool]:
+    """D27: `(rate, sufficient)` — the chance a case NEW to `stage` completes:
+    each step's measured pull-through, multiplied along the way to
+    completion. It is the probability the forecast gives a case that has just
+    entered the stage (`complete_from` at no time in stage). Sufficient only
+    when every step on the way is measured on enough history — otherwise it
+    is stated as provisional, as a step's own pull-through is; None when a
+    step has no pull-through at all."""
+    p, sufficient = 1.0, True
+    while stage != "COMPLETED":
+        sm = stages.get(stage) or {}
+        if sm.get("pullThrough") is None:
+            return None, False
+        p *= float(sm["pullThrough"])
+        sufficient = sufficient and bool(sm.get("sufficient"))
+        stage = _NEXT[stage]
+    return round(p, 4), sufficient
 
 
 def advance_from(stage_model: Dict[str, Any], dwell_days: float

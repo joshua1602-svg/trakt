@@ -72,6 +72,12 @@ NEW_ARRIVAL = "new_arrival"
 STAYER = "stayer"
 DEPARTURE = "departure"
 RECONCILIATION = "reconciliation"
+#: WHAT MOVED IN THE WHOLE PIPELINE between the latest pair of extracts: every
+#: case classified once as arrived, moved stage, left or stayed — the payload's
+#: own `event_totals` and per-stage reconciliation. Reached from a governed plan
+#: (the `material_summary` change form, vocabulary 2.17.0); the sentence reader
+#: below never produces it.
+SUMMARY = "summary"
 
 #: What was asked FOR: a case count, a monetary amount, or the amount amendment
 #: on cases that did not move.
@@ -346,7 +352,7 @@ def _window(payload: Dict[str, Any]) -> str:
 
 
 def _cases(n: int) -> str:
-    return "%d case%s" % (int(n), "" if int(n) == 1 else "s")
+    return "%s case%s" % (f"{int(n):,}", "" if int(n) == 1 else "s")
 
 
 def _transition_row(payload: Dict[str, Any], src: str, dst: str
@@ -519,7 +525,93 @@ def compose(reading: StageMovement, payload: Dict[str, Any], *,
                money(row["closing_amount"])))
         return answer, [dict(row)], None
 
+    if reading.subtype == SUMMARY:
+        return _summary(payload, money=money)
+
     return None, [], "This stage-movement question could not be bound."
+
+
+def _gap_days(prior: Any, latest: Any) -> Optional[int]:
+    from datetime import date
+    try:
+        return (date.fromisoformat(str(latest)[:10])
+                - date.fromisoformat(str(prior)[:10])).days
+    except (TypeError, ValueError):
+        return None
+
+
+def _summary(payload: Dict[str, Any], *, money: Any
+             ) -> Tuple[Optional[str], List[Dict[str, Any]], Optional[str]]:
+    """What moved in the whole pipeline between the latest pair of extracts.
+
+    EVERY FIGURE IS A KEY LOOKUP or a sum of the payload's own per-stage rows:
+    the four event classes from ``event_totals``, the opening and closing stock
+    from the per-stage reconciliation, and the owner's own residuals, stated
+    when they are not zero rather than hidden.
+    """
+    from . import movement_detail as detail
+
+    totals = payload.get("event_totals") or {}
+    reconciliation = payload.get("reconciliation") or {}
+    by_stage = [dict(r) for r in reconciliation.get("by_stage") or []]
+    if not totals or not by_stage:
+        return None, [], ("The governed stage-transition analysis carries no "
+                          "movement for this window.")
+
+    def event(cls: str) -> Dict[str, Any]:
+        row = totals.get(cls) or {}
+        return {"n": int(row.get("case_count") or 0),
+                "prior": float(row.get("prior_amount") or 0.0),
+                "latest": float(row.get("latest_amount") or 0.0)}
+
+    arrived = event(detail.EVENT_NEW_ARRIVAL)
+    moved = event(detail.EVENT_STAGE_TRANSITION)
+    left = event(detail.EVENT_DEPARTURE)
+    stayed = event(detail.EVENT_STAYER)
+    opening = sum(int(r.get("opening_case_count") or 0) for r in by_stage)
+    closing = sum(int(r.get("closing_case_count") or 0) for r in by_stage)
+    opening_amount = sum(float(r.get("opening_amount") or 0.0) for r in by_stage)
+    closing_amount = sum(float(r.get("closing_amount") or 0.0) for r in by_stage)
+
+    prior, latest = payload.get("comparison_date"), payload.get("as_of_date")
+    gap = _gap_days(prior, latest)
+    window = (("Between the previous extract (%s) and the latest (%s)%s"
+               % (prior, latest, ", %d days apart" % gap if gap is not None
+                  else "")) if prior and latest
+              else "In the latest comparison window")
+    change = stayed["latest"] - stayed["prior"]
+    stayed_value = ("their value unchanged" if money(abs(change)) == money(0)
+                    else "their value %s by %s" % ("up" if change > 0 else "down",
+                                                   money(abs(change))))
+    delta = closing - opening
+    amount_delta = closing_amount - opening_amount
+    amount_moved = ("unchanged" if money(abs(amount_delta)) == money(0)
+                    else "%s %s" % ("up" if amount_delta > 0 else "down",
+                                    money(abs(amount_delta))))
+    answer = (
+        "%s, the cases in the pipeline extracts went from %s to %s (%s%s) "
+        "and their amount from %s to %s (%s). "
+        "%s arrived, carrying %s; %s moved to another stage, carrying %s; "
+        "%s left the extracts, carrying %s when last seen; and %s stayed at "
+        "their stage, %s."
+        % (window, _cases(opening), _cases(closing), "+" if delta >= 0 else "",
+           f"{delta:,}", money(opening_amount), money(closing_amount),
+           amount_moved,
+           _cases(arrived["n"]), money(arrived["latest"]),
+           _cases(moved["n"]), money(moved["latest"]),
+           _cases(left["n"]), money(left["prior"]),
+           _cases(stayed["n"]), stayed_value))
+    count_residual = reconciliation.get("count_reconciliation_residual") or 0
+    amount_residual = reconciliation.get("amount_reconciliation_residual") or 0
+    tolerance = reconciliation.get("amount_tolerance") or 0.0
+    if count_residual or abs(float(amount_residual)) > float(tolerance):
+        answer += (" The owner's reconciliation leaves a residual of %s and %s, "
+                   "stated rather than hidden."
+                   % (_cases(int(count_residual)), money(amount_residual)))
+    else:
+        answer += (" Every case is counted once, and the movement reconciles "
+                   "to both extracts.")
+    return answer, by_stage, None
 
 
 # --------------------------------------------------------------------------- #

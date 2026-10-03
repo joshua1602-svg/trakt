@@ -41,6 +41,10 @@ from .pipeline_prep import (
     forecast_readiness,
     open_pipeline,
     prepare_pipeline_mi_dataset,
+    INSUFFICIENT_HISTORY as _PREP_INSUFFICIENT_HISTORY,
+    weighted_sum as _prep_weighted_sum,
+    weighting_gap as _prep_weighting_gap,
+    weighting_gap_reason as _prep_weighting_gap_reason,
 )
 from . import pipeline_history as _history
 
@@ -581,9 +585,15 @@ def _extract_set_identity(extracts: List[Dict[str, Any]]) -> Optional[List[Any]]
 
 
 def build_pipeline_history(root: str | os.PathLike,
-                           client_id: str) -> Dict[str, Any]:
+                           client_id: str, *,
+                           as_of: Optional[str] = None) -> Dict[str, Any]:
     """Build the historical completion model from a client's UNIQUE weekly pipeline
     extracts, annotated with the dedup provenance (scanned vs used vs excluded).
+
+    ``as_of`` builds it from the extracts dated on or before that date only —
+    the history as it stood then (a forecast for an earlier run measures its
+    run-rate to that run's last extract, D22). The extract set is the cache
+    identity, so each cut is memoised on its own.
 
     Memoised on the immutable identity of the ordered extract set (path + date +
     ``mtime_ns:size`` per file) plus the tenant and the methodology version. The
@@ -594,6 +604,10 @@ def build_pipeline_history(root: str | os.PathLike,
     from .pipeline_history import build_historical_completion_model
     from .pipeline_prep import runoff_settings as _prep_runoff_settings
     inv = weekly_extract_inventory(root, client_id)
+    if as_of:
+        inv = dict(inv, extracts=[e for e in inv["extracts"]
+                                  if str(e.get("pipeline_extract_date") or "")
+                                  <= str(as_of)])
     key = _serving_cache.key_for(
         tenant=_serving_cache.resolved_tenant(),
         # The client is the scope component here: a model is per-client, and a
@@ -761,7 +775,7 @@ def compute_prior_week_aggregates(
         return None
     # Same open-pipeline population as the current snapshot's tiles, so the
     # week-on-week delta is like-for-like.
-    totals = _open_totals(df)
+    totals = open_totals(df)
     return {
         "snapshotDate": extract_date or prior.get("pipeline_source_folder_date"),
         "sourceFile": Path(prior.get("source_file", "")).name or None,
@@ -797,15 +811,29 @@ def build_pipeline_dataset_contract(
 #: Probability sources that carry forward expected-funding weight. Settled
 #: (completed / withdrawn), lapsed and not-forecast cases have none, so they
 #: have no expected completion month to report.
-_FORECAST_SOURCES = ("row_level", "historical_runoff", "historical_stage_rate",
-                     "configured_stage_rate")
+_FORECAST_SOURCES = ("row_level", "historical_runoff", "historical_stage_rate")
 
 
 def forecast_rows(df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
-    """The cases that carry forecast weight (see ``_FORECAST_SOURCES``)."""
+    """The forecast population: the cases that carry forecast weight (see
+    ``_FORECAST_SOURCES``) and those in a weighted stage the history cannot
+    yet rate (D21) — counted, with their weight, and anything built on it,
+    not stated. Settled, not-forecast and lapsed cases are outside it."""
     if df is None or "completion_probability_source" not in df.columns:
         return df
-    return df[df["completion_probability_source"].isin(_FORECAST_SOURCES)]
+    src = df["completion_probability_source"].astype(str)
+    return df[src.isin(_FORECAST_SOURCES)
+              | src.str.startswith(_PREP_INSUFFICIENT_HISTORY)]
+
+
+def _undetermined_lapse(frame: pd.DataFrame) -> bool:
+    """Does `frame` hold a case whose stage's validity window the history
+    cannot yet measure — so whether it has lapsed is unknown (D21)?"""
+    if "completion_probability_source" not in frame.columns:
+        return False
+    src = frame["completion_probability_source"].astype(str)
+    return bool((src.str.startswith(_PREP_INSUFFICIENT_HISTORY)
+                 & src.str.endswith("_window")).any())
 
 
 def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -821,14 +849,18 @@ def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
         month = str(month)
         if not month or month in ("nan", "NaT", "None"):
             continue
-        weighted = (coerce_numeric(sub["weighted_expected_funded_amount"]).sum()
-                    if "weighted_expected_funded_amount" in sub.columns else None)
+        # D21: the weighted amount is None where any case in the month has no
+        # measured rate; the count and face value too where a case's lapse is
+        # undetermined (its stage's window unmeasured) — a lapsed case is not
+        # expected to complete (D17), and nothing here can tell.
+        weighted = _prep_weighted_sum(sub)
+        unknown = _undetermined_lapse(sub)
         rows.append({
             "month": month,
-            "caseCount": int(len(sub)),
-            "expectedFundedAmount": round(float(
+            "caseCount": None if unknown else int(len(sub)),
+            "expectedFundedAmount": (None if unknown else round(float(
                 coerce_numeric(sub["expected_funded_amount"]).sum()
-                if "expected_funded_amount" in sub.columns else 0.0), 2),
+                if "expected_funded_amount" in sub.columns else 0.0), 2)),
             "weightedExpectedFundedAmount": (round(float(weighted), 2)
                                              if weighted is not None else None),
         })
@@ -849,35 +881,62 @@ def _expected_completion_summary(breakdown: List[Dict[str, Any]],
     as_of_month = (as_of or "")[:7]
     overdue_count = current_count = 0
     overdue_weighted = current_weighted = 0.0
+    overdue_amount = current_amount = 0.0
     next_month: Optional[str] = None
     next_count = 0
-    next_weighted = 0.0
+    next_weighted = next_amount = 0.0
 
     def _w(row: Dict[str, Any]) -> float:
-        return float(row.get("weightedExpectedFundedAmount") or 0.0)
+        # D21: a month whose weighted amount is not stated makes every bucket
+        # it falls in unstated (NaN propagates to None below), never 0.
+        value = row.get("weightedExpectedFundedAmount")
+        return float("nan") if value is None else float(value)
+
+    def _stated(total: float) -> Optional[float]:
+        return None if total != total else round(total, 2)
+
+    def _a(row: Dict[str, Any]) -> float:
+        value = row.get("expectedFundedAmount")
+        return float("nan") if value is None else float(value)
+
+    def _n(row: Dict[str, Any]) -> float:
+        value = row.get("caseCount")
+        return float("nan") if value is None else float(value)
+
+    def _count(total: float) -> Optional[int]:
+        return None if total != total else int(total)
 
     for row in breakdown:  # ascending by month
         month = row["month"]
         if as_of_month and month < as_of_month:
-            overdue_count += row["caseCount"]
+            overdue_count += _n(row)
             overdue_weighted += _w(row)
+            overdue_amount += _a(row)
         elif as_of_month and month == as_of_month:
-            current_count += row["caseCount"]
+            current_count += _n(row)
             current_weighted += _w(row)
+            current_amount += _a(row)
         else:  # future (or no as-of month known)
             if next_month is None:
                 next_month = month
-                next_count = row["caseCount"]
+                next_count = _n(row)
                 next_weighted = _w(row)
+                next_amount = _a(row)
     return {
         "asOfMonth": as_of_month or None,
-        "overdueExpectedCompletionCount": overdue_count,
-        "overdueExpectedCompletionWeightedAmount": round(overdue_weighted, 2),
-        "currentMonthExpectedCompletionCount": current_count,
-        "currentMonthExpectedCompletionWeightedAmount": round(current_weighted, 2),
+        "overdueExpectedCompletionCount": _count(overdue_count),
+        "overdueExpectedCompletionWeightedAmount": _stated(overdue_weighted),
+        # The amount (the expected funded amount, which for a pipeline case is
+        # its loan amount) beside the count and the weighted value, so "how
+        # much pipeline is overdue" has the tab's own figure to read.
+        "overdueExpectedCompletionAmount": _stated(overdue_amount),
+        "currentMonthExpectedCompletionCount": _count(current_count),
+        "currentMonthExpectedCompletionWeightedAmount": _stated(current_weighted),
+        "currentMonthExpectedCompletionAmount": _stated(current_amount),
         "nextExpectedCompletionMonth": next_month,
-        "nextExpectedCompletionCount": next_count,
-        "nextExpectedCompletionWeightedAmount": round(next_weighted, 2),
+        "nextExpectedCompletionCount": _count(next_count),
+        "nextExpectedCompletionWeightedAmount": _stated(next_weighted),
+        "nextExpectedCompletionAmount": _stated(next_amount),
     }
 
 
@@ -893,8 +952,8 @@ def _dimension_breakdown(df: pd.DataFrame, field: str,
             continue
         amount = (coerce_numeric(sub["current_outstanding_balance"]).sum()
                   if "current_outstanding_balance" in sub.columns else 0.0)
-        weighted = (coerce_numeric(sub["weighted_expected_funded_amount"]).sum()
-                    if "weighted_expected_funded_amount" in sub.columns else None)
+        # D21: None where any case in the group has no measured rate.
+        weighted = _prep_weighted_sum(sub)
         rows.append({
             key_name: str(key),
             "caseCount": int(len(sub)),
@@ -982,6 +1041,53 @@ def _stage_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
+#: The extract's own region column, and the governed reporting region the
+#: preparation layer stamps beside it (``pipeline_prep._apply_region_taxonomy``).
+RAW_REGION_FIELD = "geographic_region_obligor"
+REPORTING_REGION_FIELD = "canonical_region_reporting"
+
+
+def region_breakdown_field(df: pd.DataFrame) -> str:
+    """The column the Pipeline tab's region breakdown groups by.
+
+    The reporting taxonomy wherever the preparation layer resolved it; the raw
+    column only where no taxonomy is configured or none of the extract's values
+    resolved — the same fallback the funded book's ``region_series`` makes.
+    """
+    if (REPORTING_REGION_FIELD in df.columns
+            and df[REPORTING_REGION_FIELD].notna().any()):
+        return REPORTING_REGION_FIELD
+    return RAW_REGION_FIELD
+
+
+def region_basis(df: pd.DataFrame, field: str,
+                 report: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Which region the breakdown is, and the live cases it cannot place.
+
+    A case whose extract region has no governed mapping keeps no reporting
+    region; it is left out of the breakdown and counted here, with the raw
+    values, so the chart and an agent answer can both say so.
+    """
+    harmonisation = (report or {}).get("region_harmonisation") or {}
+    basis: Dict[str, Any] = {
+        "field": field,
+        "taxonomy": (harmonisation.get("reporting_taxonomy")
+                     if field == REPORTING_REGION_FIELD else None),
+        "unmappedCaseCount": 0, "unmappedAmount": 0.0, "unmappedValues": {},
+        "sourceFieldRows": {}}
+    if field != REPORTING_REGION_FIELD or field not in df.columns:
+        return basis
+    # The one disclosure every region breakdown makes (the harmonisation's
+    # owner), in this contract's keys.
+    from engine import region_taxonomy as _region
+    told = _region.disclosure(df, harmonisation)
+    basis.update({"unmappedCaseCount": told["unmapped_rows"],
+                  "unmappedAmount": told["unmapped_amount"],
+                  "unmappedValues": told["unmapped_values"],
+                  "sourceFieldRows": told["source_field_rows"]})
+    return basis
+
+
 def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
                   key_name: str = "key") -> List[Dict[str, Any]]:
     """Cap a long categorical breakdown to ``top_n`` rows: the top ``top_n - 1``
@@ -992,11 +1098,17 @@ def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
         return rows
     head = rows[: top_n - 1]
     tail = rows[top_n - 1:]
-    total_amount = sum(r["pipelineAmount"] for r in rows) or 1.0
-    other_amount = round(sum(r["pipelineAmount"] for r in tail), 2)
+    # D21: a row whose amount is not stated (a forecast on an unrated stage)
+    # counts toward no total, and an "Other" holding one is not stated either.
+    total_amount = sum(r["pipelineAmount"] or 0.0 for r in rows) or 1.0
+    tail_amounts = [r["pipelineAmount"] for r in tail]
+    other_amount = (round(sum(tail_amounts), 2)
+                    if all(a is not None for a in tail_amounts) else None)
     weighted_vals = [r.get("weightedExpectedFundedAmount") for r in tail]
-    other_weighted = (round(sum(v for v in weighted_vals if v is not None), 2)
-                      if any(v is not None for v in weighted_vals) else None)
+    # D21: one unstated category leaves "Other" unstated too.
+    other_weighted = (round(sum(weighted_vals), 2)
+                      if weighted_vals and all(v is not None for v in weighted_vals)
+                      else None)
     other = {
         key_name: "Other",
         "caseCount": sum(r["caseCount"] for r in tail),
@@ -1009,7 +1121,8 @@ def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
            for key in ("fundedAmount",) if any(key in r for r in tail)},
         "isOther": True,
         "categoriesIncluded": len(tail),
-        "sharePct": round(other_amount / total_amount * 100, 1),
+        "sharePct": (round(other_amount / total_amount * 100, 1)
+                     if other_amount is not None else None),
     }
     return head + [other]
 
@@ -1020,18 +1133,85 @@ def _col_sum(df: pd.DataFrame, col: str) -> Optional[float]:
     return round(float(coerce_numeric(df[col]).sum()), 2)
 
 
-def _open_totals(df: pd.DataFrame) -> Dict[str, Any]:
+def open_totals(df: pd.DataFrame) -> Dict[str, Any]:
     """Case count, amount and weighted expected funded of the OPEN pipeline."""
     odf = open_pipeline(df)
     return {
         "cases": int(len(odf)),
         "amount": _col_sum(odf, "current_outstanding_balance") or 0.0,
         "expected": _col_sum(odf, "expected_funded_amount"),
-        "weighted": _col_sum(odf, "weighted_expected_funded_amount"),
+        # D21: None where a live case has no measured rate.
+        "weighted": (round(_prep_weighted_sum(odf), 2)
+                     if _prep_weighted_sum(odf) is not None else None),
     }
 
 
-def _excluded_from_open(df: pd.DataFrame) -> Dict[str, Any]:
+#: The columns through which a question names a pipeline STAGE itself. A query
+#: filtered on one of these asked about stages explicitly — "withdrawn cases",
+#: "completions at offer" — and is answered over the whole extract; every other
+#: pipeline query is answered over the live pipeline (owner decision,
+#: 2026-09-29: live cases are the default, and the dashboard and the query agent
+#: use the same pipeline).
+STAGE_COLUMNS = frozenset({"pipeline_stage", "pipeline_stage_bucket",
+                           "pipeline_status"})
+
+
+def live_pipeline_scope(df: pd.DataFrame, *, names_a_stage: bool = False
+                        ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """The rows a pipeline query is answered over, and what that leaves out.
+
+    THE ONE RULE both the dashboard's figures and the query agent's follow: the
+    live pipeline (``OPEN_STAGES``) unless the question named a stage itself.
+    The disclosure is the dashboard's own ``excluded_from_open``, so an answer
+    and a tile describe the same exclusion with the same numbers.
+    """
+    if names_a_stage or "pipeline_stage" not in df.columns:
+        return df, {"population": "extract", "open_stages": list(OPEN_STAGES),
+                    "extract_row_count": int(len(df)),
+                    "excluded": {"stages": [], "cases": 0, "amount": 0.0}}
+    return open_pipeline(df), {"population": "open",
+                               "open_stages": list(OPEN_STAGES),
+                               "extract_row_count": int(len(df)),
+                               "excluded": excluded_from_open(df)}
+
+
+def _gbp(value: Optional[float]) -> str:
+    """Money in an answer sentence, by the answer standard."""
+    from mi_agent import answer_standard
+    return answer_standard.money(float(value or 0.0))
+
+
+def _stage_label(stage: Any) -> str:
+    text = str(stage or "").strip().upper()
+    return text if text == "KFI" else text.title()
+
+
+def live_pipeline_note(scope: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The sentence every pipeline answer carries about its population.
+
+    One wording for both answer paths, built from `live_pipeline_scope`, so a
+    reader reconciling an answer against the Pipeline tab sees the same
+    exclusion the tab discloses. None when the answer is not the live pipeline.
+    """
+    if not scope or scope.get("population") != "open":
+        return None
+    stages = ", ".join(_stage_label(s) for s in scope.get("open_stages") or ())
+    excluded = scope.get("excluded") or {}
+    if excluded.get("cases"):
+        parts = [f"{_stage_label(r['stage'])} {int(r['caseCount']):,} "
+                 f"({_gbp(r.get('amount'))})"
+                 for r in excluded.get("stages") or ()]
+        from mi_agent import answer_standard
+        return (f"Live pipeline ({stages}); excludes "
+                f"{answer_standard.plural(excluded['cases'], 'closed or unmapped case')}: "
+                + ", ".join(parts))
+    left = [_stage_label(s) for s in scope.get("excluded_stages") or ()]
+    if left:
+        return f"Live pipeline ({stages}); {', '.join(left)} not counted"
+    return f"Live pipeline ({stages})"
+
+
+def excluded_from_open(df: pd.DataFrame) -> Dict[str, Any]:
     """What the open-pipeline figures leave out, by stage — disclosed, never
     silently dropped: completed and withdrawn cases stay in the weekly extract,
     and an unmapped stage is not evidence of a live case."""
@@ -1124,8 +1304,8 @@ def compute_pipeline_snapshot(
     # Every figure below is the OPEN pipeline (KFI / Application / Offer).
     # Completed and withdrawn cases stay in the weekly extract with their
     # balance; they are disclosed in ``excludedFromOpenPipeline``, not counted.
-    excluded = _excluded_from_open(df)
-    totals = _open_totals(df)
+    excluded = excluded_from_open(df)
+    totals = open_totals(df)
     full_df, df = df, open_pipeline(df)
     weighted = totals["weighted"]
     as_of = src.get("pipeline_as_of_date") or report.get("pipeline_as_of_date")
@@ -1135,7 +1315,11 @@ def compute_pipeline_snapshot(
     # Long categorical breakdowns are capped to top 10 (+ Other) for the visual;
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
     broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
-    region_full = _dimension_breakdown(df, "geographic_region_obligor", key_name="key")
+    # REGION IS THE CLIENT'S REPORTING TAXONOMY (owner, 2026-09-29), the value
+    # an agent answer groups "by region" on; the extract's own spelling stays
+    # in ``regionSourceBreakdownFull`` for audit.
+    region_field = region_breakdown_field(df)
+    region_full = _dimension_breakdown(df, region_field, key_name="key")
     product_full = _dimension_breakdown(df, "product_type", key_name="key")
     completion_breakdown = _expected_completion_breakdown(df)
     completion_summary = _expected_completion_summary(completion_breakdown, as_of)
@@ -1170,6 +1354,13 @@ def compute_pipeline_snapshot(
         "excludedFromOpenPipeline": excluded,
         "extractRowCount": int(len(full_df)),
         "weightedExpectedFundedAmount": weighted,
+        # D21: whether every weighted figure could be stated, and if not, the
+        # stages the client's history cannot yet rate. A withheld figure is
+        # null with this reason, never a zero.
+        "weightingComplete": not _prep_weighting_gap(open_pipeline(full_df)),
+        "weightingIncompleteReason": (
+            _prep_weighting_gap_reason(_prep_weighting_gap(open_pipeline(full_df)))
+            if _prep_weighting_gap(open_pipeline(full_df)) else None),
         # The correction, stated so it is auditable from the payload alone.
         "pipelineExtractRowCount": int(report.get("row_count", len(df))),
         "pipelineTerminalRowCount": int(report.get("terminal_row_count", 0) or 0),
@@ -1201,6 +1392,10 @@ def compute_pipeline_snapshot(
         "brokerBreakdownFull": broker_full,
         "regionBreakdown": cap_breakdown(region_full, 10),
         "regionBreakdownFull": region_full,
+        "regionBasis": region_basis(df, region_field, report),
+        "regionSourceBreakdownFull": (
+            _dimension_breakdown(df, RAW_REGION_FIELD, key_name="key")
+            if region_field != RAW_REGION_FIELD else region_full),
         # Product and LTV band (additive): the same amount / count / weighted
         # rows as broker and region. LTV bands come from the shared bucket
         # engine the funded book uses, so the two books band alike.

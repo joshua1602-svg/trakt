@@ -81,13 +81,18 @@ from .plan import (
     PeriodBinding,
     PlanProvenance,
     PopulationBinding,
+    RankingBinding,
     TargetBinding,
 )
 from .vocabulary import (
     CHANGE_FORM_ABSENT_PERIOD_DEFAULT,
+    SERIES_ABSENT_SPAN_DEFAULT,
+    SERIES_ABSENT_SPAN_RULE,
+    CAPABILITY_CHANGE_FORMS,
     CHANGE_FORM_CAPABILITY,
     CHANGE_FORM_MODE,
     CAPABILITY_OPERATIONS,
+    NAMED_THRESHOLDS,
     STATISTICS_FORBIDDING_WEIGHT,
     STATISTICS_REQUIRING_WEIGHT,
     GovernedVocabulary,
@@ -127,6 +132,41 @@ _DEFAULT_GEOGRAPHY_BASIS = "reporting_taxonomy"
 #: carries both. Guessing between them is exactly the substitution this
 #: architecture exists to stop.
 _BASIS_REQUIRED_LEVELS = frozenset({"nuts3", "itl3"})
+
+#: NAMED PERIODS ARE NOT A RELATIVE PERIOD (design §40). The Claude Opus 5.5
+#: sign-off run read "Compare October and November pipeline amount" as
+#: `relative_pair` with labels ["October", "November"]: the form said "the
+#: latest month and the one before", the labels named two months, and the
+#: runtime resolved the form — August and September — so the answer was for
+#: months nobody asked about, silently. Five readings of the run did it.
+#:
+#: The labels are the reading's own slot content, not the question: they are
+#: read here by the one governed label reader the runtimes share
+#: (`mi_agent.period_labels`, no regular expressions), exactly as an explicit
+#: period's labels are read when it is served. When EVERY label names a month,
+#: the reading is those months — `explicit_period` with the same labels — and
+#: the plan says so in its notes. When only SOME do, the form and the labels
+#: disagree, and the plan is refused as ambiguous rather than guessed.
+_RELATIVE_FORMS = frozenset({"relative_pair", "previous_reporting_period"})
+
+
+def _months_named(labels: Sequence[str]) -> List[str]:
+    from mi_agent.period_labels import parse_anchor
+    return [str(l) for l in labels or () if parse_anchor(l) is not None]
+
+
+def _named_periods(intent: CandidateIntent) -> Tuple[CandidateIntent, str]:
+    """`(intent, note)`: a relative form whose every label names a month,
+    read as those months; otherwise the intent unchanged and no note."""
+    time = intent.time
+    if (time.form not in _RELATIVE_FORMS or not time.labels
+            or len(_months_named(time.labels)) != len(time.labels)):
+        return intent, ""
+    named = replace(time, form="explicit_period", periods_back=None)
+    return (replace(intent, time=named),
+            f"named periods: {time.form} -> explicit_period (the labels "
+            f"{list(time.labels)} name months, which a relative form cannot)")
+
 
 #: Semantic time form -> the governed period contract that resolves it, and
 #: whether this package can consider it settled without touching a book.
@@ -348,6 +388,25 @@ class CompilerContext:
         return canonical_field in self.available_fields
 
 
+def _implies(predicate: FilterBinding, comparator: str, value: Any) -> bool:
+    """Does an existing predicate already keep only rows `comparator value`?
+    Decided for the comparators a statistic scope declares (`gt`, `ge`); any
+    other scope is never assumed to be implied."""
+    number = lambda v: (isinstance(v, (int, float))            # noqa: E731
+                        and not isinstance(v, bool))
+    if comparator not in ("gt", "ge") or not number(value):
+        return False
+    held = predicate.value
+    low = (held if predicate.comparator in ("gt", "ge", "eq") and number(held)
+           else (held[0] if predicate.comparator == "between"
+                 and isinstance(held, (list, tuple)) and held
+                 and number(held[0]) else None))
+    if low is None:
+        return False
+    strict = predicate.comparator == "gt"
+    return low > value or (low == value and (strict or comparator == "ge"))
+
+
 class DeterministicCompiler:
     """Compiles a CandidateIntent against one governed context.
 
@@ -380,6 +439,9 @@ class DeterministicCompiler:
         intent = normalisation.intent
         notes.extend(f"normalised [{NORMAL_FORM_VERSION}]: {applied}"
                      for applied in normalisation.applied)
+        intent, named_note = _named_periods(intent)
+        if named_note:
+            notes.append(named_note)
 
         # A. VALIDATE ------------------------------------------------------- #
         reasons.extend(self._validate(intent))
@@ -434,10 +496,15 @@ class DeterministicCompiler:
         target, target_reasons = self._bind_target(intent)
         reasons.extend(target_reasons)
 
+        ranking, ranking_reasons, ranking_notes = self._bind_ranking(intent)
+        reasons.extend(ranking_reasons)
+        notes.extend(ranking_notes)
+
         outputs: List[OutputPlan] = []
         for output in intent.effective_outputs():
             plan_output, out_reasons, out_notes = self._bind_output(
-                output, intent=intent, inherited_geography=top_geography)
+                output, intent=intent, inherited_geography=top_geography,
+                plan_filters=top_filters)
             reasons.extend(out_reasons)
             notes.extend(out_notes)
             if plan_output is not None:
@@ -466,6 +533,7 @@ class DeterministicCompiler:
             outputs=tuple(outputs),
             period=period,
             target=target,
+            ranking=ranking,
             comparison_kind=intent.comparison.kind,
             comparison_left=intent.comparison.left,
             comparison_right=intent.comparison.right,
@@ -702,11 +770,33 @@ class DeterministicCompiler:
             reasons.append(CompileReason(
                 PERIOD_UNRESOLVED, "time.labels",
                 "an explicit period was claimed but no period was named"))
-        if time.form in ("range", "series") and not (
+        # A relative form whose labels name SOME months (all of them is
+        # `_named_periods`'): the form and the labels disagree about which
+        # periods are meant, and choosing would be a guess (§40).
+        named = _months_named(time.labels)
+        if time.form in _RELATIVE_FORMS and named:
+            reasons.append(CompileReason(
+                AMBIGUOUS_PERIOD, "time.labels",
+                f"a {time.form} names the months {named} beside relative "
+                f"periods; which periods are meant is not stated"))
+        # D20 (owner decision 2026-09-30): a SERIES stating no span, grain or
+        # count — "over time", "the trend" — is every reporting date the owner
+        # holds, at the owner's own cadence; the answer states the first and
+        # last date and how many. Recorded on the binding as a default, never
+        # silently assumed. A RANGE states bounds by definition, so one with
+        # none is still an incomplete request.
+        open_series = time.form == "series" and not (
+            time.labels or time.periods_back or time.grain)
+        if time.form == "range" and not (
                 time.labels or time.periods_back or time.grain):
             reasons.append(CompileReason(
                 AMBIGUOUS_PERIOD, "time",
                 f"a {time.form} with no span, grain or period count"))
+        if time.periods_ahead is not None and time.form != "forward_looking":
+            reasons.append(CompileReason(
+                UNSUPPORTED_COMPOSITION, "time.periods_ahead",
+                f"a horizon ahead belongs to a forward_looking question, not "
+                f"a {time.form} one"))
         if time.form == "forward_looking" and intent.capability not in _FORWARD_CAPABILITIES:
             reasons.append(CompileReason(
                 UNSUPPORTED_COMPOSITION, "time.form",
@@ -731,24 +821,52 @@ class DeterministicCompiler:
         if not time.stated and intent.change_form:
             default_method = CHANGE_FORM_ABSENT_PERIOD_DEFAULT.get(
                 intent.change_form) or ""
+        default_owner = intent.change_form or ""
+        default_reason = ("no temporal form was stated; the analytical form "
+                          "owns the comparison window")
+        if open_series:
+            default_method = SERIES_ABSENT_SPAN_DEFAULT
+            default_owner = intent.capability or ""
+            default_reason = SERIES_ABSENT_SPAN_RULE
         # The record lives ON THE BINDING — `defaulted`, `default_reason`,
         # `default_method`, `default_owner` — which is where `GeographyBinding`
         # keeps the same fact and which travels with the plan. This function owns
         # no provenance-notes list, and widening its signature to reach one would
         # add a second place the same thing is written.
         return (PeriodBinding(form=time.form, labels=time.labels, grain=time.grain,
-                              periods_back=time.periods_back, contract=contract,
+                              periods_back=time.periods_back,
+                              periods_ahead=time.periods_ahead, contract=contract,
                               resolved=settled, owned_by_capability=owned,
                               stated=time.stated,
                               defaulted=bool(default_method),
-                              default_reason=(
-                                  "no temporal form was stated; the analytical "
-                                  "form owns the comparison window"
-                                  if default_method else ""),
+                              default_reason=(default_reason
+                                              if default_method else ""),
                               default_method=default_method,
-                              default_owner=(intent.change_form or ""
+                              default_owner=(default_owner
                                              if default_method else "")),
                 reasons)
+
+    def _bind_ranking(self, intent: CandidateIntent
+                      ) -> Tuple[Optional[RankingBinding], List[CompileReason],
+                                 List[str]]:
+        """Which end of a ranking, and how many (twins run 2026-10-01).
+
+        A ranking orders ONE breakdown by its figure: it rides a `rank` (or a
+        `breakdown`) and nothing else. A `rank` that names no end is read
+        highest first — "which is largest" is what a ranking asks unless it
+        says otherwise — and the default is recorded on the plan."""
+        ranking = intent.ranking
+        if ranking is None:
+            if intent.operation == "rank":
+                return (RankingBinding(order="highest", defaulted=True), [],
+                        ["ranking: no end named, read highest first"])
+            return None, [], []
+        if intent.operation not in ("rank", "breakdown"):
+            return None, [CompileReason(
+                CONFLICTING_CLAIMS, "ranking",
+                f"a ranking orders a breakdown; operation "
+                f"{intent.operation!r} has none to order")], []
+        return RankingBinding(order=ranking.order, limit=ranking.limit), [], []
 
     def _bind_target(self, intent: CandidateIntent
                      ) -> Tuple[Optional[TargetBinding], List[CompileReason]]:
@@ -774,14 +892,20 @@ class DeterministicCompiler:
         concept, reason = self._resolve(intent.target.concept, slot="target")
         if reason is not None:
             return None, [reason]
-        if not isinstance(intent.target.value, (int, float)) \
-                or isinstance(intent.target.value, bool):
+        value = intent.target.value
+        # A NAMED THRESHOLD ("scale", D9) is a word the vocabulary governs; its
+        # figure is the portfolio's and is resolved after interpretation, so
+        # the plan carries the word. Any other non-number is refused.
+        if isinstance(value, str) and value.strip().lower() in NAMED_THRESHOLDS:
+            value = value.strip().lower()
+        elif not isinstance(value, (int, float)) or isinstance(value, bool):
             return None, [CompileReason(
                 UNSUPPORTED_FILTER, "target",
-                "a threshold must be a number")]
+                "a threshold must be a number, or a governed named threshold "
+                f"({', '.join(sorted(NAMED_THRESHOLDS))})")]
         return (TargetBinding(concept=concept.concept_id,
                               comparator=intent.target.comparator,
-                              value=intent.target.value,
+                              value=value,
                               canonical_field=concept.canonical_field,
                               capability_owner=concept.owning_capability),
                 reasons)
@@ -979,7 +1103,8 @@ class DeterministicCompiler:
                 reasons, notes)
 
     def _bind_output(self, output: RequestedOutput, *, intent: CandidateIntent,
-                     inherited_geography: Optional[GeographyBinding]
+                     inherited_geography: Optional[GeographyBinding],
+                     plan_filters: Sequence[FilterBinding] = ()
                      ) -> Tuple[Optional[OutputPlan], List[CompileReason], List[str]]:
         reasons: List[CompileReason] = []
         notes: List[str] = []
@@ -1024,6 +1149,10 @@ class DeterministicCompiler:
         filters, filter_reasons = self._bind_filters(output.filters,
                                                      slot=f"{slot}.filters")
         reasons.extend(filter_reasons)
+        scope_reasons, scope_notes = self._apply_statistic_scope(
+            measures, filters, plan_filters)
+        reasons.extend(scope_reasons)
+        notes.extend(scope_notes)
 
         requested_geography = output.geography
         if geography_from_dimension is not None and not requested_geography.requested:
@@ -1041,6 +1170,59 @@ class DeterministicCompiler:
                            dimensions=tuple(dimensions), filters=tuple(filters),
                            geography=geography),
                 reasons, notes)
+
+    def _apply_statistic_scope(self, measures: Sequence[MeasureBinding],
+                               filters: List[FilterBinding],
+                               plan_filters: Sequence[FilterBinding]
+                               ) -> Tuple[List[CompileReason], List[str]]:
+        """A STATISTIC GOVERNED OVER ITS OWN POPULATION, written onto the plan.
+
+        The registry may say which rows a statistic counts — the minimum
+        balance counts only balances above zero (owner decision D14), because a
+        redeemed loan's balance is zeroed on purpose and "the smallest loan" is
+        not £0. That is a rule about the FIGURE, so it becomes a predicate on
+        the output that carries it: in the plan and its identity, applied by
+        the executor like any filter, disclosed by the receipt and proved by
+        the coverage ledger. Nothing downstream knows the rule exists.
+
+        An output is one figure. If the scoped measure shares its output with
+        another, the predicate would change that figure too — so the plan is
+        refused rather than answered wrongly. A predicate already on the field
+        that implies the scope stands on its own; one that does not is kept
+        beside it, and a runtime that takes one predicate per field refuses.
+        """
+        reasons: List[CompileReason] = []
+        notes: List[str] = []
+        for measure in measures:
+            concept = self.context.vocabulary.resolve(measure.concept)
+            scope = concept.scope_for(measure.statistic) if concept else None
+            if scope is None:
+                continue
+            comparator, value = scope
+            if len(measures) > 1:
+                reasons.append(CompileReason(
+                    UNSUPPORTED_COMPOSITION, measure.concept,
+                    f"the {measure.statistic} of {measure.concept!r} counts only "
+                    f"rows where it is {comparator} {value!r}; asked beside "
+                    f"another figure in one output it would change that figure "
+                    f"too — it is its own figure"))
+                continue
+            existing = [f for f in (*filters, *plan_filters)
+                        if f.canonical_field == concept.canonical_field]
+            if any(_implies(f, comparator, value) for f in existing):
+                notes.append(f"the {measure.statistic} of {measure.concept!r} "
+                             f"counts only rows where it is {comparator} "
+                             f"{value!r}; the question's own predicate already "
+                             f"restricts it")
+                continue
+            filters.append(FilterBinding(
+                concept=concept.concept_id, comparator=comparator,
+                canonical_field=concept.canonical_field, value=value))
+            notes.append(f"the {measure.statistic} of {measure.concept!r} counts "
+                         f"only rows where it is {comparator} {value!r} — the "
+                         f"governed registry's statistic scope (owner decision "
+                         f"D14)")
+        return reasons, notes
 
     # -- C. authorise composition ------------------------------------------- #
 
@@ -1114,6 +1296,9 @@ class DeterministicCompiler:
         under ``compiler_bindings["normalisation"]``, because the rewrite is the
         compiler's decision and belongs on the compiler's side of the line.
         """
+        # The capability the plan is BOUND to — normalisation's, not the claim.
+        bound_capability = getattr(getattr(normalised, "intent", None),
+                                   "capability", None) or intent.capability
         claims: Dict[str, Any] = {
             "capability": intent.capability,
             "operation": intent.operation,
@@ -1160,7 +1345,14 @@ class DeterministicCompiler:
             # reading.
             "change_form": {
                 "form": intent.change_form,
-                "capability": CHANGE_FORM_CAPABILITY.get(intent.change_form),
+                # The capability that implements the form HERE: the plan's own
+                # where it implements the form over its own figures (the
+                # pipeline's change between snapshots), else the funded
+                # book's owner of the form.
+                "capability": (bound_capability
+                               if intent.change_form in CAPABILITY_CHANGE_FORMS.get(
+                                   bound_capability, ())
+                               else CHANGE_FORM_CAPABILITY.get(intent.change_form)),
                 "mode": CHANGE_FORM_MODE.get(intent.change_form or ""),
             } if intent.change_form else None,
         }

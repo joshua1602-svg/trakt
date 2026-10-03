@@ -126,12 +126,31 @@ def test_pipeline_evolution_dedups_extracts():
 # Forecast evolution
 # --------------------------------------------------------------------------- #
 def test_forecast_evolution_combines_funded_and_pipeline(funded_root):
-    out = evo.forecast_evolution(funded_root, _PIPELINE_FIXTURE, "client_001", "mi_2025_11")
+    # D21: weighted by the fixture book's own history, measured at test-book
+    # scale (it is far below the production thresholds).
+    from tests.measured_history import measured_history
+    out = evo.forecast_evolution(funded_root, _PIPELINE_FIXTURE, "client_001",
+                                 "mi_2025_11",
+                                 historical_model=measured_history(str(_PIPELINE_FIXTURE)))
     assert out["dataset"] == "forecast"
     assert len(out["periods"]) == 2
     for p in out["periods"]:
         m = p["metrics"]
         assert m["forecast_funded_balance"] >= m["funded_balance"]
+
+
+def test_forecast_evolution_withholds_a_month_it_cannot_weight(funded_root):
+    """D21: a month whose extract holds a live case no measured rate weights
+    has no forecast — not the funded balance, which is a month with no
+    extract at all."""
+    out = evo.forecast_evolution(funded_root, _PIPELINE_FIXTURE, "client_001", "mi_2025_11")
+    for p in out["periods"]:
+        m = p["metrics"]
+        if p["pipeline_extract_date"]:
+            assert m["weighted_expected_pipeline"] is None
+            assert m["forecast_funded_balance"] is None
+        else:
+            assert m["forecast_funded_balance"] == m["funded_balance"]
 
 
 # --------------------------------------------------------------------------- #

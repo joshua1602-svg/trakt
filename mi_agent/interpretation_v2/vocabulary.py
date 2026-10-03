@@ -42,6 +42,7 @@ from .metadata import (
 )
 from .metadata import _load as _load_source
 from .metadata import _slug
+from mi_agent import semantic_model as _semantic_model
 
 #: 2.1.0 added the capability-boundary block. 2.2.0 adds the portfolio-scope
 #: axes block and the seasoning concept boundary — the four scope axes stated as
@@ -50,7 +51,135 @@ from .metadata import _slug
 #: model was SHOWN, and an interpretation made against a different orientation
 #: block is not comparable with one made against this. Every run recorded before
 #: this change was made at 2.0.0 or 2.1.0 and says so.
-VOCABULARY_VERSION = "2.2.0"
+#:
+#: 2.3.0 defines the three forecast measures (`SPECIALIST_MEASURE_DEFINITIONS`).
+#: Replaying the owner's 2026-09-28 production run showed the model putting
+#: different questions into one forecast measure because it was shown a name and
+#: no definition; the orientation block is unchanged, and what moved is what
+#: `search_concepts` and `get_concept_metadata` return for those three concepts.
+#:
+#: 2.4.0 permits the balance-weighted average of current valuation (owner
+#: decision D10, 2026-09-29): the dashboard's "Weighted avg property value" tile
+#: and the LTV denominator, which the model was told it could not ask for. The
+#: registry entry now carries `weighted_avg` weighted by current balance — the
+#: tile's own definition — so the model is shown one more permitted statistic.
+#:
+#: 2.5.0 lets a milestone name `scale` instead of an amount (owner decision D9,
+#: 2026-09-29): the forecast_milestone_date definition says so, and the figure
+#: is the portfolio's, resolved after interpretation.
+#:
+#: 2.6.0 adds the Pipeline tab's weighted expected funded amount and its
+#: expected-completion view (month, and overdue / this month / next month, D11)
+#: as pipeline concepts — catalogue batch 1 (§15.2).
+#:
+#: 2.7.0 reads the FORECAST concepts from the capability's semantic model
+#: (`config/mi/semantic_model/forecast.yaml`, P0 design §16) — catalogue batch
+#: 2: the forecast's parts, loan count, weighting exclusions, the projection
+#: curve and its scenario bands, the annualised run-rate and the milestone
+#: ladder — and lets a forecast be broken down. The three 2.3.0 definitions
+#: keep every phrase that ruled out a production misread, and now point to the
+#: concept that answers it.
+#:
+#: 2.8.0 shows ONE concept per meaning: a registry field `superseded_by`
+#: another is folded into it as an alias. `borrower_structure` (a legacy band
+#: no book materialises) is now `borrower_type`, which funded preparation
+#: builds — "balance by borrower structure" used to fail on every book.
+#:
+#: 2.9.0 says which POPULATION the weighting exclusions are measured over (the
+#: pipeline), and what `lapsed` means in the pipeline's own words (an open case
+#: past its stage's validity window). The 2026-09-29 spot check read the three
+#: exclusion questions correctly and asked to clarify "lapsed past its stage
+#: window", having been told no such concept existed.
+#:
+#: 2.10.0 (owner decision D13, 2026-09-29: conversion and pipeline change are
+#: must-answer): the stage-movement capability's measured rates — cohort
+#: conversion, stage pull-through, the historical completion rate by stage —
+#: read from its semantic model (`config/mi/semantic_model/
+#: pipeline_stage_movement.yaml`) by the one semantic engine (§20); and the
+#: pipeline's change between two dated extracts (`movement` / `compare`,
+#: `CAPABILITY_CHANGE_FORMS`), so a metric delta on a pipeline measure stays
+#: with the pipeline instead of reaching a funded-book runtime.
+#:
+#: 2.11.0 says that a month named as the pipeline's own attribute ("how much
+#: pipeline is current month") is the expected-completion timing, not a
+#: reporting period. The 2026-09-29 full bank read it as the current period
+#: and answered with the whole live pipeline — a must-answer question (D13)
+#: answered wrongly.
+#:
+#: 2.12.0 (owner decisions 2026-09-29) — D14: the minimum balance counts only
+#: balances above zero (`statistic_scope` on the registry field, written onto
+#: the plan by the compiler), and the model is told so; §21: the model is
+#: handed the governed catalogue whole, in the cached prompt, and answers in
+#: ONE call instead of retrieving it through lookup tools — so the orientation
+#: block's "how to find a concept" and the named-book axis point at the
+#: catalogue and the per-request CLIENT CONTEXT.
+#:
+#: 2.13.0 (the 2026-09-30 full bank, P0 design §22): 'the expected funded
+#: balance' is named as the forecast funded balance and ruled out of the
+#: pipeline's weighted amount ([87] was answered with the latter); the
+#: weighting exclusion says it covers the WHOLE extract, so a live/active
+#: restriction is kept, not dropped ([102]); the completion run-rate says it
+#: is measured over the forecast's own window, so an 8- or 12-week run-rate
+#: keeps its window ([125, 126]).
+#:
+#: 2.14.0 (owner decision 2026-09-30, P0 design §23): WHEN the live pipeline
+#: is expected to complete, from the book's own history — the stage-movement
+#: capability's `expected_completion_date` — and the extract's own
+#: expected-completion month no longer claims that question ([135]).
+#:
+#: 2.15.0 (owner direction 2026-09-30, P0 design §25): NO QUESTION FROM ANY
+#: BANK IN WHAT THE MODEL SEES. Three definitions quoted a bank question
+#: word for word (the pipeline's timing, the assumed completion rate, the
+#: expected completion date); each now states the meaning it rests on, with
+#: term-level synonyms only, so a reworded question reads the same as the
+#: bank's. Guarded by `test_no_bank_question_is_in_the_models_view.py`.
+#:
+#: 2.16.0 (owner decisions 2026-09-30, P0 design §26): D15, what moved in the
+#: pipeline is the pipeline's own `material_summary` between its two most
+#: recent snapshots (`POPULATION_CHANGE_OWNER`); D16, what is expected to
+#: complete in a month is the pipeline amount at face value, the weighted
+#: figure only when weighting is asked for; D17, the expected completion date
+#: leaves lapsed cases out.
+#:
+#: 2.17.0 (P0 design §28): stage movement implements `material_summary` — what
+#: moved in the whole pipeline between its latest pair of extracts, every case
+#: classified once as arrived, moved stage, left or stayed, from the movement
+#: owner's own totals. A "what moved" reading over the stage-movement figures
+#: was bound to the FUNDED book's owner of the form and refused; the owner of
+#: the figures now owns the form over them.
+#:
+#: 2.18.0 (P0 design §29): the stage-movement figures say what they are. They
+#: were shown by name only, and a question about how the pipeline changed
+#: overall was answered with the flows between stages over every case in the
+#: extracts (£1.18bn) where the pipeline's own change (+£2.9m on £969.8m) was
+#: asked for. Each now says it counts cases BETWEEN STAGES, and that a change
+#: in the pipeline's size or value is the pipeline's own figures (D15).
+#:
+#: 2.19.0 (P0 design §31): D16 in each month — what is expected to complete
+#: month by month is the amount at face value, as in one month, with the
+#: weighted figure stated alongside; the weighted figure's other name ("the
+#: expected completions") is the forecast's, not a month's.
+#:
+#: 2.20.0 (P0 design §32): D22 — the completion run-rate is measured on the
+#: calendar and published over every whole number of weeks the history
+#: covers; a question naming its own window of weeks states it as a range of
+#: that many weekly periods (grain weekly, periods_back N).
+#:
+#: 2.21.0 (P0 design D23): amount or number. "How much" asks for an amount,
+#: "how many" for a count, and a question that says neither is answered by
+#: amount — a governed default the model is shown, so the words choose the
+#: measure and the unstated case is never asked back.
+#:
+#: 2.22.0 (2026-10-01 twins run and full bank): a ranking's END and NUMBER
+#: are stated (`ranking`: highest / lowest, and the number named) and the
+#: pipeline may be ranked; "X to completion" from KFI or Application is the
+#: completion rate, not the one-step pull-through; the scenario band belongs
+#: to the scale-up projection and the milestone dates only.
+#: 2.23.0 (D27, owner 2026-10-01): a stage's completion rate and its
+#: one-step pull-through are the run-off model's own — of the cases ENTERING
+#: the stage, cases still in progress counted as waiting — and the forecast
+#: weights no KFI.
+VOCABULARY_VERSION = "2.23.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -99,12 +228,26 @@ CAPABILITY_OPERATIONS: Mapping[str, FrozenSet[str]] = {
                                  "eligibility", "breakdown", "movement",
                                  "bridge", "series"}),
     "funded_bridge": frozenset({"bridge", "movement"}),
-    "pipeline": frozenset({"summary", "breakdown", "point_in_time", "series"}),
+    # `movement` and `compare` since 2.10.0 (owner decision D13): the
+    # pipeline's change between two dated extracts, as a movement or as the two
+    # levels side by side (§20). A comparison of two POPULATIONS or two
+    # dimension values is still refused by the pipeline runtime.
+    # `rank` since 2.22.0: "which broker has the largest pipeline", "the
+    # five smallest LTV bands" — a ranking over one of the tab's breakdowns,
+    # ordered by its figure (twins run 2026-10-01).
+    "pipeline": frozenset({"summary", "breakdown", "point_in_time", "series",
+                           "movement", "compare", "rank"}),
+    # `point_in_time` since 2.10.0: a measured rate is one figure (§20).
+    # `summary` since 2.17.0: what moved in the whole pipeline, the
+    # `material_summary` form's own operation (§28).
     "pipeline_stage_movement": frozenset({
         "transition", "arrivals", "departures", "stayers", "reconciliation",
-        "movement", "breakdown"}),
+        "movement", "breakdown", "point_in_time", "summary"}),
+    # `breakdown` since 2.7.0: the Forecast tab publishes the forecast by
+    # component, region and LTV band, the weighting exclusion by reason, and
+    # the milestone ladder by threshold (§16.3).
     "forecast": frozenset({"forecast_milestone", "forecast_projection",
-                           "series", "point_in_time"}),
+                           "series", "point_in_time", "breakdown"}),
 }
 
 STATISTICS: FrozenSet[str] = frozenset({
@@ -199,10 +342,11 @@ PORTFOLIO_SCOPE_AXES: Mapping[str, Any] = {
                     "books, and naming one is not the same as asking for the "
                     "acquired role.",
             "values": {
-                "the reader's phrase": "call get_source_portfolios for the "
-                                       "governed names this client declares, "
-                                       "and put the reader's phrase here. "
-                                       "Never an id, a path or a dataset.",
+                "the reader's phrase": "match it against CLIENT CONTEXT "
+                                       "source_portfolios, the governed names "
+                                       "this client declares, and put the "
+                                       "reader's phrase here. Never an id, a "
+                                       "path or a dataset.",
             },
         },
         {
@@ -337,6 +481,37 @@ CHANGE_FORM_CAPABILITY: Mapping[str, Optional[str]] = {
 #: THE MODE EACH FORM RUNS THE SHARED OWNER IN, where the capability alone does
 #: not separate two forms. Only `period_change` has such a pair today.
 #: A form absent from this table states no mode and the owner's default applies.
+#: CAPABILITIES THAT IMPLEMENT A CHANGE FORM FOR THEIR OWN MEASURES (§20).
+#:
+#: `CHANGE_FORM_CAPABILITY` names the owner of each form for the FUNDED book's
+#: generic measures. A capability that owns its measures and serves the same
+#: analytical form over them — the pipeline's change between two dated
+#: extracts, computed by the semantic engine's one `period_change` — is listed
+#: here, so normalisation keeps the measure's owner rather than sending a
+#: pipeline change to a funded-book runtime that would refuse its population.
+CAPABILITY_CHANGE_FORMS: Mapping[str, FrozenSet[str]] = {
+    # `material_summary` since 2.16.0 (owner decision D15, 2026-09-30): what
+    # moved in the pipeline between its two most recent snapshots — the change
+    # in each of its headline figures, from the same weekly owner.
+    "pipeline": frozenset({"metric_delta", "level_comparison",
+                           "material_summary"}),
+    # `material_summary` since 2.17.0 (§28): what moved in the whole pipeline
+    # between the movement owner's latest pair of extracts — arrived, moved
+    # stage, left, stayed — from its own event totals.
+    "pipeline_stage_movement": frozenset({"material_summary"}),
+}
+
+#: WHOSE CHANGE A POPULATION'S CHANGE IS, where no measure names an owner.
+#:
+#: `CHANGE_FORM_CAPABILITY` is the FUNDED book's owner of each form. A change
+#: question about another population with no measure named — "how has the
+#: pipeline changed since the previous extract?" — is still about THAT
+#: population, and its owner implements the form over its own figures
+#: (`CAPABILITY_CHANGE_FORMS`). The 13:49 check (2026-09-30) sent two such
+#: readings to the funded book's material summary, which refused the
+#: population: the form's owner had been chosen without the population.
+POPULATION_CHANGE_OWNER: Mapping[str, str] = {"pipeline": "pipeline"}
+
 CHANGE_FORM_MODE: Mapping[str, str] = {
     "metric_delta": "requested_metric",
     "material_summary": "portfolio_overview",
@@ -418,6 +593,16 @@ CHANGE_FORM_ABSENT_PERIOD_DEFAULT: Mapping[str, Optional[str]] = {
     "level_comparison": None,
 }
 
+#: D20 (owner decision 2026-09-30): "over time" with no span, grain or count is
+#: every reporting date the owner holds — the whole history at the owner's own
+#: cadence (the pipeline's extracts as reported, the funded book's monthly
+#: runs). Not the latest two dates: those are "previous" (D15), a comparison,
+#: where "over time" asks for the trend. Recorded on the period binding as the
+#: default applied; the answer states the first and last date and how many.
+SERIES_ABSENT_SPAN_DEFAULT = "every_reporting_date"
+SERIES_ABSENT_SPAN_RULE = ("D20: a series stating no span is every reporting "
+                           "date the owner holds, at its own cadence")
+
 #: The operations that are linguistic variants of each form's own action, and so
 #: canonicalise to it. A form absent from this table canonicalises nothing, and
 #: its operation is checked against its capability in the ordinary way.
@@ -497,6 +682,13 @@ CAPABILITY_BOUNDARIES: Tuple[Dict[str, Any], ...] = (
 )
 
 
+#: THE FORECAST CAPABILITY'S SEMANTIC MODEL (§16): its measures, dimensions and
+#: definitions are declared once, beside where the owner publishes each figure.
+_FORECAST_MODEL = _semantic_model.load("forecast")
+#: D2a: the stage-movement capability's measured rates — cohort conversion,
+#: stage pull-through, the historical completion rate (§20).
+_STAGE_MODEL = _semantic_model.load("pipeline_stage_movement")
+
 #: Specialist measures OWNED by a capability, not composed from fields. Opus may
 #: name them; it is never shown how they are built.
 SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
@@ -506,16 +698,154 @@ SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
         "eligible_balance", "ineligible_balance", "ineligible_loan_count",
         "ineligible_loan_share", "ineligible_balance_share"),
     "funded_bridge": ("funded_balance_movement", "bridge_component"),
-    "pipeline": ("pipeline_amount", "pipeline_case_count"),
+    "pipeline": ("pipeline_amount", "pipeline_case_count",
+                 "weighted_expected_funded_amount"),
     "pipeline_stage_movement": (
         "cases_moved", "amount_moved", "cases_arrived", "cases_departed",
-        "cases_stayed", "stayer_amount_change", "stage_opening", "stage_closing"),
-    "forecast": ("forecast_funded_balance", "forecast_completion_rate",
-                 "forecast_milestone_date"),
+        "cases_stayed", "stayer_amount_change", "stage_opening", "stage_closing",
+        *_STAGE_MODEL.measures),
+    # Read from the capability's semantic model (§16): one declaration of
+    # what each forecast figure is and where the owner publishes it.
+    "forecast": tuple(_FORECAST_MODEL.measures),
     "concentration": ("concentration_exposure", "concentration_share"),
     "limit_assessment": ("limit_headroom", "limit_utilisation",
                          "limit_breach_status"),
     "portfolio_summary": ("portfolio_overview",),
+}
+
+#: WHAT A SPECIALIST MEASURE IS, for the ones whose name does not say it.
+#:
+#: A specialist measure is shown to the model with a name and, by default, only
+#: "owned by the <capability> capability". For most that is enough. For the
+#: three forecast measures it was not: the owner's production run (2026-09-28,
+#: replayed in `tests/interpretation_v2/test_production_bank_perimeter.py`) put
+#: "the extrapolation curve", "the base forecast", "expected completions by
+#: month" and "how much of the forecast comes from the funded book" into
+#: `forecast_funded_balance`, and "a KFI-to-completion conversion rate" and "the
+#: forecast's method" into `forecast_completion_rate`. Each was answered — or
+#: would have been — with a figure it did not ask for.
+#:
+#: So each definition says what the figure IS, in the owner's terms, and what it
+#: is NOT, naming the readings the production run actually made. It states no
+#: methodology the model could decompose (rule 3 still holds: the capability
+#: owns the arithmetic) and no column, dataset or date.
+#: What every stage-movement FLOW figure is not (2.18.0, §29): a change in the
+#: pipeline's size or value. Said once, carried by each.
+_NOT_THE_PIPELINES_CHANGE = (
+    " It counts cases between STAGES, over every case the two extracts hold "
+    "(closed stages included). It is NOT how the pipeline changed in size or "
+    "value: the change in the live pipeline's amount, case count or weighted "
+    "value between two extracts — or a summary of what changed in the "
+    "pipeline — is the pipeline's own figures (`pipeline_amount`, "
+    "`pipeline_case_count` and the pipeline's weighted value), owner "
+    "decision D15.")
+
+#: The flows between the latest pair of weekly extracts, as the movement owner
+#: classifies every case once: arrived, moved stage, left, or stayed.
+_STAGE_FLOW_DEFINITIONS: Mapping[str, str] = {
+    "cases_moved": (
+        "The number of pipeline cases that MOVED FROM ONE STAGE TO ANOTHER "
+        "between the latest two weekly extracts (e.g. from KFI to "
+        "Application)." + _NOT_THE_PIPELINES_CHANGE),
+    "amount_moved": (
+        "The amount carried by the cases that moved from one stage to another "
+        "between the latest two weekly extracts." + _NOT_THE_PIPELINES_CHANGE),
+    "cases_arrived": (
+        "The number of cases in the latest weekly extract that were in no "
+        "stage of the one before — new to the pipeline, or new at a stage."
+        + _NOT_THE_PIPELINES_CHANGE),
+    "cases_departed": (
+        "The number of cases in the earlier of the latest two weekly extracts "
+        "that left a stage — moved on, or left the extracts."
+        + _NOT_THE_PIPELINES_CHANGE),
+    "cases_stayed": (
+        "The number of cases at the same stage in both of the latest two "
+        "weekly extracts." + _NOT_THE_PIPELINES_CHANGE),
+    "stayer_amount_change": (
+        "The change in the amount of the cases that stayed at the same stage "
+        "between the latest two weekly extracts (amendments to cases, not "
+        "movement)." + _NOT_THE_PIPELINES_CHANGE),
+    "stage_opening": (
+        "A stage's case count at the earlier of the latest two weekly "
+        "extracts, as the stage's reconciliation opens."),
+    "stage_closing": (
+        "A stage's case count at the latest weekly extract, as the stage's "
+        "reconciliation closes."),
+}
+
+SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
+    # The forecast definitions (2.3.0, amended 2.7.0) live in the semantic
+    # model, beside the path each figure is read from.
+    **{name: m.definition for name, m in _FORECAST_MODEL.measures.items()},
+    **{name: m.definition for name, m in _STAGE_MODEL.measures.items()},
+    **_STAGE_FLOW_DEFINITIONS,
+    # THE PIPELINE'S WEIGHTED VALUE (catalogue batch 1, 2026-09-29). The
+    # Pipeline tab has shown it for months; the model was told no such concept
+    # existed and asked to clarify every question about it.
+    "weighted_expected_funded_amount": (
+        "The LIVE pipeline weighted by each case's probability of completing — "
+        "the Pipeline tab's weighted expected funded figure, also called the "
+        "weighted pipeline, or the pipeline's expected completions as the "
+        "forecast counts them. It is the pipeline part of the forecast funded "
+        "balance. What is expected or due to complete IN A MONTH (overdue, "
+        "this month, next month) or IN EACH MONTH (a breakdown by expected "
+        "completion month) is the pipeline AMOUNT of the cases due then, at "
+        "face value — name this measure there only when the question asks for "
+        "the weighted or probability-adjusted figure; the answer states both "
+        "(owner decision D16). It is NOT the "
+        "pipeline amount (unweighted), and NOT the forecast funded balance "
+        "(which adds the funded book): 'the expected funded BALANCE' is the "
+        "forecast funded balance — a balance the book is expected to hold — "
+        "while this is the AMOUNT expected from the pipeline alone. It can be "
+        "broken down by stage, broker, product, LTV band or expected "
+        "completion month."),
+}
+
+#: WHAT A SPECIALIST DIMENSION IS, where its name does not say it, and the
+#: values a question may name for it. The Pipeline tab's expected-completion
+#: view (owner decision D11, 2026-09-29: "overdue" about the pipeline is the
+#: tab's own definition).
+SPECIALIST_DIMENSION_DEFINITIONS: Mapping[str, str] = {
+    "expected_completion_month": (
+        "The month a live pipeline case's OWN record says it is expected to "
+        "complete — the date the extract carries, which only some cases have. "
+        "Group by it for 'by expected completion month or date'. WHEN the live "
+        "pipeline is expected to complete, from the book's own history of how "
+        "long cases take, is the stage-movement capability's "
+        "`expected_completion_date`."),
+    "expected_completion_timing": (
+        "Where a live pipeline case's expected completion month falls against "
+        "the month of the pipeline extract: `overdue` (an earlier month — the "
+        "case is past its expected completion), `current_month` (this month) "
+        "or `next_month` (the first month after). Filter on ONE value when "
+        "the pipeline asked about is overdue, due this month or due next "
+        "month. HOW MUCH is expected or due to complete in it is the "
+        "`pipeline_amount` of those cases, at face value; the weighted "
+        "figure is `weighted_expected_funded_amount` only when the question "
+        "asks for weighting, and the answer states both (owner decision D16). "
+        "A month used to describe the PIPELINE ITSELF — 'current month "
+        "pipeline', 'this month's pipeline', 'next month's pipeline', the "
+        "pipeline due in or completing in a month — is this timing, NOT a "
+        "reporting period: the pipeline is always read at its latest weekly "
+        "extract, so reading such a month as the period would return the "
+        "whole pipeline. It is about the PIPELINE; overdue LOANS are arrears, "
+        "a different question."),
+    **{name: d.definition for name, d in _FORECAST_MODEL.dimensions.items()},
+    **{name: d.definition for name, d in _STAGE_MODEL.dimensions.items()},
+}
+SPECIALIST_DIMENSION_VALUES: Mapping[str, Tuple[str, ...]] = {
+    "expected_completion_timing": ("overdue", "current_month", "next_month"),
+    **{name: d.values for name, d in _FORECAST_MODEL.dimensions.items()
+       if d.values},
+    **{name: d.values for name, d in _STAGE_MODEL.dimensions.items()
+       if d.values},
+}
+
+#: THRESHOLDS A TARGET MAY NAME INSTEAD OF AN AMOUNT. The word is the model's;
+#: the figure is the portfolio's, resolved after interpretation and never shown
+#: to the model (D9: `mi_agent_api.scale_policy`).
+NAMED_THRESHOLDS: Mapping[str, str] = {
+    "scale": "the portfolio's scale threshold for its stage (owner decision D9)",
 }
 
 SPECIALIST_DIMENSIONS: Mapping[str, Tuple[str, ...]] = {
@@ -524,6 +854,8 @@ SPECIALIST_DIMENSIONS: Mapping[str, Tuple[str, ...]] = {
     "limit_assessment": ("concentration_test",),
     "concentration": ("concentration_test",),
     "funded_bridge": ("bridge_component",),
+    "pipeline": ("expected_completion_month", "expected_completion_timing"),
+    "forecast": tuple(_FORECAST_MODEL.dimensions),
 }
 
 #: The row itself. "How many loans?" counts rows and needs no field; without a
@@ -612,6 +944,18 @@ class SemanticConcept:
     geography_level: Optional[str] = None
     canonical_field: Optional[str] = None
     owning_capability: Optional[str] = None
+    #: A statistic governed over its own population: `(statistic, comparator,
+    #: value)` — the rows that statistic counts (the registry's
+    #: `statistic_scope`; owner decision D14, the minimum balance counts only
+    #: balances above zero). The compiler writes it onto the plan.
+    statistic_scope: Tuple[Tuple[str, str, Any], ...] = ()
+
+    def scope_for(self, statistic: Optional[str]) -> Optional[Tuple[str, Any]]:
+        """`(comparator, value)` the named statistic counts over, or None."""
+        for stat, comparator, value in self.statistic_scope:
+            if stat == statistic:
+                return comparator, value
+        return None
 
     @property
     def is_specialist(self) -> bool:
@@ -658,6 +1002,14 @@ class SemanticConcept:
             view["default_weight_concept"] = self.default_weight_concept
         if self.bucket_concept:
             view["banded_as"] = self.bucket_concept
+        if self.statistic_scope:
+            # Said to the model so it does not add the predicate itself: the
+            # compiler writes it onto the plan.
+            view["statistic_scope"] = {
+                stat: (f"counts only rows where {self.concept_id} "
+                       f"{_COMPARATOR_WORDS.get(comparator, comparator)} {value}"
+                       f"; the compiler applies this, do not add it as a filter")
+                for stat, comparator, value in self.statistic_scope}
         if self.is_specialist:
             view["note"] = ("Owned by a capability. Name it; do not impose a "
                             "statistic or weight and do not decompose it.")
@@ -794,10 +1146,34 @@ class GovernedVocabulary:
                 "dimensions": len(self.dimensions()),
             },
             "how_to_find_a_concept": (
-                "Call search_concepts to find the governed identifier for a "
-                "business word, get_concept_metadata for its full definition, "
-                "and get_allowed_values before asserting any filter value."),
+                "Every governed concept is in the GOVERNED CATALOGUE with its "
+                "definition, aliases, permitted statistics and, where Trakt "
+                "governs a value list, its allowed_values; a filter value "
+                "must be one of them."),
         }
+
+
+#: D23 (owner decision 2026-09-30): amount or number. When a question asks for
+#: the size of what it is about without naming a measure of its own, its words
+#: choose between the AMOUNT and the NUMBER — "how much" is the amount, "how
+#: many" is the count — and a question that says neither is answered by amount,
+#: stated in the answer, never asked back (a low-risk reading: the answer names
+#: its measure, and the count is one question away). The catalogue carries both
+#: sides for every population the agent answers on: a balance and the loans
+#: counted, the pipeline amount and its case count, the excluded amount and its
+#: cases, the forecast balance and its loans. A measure the question names
+#: itself — an LTV, a rate, a date — is never overridden by these words.
+AMOUNT_OR_NUMBER_SLOT = "measures (amount or number)"
+AMOUNT_OR_NUMBER_RULE = (
+    "D23: where the question asks for the size of what it is about and names "
+    "no measure of its own, its words choose. 'How much' is the AMOUNT: the "
+    "money measure of that population (a balance, the pipeline amount, the "
+    "excluded amount). 'How many' (or 'number of', 'count') is the NUMBER: "
+    "the count of its loans or cases. A question that says neither is answered "
+    "by AMOUNT: name the amount measure and record the reading as a "
+    "non-blocking ambiguity; it is never a blocking one. A measure the "
+    "question names itself (an LTV, a rate, a date) is not overridden by these "
+    "words.")
 
 
 #: Slots the compiler fills from a governed default when the question leaves
@@ -818,6 +1194,9 @@ GOVERNED_DEFAULTS: Mapping[str, str] = {
         "empty resolves to the governed registry weight for that concept."),
     "population.base": "empty resolves to 'funded'.",
     "time.form": "empty resolves to 'current'.",
+    # D23 (owner, 2026-09-30): "'how much' = amount, 'how many' = count" and,
+    # for the low-risk case where neither is said, "default to amount".
+    AMOUNT_OR_NUMBER_SLOT: AMOUNT_OR_NUMBER_RULE,
 }
 
 
@@ -860,6 +1239,12 @@ def _concept_from_registry(canonical_field: str, mi_entry: Mapping[str, Any],
     aliases.discard("")
     aliases.discard(canonical_field)
 
+    scope: List[Tuple[str, str, Any]] = []
+    for raw, rule in sorted((mi_entry.get("statistic_scope") or {}).items()):
+        stat = _AGG_TRANSLATION.get(str(raw).strip().lower())
+        if stat in stats and isinstance(rule, Mapping) and rule.get("comparator"):
+            scope.append((stat, str(rule["comparator"]), rule.get("value")))
+
     basis, level = GEOGRAPHY_CONCEPTS.get(canonical_field, (None, None))
     return SemanticConcept(
         concept_id=canonical_field,
@@ -885,7 +1270,13 @@ def _concept_from_registry(canonical_field: str, mi_entry: Mapping[str, Any],
         geography_basis=basis,
         geography_level=level,
         canonical_field=canonical_field,
+        statistic_scope=tuple(scope),
     )
+
+
+#: How a governed comparator reads in a sentence the model is shown.
+_COMPARATOR_WORDS = {"gt": ">", "ge": ">=", "lt": "<", "le": "<=",
+                     "eq": "=", "ne": "!="}
 
 
 def _specialist_concepts(capabilities: Iterable[str]) -> Dict[str, SemanticConcept]:
@@ -898,9 +1289,10 @@ def _specialist_concepts(capabilities: Iterable[str]) -> Dict[str, SemanticConce
             out[concept_id] = SemanticConcept(
                 concept_id=concept_id,
                 label=concept_id.replace("_", " ").title(),
-                description=(f"Owned by the {cap} capability. Its methodology is "
-                             f"deterministic and is not composed by the "
-                             f"interpreter."),
+                description=SPECIALIST_MEASURE_DEFINITIONS.get(
+                    concept_id,
+                    f"Owned by the {cap} capability. Its methodology is "
+                    f"deterministic and is not composed by the interpreter."),
                 role="measure", allowed_statistics=(), owning_capability=cap)
     for cap, ids in SPECIALIST_DIMENSIONS.items():
         if cap not in caps:
@@ -911,10 +1303,13 @@ def _specialist_concepts(capabilities: Iterable[str]) -> Dict[str, SemanticConce
             out[concept_id] = SemanticConcept(
                 concept_id=concept_id,
                 label=concept_id.replace("_", " ").title(),
-                description=f"A governed dimension of the {cap} capability.",
+                description=SPECIALIST_DIMENSION_DEFINITIONS.get(
+                    concept_id,
+                    f"A governed dimension of the {cap} capability."),
                 role="dimension", owning_capability=cap,
-                values=governed_values_for_field().get("pipeline_stage", ())
-                if concept_id.endswith("_stage") else ())
+                values=(SPECIALIST_DIMENSION_VALUES.get(concept_id)
+                        or (governed_values_for_field().get("pipeline_stage", ())
+                            if concept_id.endswith("_stage") else ())))
     return out
 
 
@@ -935,6 +1330,24 @@ def load_governed_vocabulary() -> GovernedVocabulary:
             canonical.get(canonical_field) or {}, values)
         if concept is not None:
             concepts[concept.concept_id] = concept
+
+    # ONE CONCEPT PER MEANING. A registry field `superseded_by` another is a
+    # second name for the same fact (the registry records which is governed);
+    # the model is shown only the governed one, and the superseded name and
+    # its synonyms become aliases of it, so a reader's words still resolve —
+    # to the field the books carry. A successor that is not itself a concept
+    # leaves the field as it was: nothing is folded into nothing.
+    for canonical_field, entry in sorted(mi_fields.items()):
+        successor = str((entry or {}).get("superseded_by") or "")
+        if not successor or successor not in concepts \
+                or canonical_field not in concepts:
+            continue
+        retired = concepts.pop(canonical_field)
+        folded = {canonical_field, *retired.aliases}
+        folded.discard(successor)
+        target = concepts[successor]
+        concepts[successor] = replace(
+            target, aliases=tuple(sorted(set(target.aliases).union(folded))))
 
     # Default weights, now that every identifier exists.
     for concept_id, concept in list(concepts.items()):

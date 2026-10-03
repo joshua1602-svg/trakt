@@ -1430,6 +1430,10 @@ def _execute_grouped(spec, work, semantics, warnings, balance_col,
                                balance_col, warnings)
 
     if top_n_allowed and spec.top_n is not None:
+        # How many groups were ranked, before the cut: "the highest of 11",
+        # never "1 group" for a ranking that compared eleven.
+        if coverage is not None:
+            coverage["groups_before_top_n"] = int(len(out))
         out = _apply_top_n(out, metric_col, work, group_cols, agg, balance_col,
                            spec.top_n, rank_priority, warnings,
                            sort_direction=(spec.sort_direction or "desc"))
@@ -1650,6 +1654,26 @@ def execute_mi_query(
             )
 
     warnings: List[str] = []
+    # THE LIVE PIPELINE BY DEFAULT (owner decision, 2026-09-29). ERE's weekly
+    # extract keeps completed and withdrawn cases with their balance; the
+    # Pipeline tab counts KFI / Application / Offer only, and a pipeline answer
+    # must be the same figure. A question that names a stage itself ("withdrawn
+    # cases") is answered over the whole extract. The rule and its disclosure
+    # are the Pipeline owner's, imported here only for a pipeline query — the
+    # Function App package, which runs funded queries, does not carry it.
+    pipeline_scope: Optional[Dict[str, Any]] = None
+    if dataset == "pipeline":
+        from mi_agent_api.pipeline_contract import (
+            STAGE_COLUMNS, live_pipeline_note, live_pipeline_scope)
+
+        def _column(key: str) -> str:
+            entry = (semantics.get("fields") or {}).get(key) or {}
+            return str(entry.get("canonical_field") or key)
+
+        names_a_stage = any(_column(k) in STAGE_COLUMNS
+                            for k in (spec.filters or {}))
+        df, pipeline_scope = live_pipeline_scope(df, names_a_stage=names_a_stage)
+        pipeline_scope["note"] = live_pipeline_note(pipeline_scope)
     work = df.copy()  # never mutate the caller's dataframe
     # Duplicate column names make a single-name selection return a DataFrame
     # (crashing numeric coercion). Fail fast with a controlled, explained error.
@@ -1682,6 +1706,7 @@ def execute_mi_query(
         "filtered_row_count": int(len(work)),
         "dataset": dataset,
         "run_id": run_id,
+        "pipeline_scope": pipeline_scope,
     }
     # Filled by grouped paths with precise included/excluded record + balance totals.
     coverage: Dict[str, Any] = {}
@@ -1854,6 +1879,8 @@ def execute_mi_query(
                 col = ent.get("canonical_field", key)
                 if col not in measure_cols:
                     measure_cols.append(col)
+    if coverage.get("groups_before_top_n") is not None:
+        metadata["groups_before_top_n"] = coverage["groups_before_top_n"]
     metadata["reconciliation"] = _build_reconciliation(
         df, work, balance_col, spec, coverage, result_type, metadata,
         measure_cols=measure_cols)

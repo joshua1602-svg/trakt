@@ -38,7 +38,13 @@ from typing import List, Mapping, Optional
 # current model identifiers are complete without one, and a suffix that drifts
 # out of service fails at the API rather than at import, in whichever deployment
 # had not set the env var.
-DEFAULT_MODEL = "claude-opus-5"
+#
+# CLAUDE OPUS 5.5 (owner, 2026-10-02: "We must upgrade to Opus 5.5"). The
+# current Opus: cheaper per token than Claude Opus 5 ($4/$20 against $5/$25 per
+# million; cached input $0.20 against $0.50). Claude Opus 5 is not deprecated
+# (retirement not before 2027-07-24); the move is measured against the signed-
+# off baseline before it is relied on (P0 design §40).
+DEFAULT_MODEL = "claude-opus-5-5"
 DEFAULT_PROVIDER = "anthropic"
 # Cost-conscious default: one repair attempt (override with MI_AGENT_MAX_REPAIR_ATTEMPTS).
 DEFAULT_MAX_REPAIR_ATTEMPTS = 1

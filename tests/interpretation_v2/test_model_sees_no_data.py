@@ -90,7 +90,10 @@ def _every_tool_result(vocabulary) -> list:
 
 def _whole_surface(vocabulary, question: str = "What is our total balance?") -> str:
     return json.dumps({
-        "system": build_system_blocks(vocabulary),
+        # The catalogue AND a client's context, with a loaded registry: every
+        # block the model can be sent (P0 design §21).
+        "system": build_system_blocks(vocabulary,
+                                      source_registry=_loaded_registry()),
         "user": build_user_prompt(question),
         "tools": metadata_tool_schemas() + [build_tool_schema()],
         "tool_results": _every_tool_result(vocabulary),
@@ -173,7 +176,9 @@ def test_the_interpreter_sends_exactly_what_the_builders_produce(vocabulary):
     assert client.last_system == build_system_blocks(vocabulary)
     assert client.last_user == build_user_prompt("What is our total funded balance?")
     assert client.last_tool_schema == build_tool_schema()
-    assert list(client.last_metadata_tools) == metadata_tool_schemas()
+    # ONE CALL (P0 design §21): the catalogue is in the prompt, so the model
+    # is offered no lookup tool and no dispatcher.
+    assert list(client.last_metadata_tools) == []
 
 
 def test_a_dataframe_can_never_reach_the_interpreter(vocabulary):
@@ -184,6 +189,8 @@ def test_a_dataframe_can_never_reach_the_interpreter(vocabulary):
     # `source_registry` is the ONE addition, it is KEYWORD-ONLY, and it takes a
     # governed portfolio registry — configuration naming this client's books.
     # Positional data is still impossible, which is what this test is for.
+    # A conversation adds nothing here (§39): a follow-up reaches the
+    # interpreter already made a complete question, as text.
     assert list(signature.parameters) == ["self", "question", "source_registry"]
     assert (signature.parameters["source_registry"].kind
             is inspect.Parameter.KEYWORD_ONLY)

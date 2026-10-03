@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 
@@ -1090,10 +1090,29 @@ def pipeline_stage_movement(pipeline_root: str | os.PathLike, client_id: str,
 # Pipeline evolution (governed weekly extracts)
 # --------------------------------------------------------------------------- #
 @_perf.stage_fn("pipeline_evolution_series")
+def pipeline_extract_dates(pipeline_root: str | os.PathLike, client_id: str,
+                           to_run_id: Optional[str] = None) -> List[str]:
+    """The extract dates `pipeline_evolution` would read, from the inventory
+    alone — no extract is prepared. A question about named snapshots chooses
+    its dates from this list, then asks the series for those dates only."""
+    inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
+    cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
+    return [str(e.get("pipeline_extract_date")) for e in inv.get("extracts", [])
+            if e.get("pipeline_extract_date")
+            and not (cut_ym and str(e["pipeline_extract_date"])[:7] > cut_ym)]
+
+
 def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
                        to_run_id: Optional[str] = None, *,
-                       historical_model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                       historical_model: Optional[Dict[str, Any]] = None,
+                       only_dates: Optional[Iterable[str]] = None) -> Dict[str, Any]:
     """Pipeline time series across the governed UNIQUE weekly extracts.
+
+    ``only_dates`` prepares those extracts and no others: each extract's
+    figures are its own, so a question about two named snapshots needs two
+    preparations, not the whole history (a cold "latest against previous" took
+    143 s preparing 90). The trailing five-week average needs the weeks
+    around each one, so it is not published for a partial series.
 
     When a governed ``historical_model`` is supplied the weighted-expected-funded
     amount is weighted by the SAME empirical stage completion rates used by the
@@ -1109,9 +1128,12 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
     sources: List[str] = []
     dates: List[Optional[str]] = []
 
+    wanted = None if only_dates is None else {str(d) for d in only_dates}
     for ext in extracts:
         edate = ext.get("pipeline_extract_date")
         if cut_ym and edate and edate[:7] > cut_ym:
+            continue
+        if wanted is not None and str(edate) not in wanted:
             continue
         try:
             summary = pipeline_mod.load_extract_summary(
@@ -1184,7 +1206,8 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
         # Governed trailing five-week average of the SAME weekly series above,
         # using the SAME window and the SAME trailing-mean helper the funnel
         # already publishes per stage. Additive: no existing field changes.
-        "fiveWeekAverage": five_week_average(periods),
+        "fiveWeekAverage": (five_week_average(periods) if wanted is None
+                            else None),
         "lineage": {
             "source": "governed weekly pipeline extracts (deduplicated)",
             "metric": "origination pipeline amount / weighted expected funded per extract",
@@ -1334,11 +1357,21 @@ def _lagged_value(series: List[Optional[float]], lag: int) -> Tuple[Optional[flo
     return series[idx], idx
 
 
+def funnel_tail_needed(lag_weeks: Optional[int]) -> int:
+    """How many trailing extracts the funnel's headline summary reads: the
+    trailing five-week flows (six stock points) and the KFI stock `lag_weeks`
+    extracts before the latest. A caller reading only those figures needs
+    only those extracts prepared (`pipeline_funnel_evolution(tail=...)`)."""
+    lag = max(0, int(lag_weeks or 0))
+    return max(lag + 1, _CONVERSION_WINDOW + 1)
+
+
 @_perf.stage_fn("pipeline_funnel_series")
 def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
                               to_run_id: Optional[str] = None,
                               lag_weeks: Optional[int] = None, *,
-                              historical_model: Optional[Dict[str, Any]] = None
+                              historical_model: Optional[Dict[str, Any]] = None,
+                              tail: Optional[int] = None
                               ) -> Dict[str, Any]:
     """Weekly origination funnel: KFI / Application / Offer / Completion per
     governed weekly extract, FLOW-FIRST.
@@ -1367,10 +1400,23 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
     median KFI->completion lag in weeks (from the historical completion model);
     when unknown the rate is computed unlagged and flagged as such. Reuses the
     governed weekly pipeline extracts (same source as ``pipeline_evolution``).
+
+    ``tail`` prepares only the last ``tail`` extracts (to the cut). The
+    headline figures — latest stock and flow, the trailing five-week flows and
+    the lagged KFI stock — are the full series' own when ``tail`` is at least
+    ``funnel_tail_needed(lag_weeks)``; the series, ``weeksObserved`` and the
+    trend then cover the tail only. The forecast extrapolation reads the
+    headline figures alone, and a cold forecast question used to prepare all
+    90 of ERE's extracts for them (140 s).
     """
     inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
     extracts = inv.get("extracts", [])
     cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
+    if tail is not None:
+        kept = [e for e in extracts
+                if not (cut_ym and e.get("pipeline_extract_date")
+                        and str(e["pipeline_extract_date"])[:7] > cut_ym)]
+        extracts = kept[-max(1, int(tail)):]
 
     weeks: List[Optional[str]] = []
     sources: List[str] = []
@@ -1567,7 +1613,8 @@ def forecast_evolution(output_root: str | os.PathLike,
                        to_run_id: Optional[str] = None, *,
                        historical_model: Optional[Dict[str, Any]] = None,
                        scope=None,
-                       include_pipeline: bool = True) -> Dict[str, Any]:
+                       include_pipeline: bool = True,
+                       latest_only: bool = False) -> Dict[str, Any]:
     """Forecast bridge over time: funded balance per run + the latest weighted
     pipeline contribution available at/under that run's month. A governed
     ``historical_model`` weights the pipeline by the same empirical stage rates as
@@ -1576,18 +1623,49 @@ def forecast_evolution(output_root: str | os.PathLike,
     ``scope`` narrows the funded side to the selected portfolios.
     ``include_pipeline=False`` is used when the governed capability resolver says
     no portfolio in scope originates — the funded series is still returned, with
-    no fabricated pipeline contribution."""
+    no fabricated pipeline contribution.
+
+    ``latest_only`` returns the LATEST funded period alone, with its pipeline
+    contribution from that month's extracts only — the same figure, without
+    preparing every extract of every earlier month (the forecast
+    extrapolation reads that period and nothing else)."""
     funded = funded_evolution(output_root, client_id, to_run_id, scope=scope)
+    if latest_only:
+        funded = dict(funded, periods=list(funded.get("periods") or [])[-1:])
+    only_dates = None
+    if latest_only and include_pipeline:
+        month = ((funded.get("periods") or [{}])[-1] or {}).get("period") or ""
+        only_dates = [d for d in pipeline_extract_dates(pipeline_root, client_id,
+                                                        to_run_id)
+                      if month and d[:7] == month]
     pipe = (pipeline_evolution(pipeline_root, client_id, to_run_id,
-                               historical_model=historical_model)
+                               historical_model=historical_model,
+                               only_dates=only_dates)
             if include_pipeline else {"periods": []})
     # Index pipeline weighted-expected by year-month (latest extract per month).
     weighted_by_month: Dict[str, float] = {}
+    # WHICH EXTRACT WON, recorded in the same statement as the value it supplied
+    # so the two cannot fall out of step under "later extract overwrites". The
+    # join below pairs by calendar month and used to discard this date, leaving a
+    # composed forecast unable to say which pipeline extract fed it. That is
+    # lineage, not arithmetic: no figure changes, an existing value stops being
+    # thrown away. D1 (P0 design §4.1) needs it to state both input vintages.
+    extract_by_month: Dict[str, Optional[str]] = {}
+    # D21: a month whose latest extract states no weighted amount (a live case
+    # in a stage the history cannot yet rate) has no forecast — it is not a
+    # month without a pipeline extract, whose forecast is the funded balance.
+    withheld_months: set = set()
     for p in pipe["periods"]:
         ym = (p.get("period") or "")
         w = p["metrics"].get("weighted_expected_funded_amount")
         if ym and w is not None:
             weighted_by_month[ym] = float(w)  # later extract overwrites -> latest wins
+            extract_by_month[ym] = p.get("extract_date")
+            withheld_months.discard(ym)
+        elif ym:
+            weighted_by_month.pop(ym, None)
+            extract_by_month[ym] = p.get("extract_date")
+            withheld_months.add(ym)
 
     periods: List[Dict[str, Any]] = []
     for fp in funded["periods"]:
@@ -1601,10 +1679,16 @@ def forecast_evolution(output_root: str | os.PathLike,
             "metrics": {
                 "funded_balance": round(float(funded_bal), 2),
                 "weighted_expected_pipeline": (round(wpipe, 2) if wpipe is not None else None),
-                "forecast_funded_balance": round(float(funded_bal) + float(wpipe or 0.0), 2),
+                "forecast_funded_balance": (
+                    None if ym in withheld_months
+                    else round(float(funded_bal) + float(wpipe or 0.0), 2)),
             },
             "reconciliation": fp.get("reconciliation"),
             "source_file": fp.get("source_file"),
+            # The pipeline extract that supplied `weighted_expected_pipeline`, or
+            # None when no extract fell in this calendar month — in which case the
+            # forecast above equals the funded balance and this says why.
+            "pipeline_extract_date": extract_by_month.get(ym),
         })
 
     # WAS THE PRIOR FORECAST RIGHT? The forecast a run published becomes the

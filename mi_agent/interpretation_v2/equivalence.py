@@ -85,7 +85,7 @@ def _slot_values(result: CompileResult) -> Dict[str, Any]:
                                      str(p.value))
                                     for p in plan.population.scope_predicates))),
         "period": (plan.period.form, plan.period.grain, plan.period.periods_back,
-                   plan.period.contract),
+                   plan.period.contract, plan.period.periods_ahead),
         "geography": ((plan.geography.canonical_field, plan.geography.group_by,
                        tuple(sorted(map(str, plan.geography.values))))
                       if plan.geography else None),

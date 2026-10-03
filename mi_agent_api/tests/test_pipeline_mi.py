@@ -269,9 +269,16 @@ class TestPipelineApiMetadata(unittest.TestCase):
         self.assertGreaterEqual(len(body["sources"]), 2)
 
     def test_snapshot_returns_metrics_dimensions_and_data_quality(self):
-        body = self._client().get(
-            "/mi/pipeline/snapshot",
-            params={"portfolioId": "client_001/mi_2025_11"}).json()
+        # D21: the weighted figure rests on the book's own history, measured
+        # at test-book scale (the fixture is far below production thresholds).
+        from unittest import mock
+        from mi_agent_api import app as app_mod
+        from tests.measured_history import measured_history
+        with mock.patch.object(app_mod, "_pipeline_history",
+                               lambda cid: measured_history(str(_FIXTURE_PACK), cid)):
+            body = self._client().get(
+                "/mi/pipeline/snapshot",
+                params={"portfolioId": "client_001/mi_2025_11"}).json()
         self.assertTrue(body["ok"])
         self.assertEqual(body["recordType"], "pipeline")
         # Pipeline dates are distinct from the funded reporting date: the latest
@@ -282,6 +289,7 @@ class TestPipelineApiMetadata(unittest.TestCase):
         self.assertGreater(body["pipelineRowCount"], 0)
         self.assertGreater(body["pipelineAmount"], 0)
         self.assertIsNotNone(body["weightedExpectedFundedAmount"])
+        self.assertTrue(body["weightingComplete"])
         self.assertTrue(body["availableMetrics"])
         self.assertTrue(body["availableDimensions"])
         self.assertIn("pipeline_stage", body["availableDimensions"])
@@ -328,17 +336,21 @@ class TestForecastReadiness(unittest.TestCase):
             self.assertIn(axis, corr, axis)
         self.assertTrue(all(self.fr["correlation_fields_available"].values()))
 
-    def test_completion_probability_from_config_not_invented(self):
-        # Probabilities come from config/client/pipeline_expected_funding.yaml.
-        # KFI is top of funnel (not forecast); forecast stages take the config.
+    def test_completion_probability_is_measured_never_configured(self):
+        """D21 (owner decision 2026-09-30): probabilities are measured from the
+        client's history or there are none. KFI is top of funnel (not
+        forecast). With no history, a forecast stage carries no probability
+        and the weighted total is not stated — not the configured rate."""
         kfi = self.out[self.out["pipeline_stage"] == "KFI"]
         self.assertTrue((kfi["completion_probability"] == 0.0).all())
-        live = self.out[self.out["completion_probability_source"] == "configured_stage_rate"]
-        self.assertTrue(set(live["pipeline_stage"]) <= {"APPLICATION", "OFFER"})
-        self.assertTrue((live[live["pipeline_stage"] == "OFFER"]
-                         ["completion_probability"] == 0.75).all())
-        self.assertTrue(self.report["weighted_expected_funded_amount"] <
-                        self.report["expected_funded_amount"])
+        self.assertNotIn("configured_stage_rate",
+                         set(self.out["completion_probability_source"]))
+        unrated = self.out[self.out["completion_probability_source"].str.startswith(
+            "insufficient_history_")]
+        self.assertTrue(set(unrated["pipeline_stage"]) <= {"APPLICATION", "OFFER"})
+        self.assertTrue(unrated["completion_probability"].isna().all())
+        self.assertIsNone(self.report["weighted_expected_funded_amount"])
+        self.assertFalse(self.report["weighting_complete"])
 
     def test_diagnostics_partitioned_by_severity(self):
         groups = diagnostics_by_severity(self.report)

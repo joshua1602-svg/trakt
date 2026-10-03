@@ -27,6 +27,7 @@ import math
 from typing import Any, Dict, List, Optional, Tuple, Sequence
 
 from . import evolution as evolution_mod
+from . import pipeline_history as _history
 
 _THRESHOLDS = [25_000_000, 50_000_000, 75_000_000, 100_000_000, 150_000_000]
 _LOOKBACKS = (4, 5, 8, 12)
@@ -115,6 +116,17 @@ def _screen_proxy_observations(obs: List[float]) -> Tuple[List[float], List[int]
     return (kept or obs), excluded
 
 
+#: WHICH COMPLETION SIGNAL A RUN-RATE WAS BUILT ON, as a stable code beside the
+#: prose `completionSignal`. The governed forecast runtime needs to know whether
+#: the pipeline was an INPUT to this figure — it is when the signal is the
+#: observed completion flow, and it is not when the owner fell back to funded
+#: balance growth — because only a figure composed from two datasets has two
+#: vintages to state and a skew to check (P0 D1). Reading that off the prose
+#: would be parsing a sentence to recover a fact the owner already had.
+SIGNAL_OBSERVED_COMPLETION_FLOW = "observed_completion_flow"
+SIGNAL_FUNDED_GROWTH_PROXY = "funded_growth_proxy"
+
+
 def run_rate_model(current_balance: float, completions: List[float], *,
                    reporting_period: Optional[str] = None,
                    thresholds: Optional[List[float]] = None,
@@ -144,6 +156,7 @@ def run_rate_model(current_balance: float, completions: List[float], *,
             scenario_basis="75% / 125% of the observed completion run-rate",
             completion_signal=(completion_basis
                                or "governed weekly completion flow (pipeline COMPLETED stage)"),
+            signal_kind=SIGNAL_OBSERVED_COMPLETION_FLOW,
             caveats=[], excluded=[])
 
     # --- Fallback: month-on-month funded balance growth, screened. ---------- #
@@ -201,6 +214,7 @@ def run_rate_model(current_balance: float, completions: List[float], *,
         observed_months=n, sufficient=sufficient, lookbacks=lookbacks,
         downside=downside, upside=upside, scenario_basis=scenario_basis,
         completion_signal="month-on-month funded balance growth (proxy)",
+        signal_kind=SIGNAL_FUNDED_GROWTH_PROXY,
         caveats=caveats, excluded=excluded)
 
 
@@ -209,7 +223,8 @@ def _assemble_run_rate(current_balance: float, base: float, thresholds: List[flo
                        sufficient: bool, lookbacks: Dict[str, float],
                        downside: float, upside: float, scenario_basis: str,
                        completion_signal: str, caveats: List[str],
-                       excluded: List[int]) -> Dict[str, Any]:
+                       excluded: List[int],
+                       signal_kind: Optional[str] = None) -> Dict[str, Any]:
     """Project, find milestones and package — shared by both completion signals."""
     # Guard against a non-positive base making the projection meaningless.
     scenarios = {"downside": max(downside, 0.0), "base": max(base, 0.0),
@@ -250,6 +265,7 @@ def _assemble_run_rate(current_balance: float, base: float, thresholds: List[flo
             "horizonMonths": _HORIZON_MONTHS,
             "currentFundedBalance": round(current_balance, 2),
             "completionSignal": completion_signal,
+            "completionSignalKind": signal_kind,
         },
         "caveats": caveats,
     }
@@ -462,6 +478,93 @@ def _withdraw_kfi_model(model_b: Dict[str, Any]) -> Dict[str, Any]:
     return model_b
 
 
+#: What a milestone question's answer IS, before anyone phrases it.
+MILESTONE_ALREADY_REACHED = "already_reached"
+MILESTONE_PROJECTED = "projected"
+#: The requested threshold lies past the projection, and the ladder's own row for
+#: it (or the next above it) says `reached` — which here means the projection
+#: topped out, not that the book got there. Phrased differently by the caller.
+MILESTONE_BEYOND_HORIZON_LADDER = "beyond_horizon_ladder"
+#: No milestone at or above the requested threshold exists at all.
+MILESTONE_BEYOND_HORIZON = "beyond_horizon"
+
+
+def milestone_for(milestones: Sequence[Dict[str, Any]],
+                  threshold: float) -> Optional[Dict[str, Any]]:
+    """The milestone FOR THIS THRESHOLD, or the next one above it.
+
+    NEVER `milestones[-1]`. That fallback returned the largest milestone the
+    projection happened to carry whenever the requested threshold was beyond
+    it, and the caller then reported that milestone's state as the answer for
+    the threshold actually asked about. Measured: the milestone list tops out
+    at £75m — all reached — so "when do we reach £250m?" answered "the book
+    has already reached £250.0m" on a book holding £172.1m.
+
+    ONE OWNER. Lifted here from `chat_routing._route_forecast`, where it was a
+    closure, so the governed forecast runtime reaches the same rule rather than
+    a second copy of it. The governed serving path may not import
+    `chat_routing`, so a rule that lived there could only be duplicated — and a
+    duplicated milestone rule is how the £250m defect would come back.
+    """
+    exact = next((m for m in milestones if m["threshold"] == threshold), None)
+    if exact:
+        return exact
+    above = [m for m in milestones if m["threshold"] >= threshold]
+    return above[0] if above else None
+
+
+def milestone_answer(milestones: Sequence[Dict[str, Any]], threshold: float,
+                     current_balance: float) -> Dict[str, Any]:
+    """Which of the four answers a "when do we reach X?" question has.
+
+    THE ARITHMETIC DECIDES, not a milestone flag. "Already reached" is a
+    statement about the CURRENT balance and the REQUESTED target, and it is
+    true exactly when one is at least the other — so it is tested first, and
+    a ladder row's `reached` flag is never read as though it answered that.
+
+    Returns `{"state": <one of the MILESTONE_* constants>, "milestone": row|None,
+    "gap": amount still to go (0 once reached)}`. The caller phrases each
+    state; this decides which state it is, once — and owns the gap, the same
+    comparison stated as an amount, so no caller computes it again.
+    """
+    gap = round(max(float(threshold) - float(current_balance or 0), 0.0), 2)
+    if float(current_balance or 0) >= float(threshold):
+        return {"state": MILESTONE_ALREADY_REACHED, "milestone": None, "gap": gap}
+    m = milestone_for(milestones, threshold)
+    if m is None:
+        return {"state": MILESTONE_BEYOND_HORIZON, "milestone": None, "gap": gap}
+    if m.get("reached"):
+        return {"state": MILESTONE_BEYOND_HORIZON_LADDER, "milestone": m,
+                "gap": gap}
+    return {"state": MILESTONE_PROJECTED, "milestone": m, "gap": gap}
+
+
+def _calendar_run_rate(pipeline_root, client_id: str,
+                       history_model: Optional[Dict[str, Any]],
+                       as_of: Optional[str]) -> Dict[str, Any]:
+    """The history owner's calendar run-rate as at `as_of` (D22): the history
+    the caller already holds when it ends there, otherwise the history cut to
+    that date. Nothing when there is no dated extract to end at."""
+    if not as_of:
+        return {"available": False, "method": "calendar",
+                "reason": "no dated pipeline extract"}
+    held = (history_model or {}).get("completionRunRate") or {}
+    if held.get("asOf") == as_of:
+        return held
+    if not pipeline_root:
+        return {"available": False, "method": "calendar",
+                "reason": "no pipeline history root"}
+    from . import pipeline_contract as _pipeline
+    try:
+        model = _pipeline.build_pipeline_history(pipeline_root, client_id,
+                                                 as_of=as_of)
+    except Exception as exc:  # noqa: BLE001 - the forecast must not 500 here
+        return {"available": False, "method": "calendar",
+                "reason": f"history unavailable: {type(exc).__name__}"}
+    return model.get("completionRunRate") or {"available": False,
+                                              "method": "calendar"}
+
+
 def build_extrapolation(output_root, pipeline_root, client_id: str,
                         to_run_id: Optional[str], *,
                         history_model: Optional[Dict[str, Any]] = None,
@@ -483,9 +586,11 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
     # Weight the pipeline by the SAME governed historical stage rates as the
     # point-in-time bridge, so Model C's 'weighted expected pipeline' matches the
     # Forecast tab instead of silently using the config-only fallback.
+    # Model C reads the latest funded period alone, so only that month's
+    # pipeline extracts are prepared — not every extract of the history.
     forecast = evolution_mod.forecast_evolution(
         output_root, pipeline_root, client_id, to_run_id, historical_model=history_model,
-        scope=scope)
+        scope=scope, latest_only=True)
     # NOTE: a third traversal of the weekly pipeline series used to sit here —
     # ``pipeline = evolution_mod.pipeline_evolution(...)`` — whose result was
     # never read by anything below (verified by AST: the name had zero Load
@@ -526,7 +631,10 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
         funnel = evolution_mod.pipeline_funnel_evolution(
             pipeline_root, client_id, to_run_id, lag_weeks=lag_weeks,
             # Reuses the frames forecast_evolution already prepared above.
-            historical_model=history_model)
+            historical_model=history_model,
+            # Model B reads the headline figures only: the trailing extracts
+            # they come from, not the whole history.
+            tail=evolution_mod.funnel_tail_needed(lag_weeks))
     except Exception:  # noqa: BLE001 - forecast must not 500 on a funnel error
         funnel = {"summary": {}}
     fsum = funnel.get("summary", {}) or {}
@@ -538,15 +646,25 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
     weekly_conv = (weekly_rate_pct / 100.0) if weekly_rate_pct is not None else None
 
     # Model A — completion run-rate. The signal is the completions the pipeline
-    # actually OBSERVED (its COMPLETED weekly flow, the same series the Pipeline
-    # → Evolution tab charts), so the two surfaces reconcile by construction.
-    # Month-on-month funded balance growth is only a proxy for that, and carries
-    # interest roll-up and any portfolio onboarded in one step, so it is the
-    # fallback rather than the signal.
-    completed_summary = (fsum.get("COMPLETED", {}) or {})
-    weekly_completions = completed_summary.get("fiveWeekAvgFlowValue")
-    observed_monthly = (float(weekly_completions) * _MONTHS_PER_WEEK
-                        if weekly_completions is not None and weekly_completions > 0
+    # actually OBSERVED. Month-on-month funded balance growth is only a proxy
+    # for that, and carries interest roll-up and any portfolio onboarded in one
+    # step, so it is the fallback rather than the signal.
+    #
+    # D22 (owner decision 2026-09-30): ON THE CALENDAR. The pipeline is
+    # reported ad hoc (D15), so an average of the last five extract-to-extract
+    # flows is not five weeks of completions, and scaling it at 52/12 "weeks"
+    # a month misstated the rate by however far apart the extracts were. The
+    # run-rate is the history owner's: the amount of the cases that completed
+    # in the five weeks to the funnel's latest extract, by each case's own
+    # completion date — and the same owner publishes every other whole-week
+    # window the history covers, which the Forecast tab and the agent read.
+    flow_as_of = (funnel.get("weeks") or [None])[-1]
+    run_rate = _calendar_run_rate(pipeline_root, client_id, history_model,
+                                  flow_as_of)
+    window = _history.run_rate_window(
+        {"completionRunRate": run_rate}, _history.RUN_RATE_DEFAULT_WEEKS)
+    monthly = (window or {}).get("monthlyAmount")
+    observed_monthly = (float(monthly) if monthly is not None and monthly > 0
                         else None)
     comp = completion_history(funded_periods)
     model_a = run_rate_model(
@@ -555,9 +673,19 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
         thresholds=sorted({float(t) for t in _THRESHOLDS}
                           | {float(t) for t in (extra_thresholds or ())}),
         observed_monthly_completions=observed_monthly,
-        completion_basis=("observed completion flow — 5-week average of the pipeline's "
-                          "COMPLETED stage, annualised to a month"))
+        completion_basis=(
+            f"observed completions — the amount of the cases that completed in "
+            f"the {window['weeks']} weeks {window['from']} to {window['to']}, "
+            f"by completion date, per month" if window else None))
     model_a["completionHistory"] = comp
+    # Every whole-week window the history covers, on the same calendar basis
+    # (D22) — the figure a question naming its own window reads.
+    model_a["runRateMethod"] = run_rate.get("method")
+    model_a["runRateWindow"] = window if observed_monthly is not None else None
+    model_a["runRateByWindow"] = list(run_rate.get("byWindow") or ())
+    model_a["runRateWindowWeeks"] = {"min": run_rate.get("minWeeks"),
+                                     "max": run_rate.get("maxWeeks"),
+                                     "default": run_rate.get("defaultWeeks")}
     rate_weeks = completed_conv.get("weeksInWindow")
     min_rate_weeks = completed_conv.get("minWeeks", 3)
     model_b = _withdraw_kfi_model(
@@ -573,6 +701,21 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
         "portfolioId": client_id,
         "toRunId": to_run_id,
         "reportingPeriod": reporting_period,
+        # BOTH INPUT VINTAGES, as dates. `reportingPeriod` is the funded month;
+        # these are what a composed answer must state (P0 D1) and what the
+        # governed forecast runtime measures skew between. The pipeline date is
+        # the extract that actually supplied Model C's weighted pipeline, or None
+        # when no extract fell in the funded month — never "the latest extract",
+        # which is a different claim.
+        "fundedReportingDate": (latest or {}).get("reporting_date"),
+        "pipelineExtractDate": (fc_latest or {}).get("pipeline_extract_date"),
+        # THE PIPELINE VINTAGE OF THE RUN-RATE, which is a different extract from
+        # Model C's. Model A's observed completion flow is a trailing average
+        # ENDING at the funnel's latest extract, so that extract is the date its
+        # pipeline input is as at. None when the run-rate did not use the flow —
+        # then the pipeline was not an input to it at all.
+        "completionFlowExtractDate": (
+            flow_as_of if observed_monthly is not None else None),
         "currentFundedBalance": round(current_balance, 2),
         "currentWeightedPipelineForecast": current_weighted,
         "completionRunRateForecast": model_a,

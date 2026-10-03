@@ -1,0 +1,641 @@
+{
+ "intents": {
+  "forecast_scale_019": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "I read this as the monthly run-rate, not the annualised one.",
+     "options": [],
+     "slot": "measures"
+    }
+   ],
+   "capability": "forecast",
+   "change_form": null,
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "forecast_completion_rate",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "point_in_time",
+   "outputs": [],
+   "population": {
+    "base": "funded",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "range",
+    "grain": "weekly",
+    "labels": [
+     "8-week"
+    ],
+    "periods_ahead": null,
+    "periods_back": 8
+   }
+  },
+  "forecast_scale_020": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "Read as the run-rate measured over the last 12 weeks rather than the default 5-week window.",
+     "options": [],
+     "slot": "time"
+    }
+   ],
+   "capability": "forecast",
+   "change_form": null,
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "forecast_completion_rate",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "point_in_time",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "range",
+    "grain": "weekly",
+    "labels": [
+     "12-week"
+    ],
+    "periods_ahead": null,
+    "periods_back": 12
+   }
+  },
+  "hv_forecast_scale_007_1": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "No period stated; read at the latest forecast over its own window.",
+     "options": [],
+     "slot": "time"
+    }
+   ],
+   "capability": "forecast",
+   "change_form": null,
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "annualised_completion_run_rate",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "point_in_time",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "current",
+    "grain": null,
+    "labels": [],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
+  "hv_funded_breakdown_1d_014_1": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "LTV bands read as current LTV bands, not original LTV.",
+     "options": [
+      "ltv_bucket",
+      "original_ltv_bucket"
+     ],
+     "slot": "dimensions"
+    }
+   ],
+   "capability": "generic_analysis",
+   "change_form": null,
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [
+    "ltv_bucket"
+   ],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "current_outstanding_balance",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "distribution",
+   "outputs": [],
+   "population": {
+    "base": "funded",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "current",
+    "grain": null,
+    "labels": [],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
+  "hv_pipeline_evolution_011_1": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "No measure named; read as pipeline amount rather than case count.",
+     "options": [
+      "pipeline_amount",
+      "pipeline_case_count"
+     ],
+     "slot": "measures"
+    },
+    {
+     "blocking": false,
+     "note": "Read 'against' as the two months' levels shown side by side.",
+     "options": [],
+     "slot": "change_form"
+    }
+   ],
+   "capability": "pipeline",
+   "change_form": "level_comparison",
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [
+    "pipeline_stage"
+   ],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "pipeline_amount",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "compare",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "relative_pair",
+    "grain": "monthly",
+    "labels": [
+     "October",
+     "November"
+    ],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
+  "hv_pipeline_evolution_012_1": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "Read as how much the amount moved, not a side-by-side of levels or its causes.",
+     "options": [
+      "metric_delta",
+      "level_comparison"
+     ],
+     "slot": "change_form"
+    }
+   ],
+   "capability": "pipeline",
+   "change_form": "metric_delta",
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "pipeline_amount",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "movement",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "relative_pair",
+    "grain": "monthly",
+    "labels": [
+     "October",
+     "November"
+    ],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
+  "hv_pipeline_evolution_014_1": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "'How much' read as the pipeline amount, not case count.",
+     "options": [
+      "pipeline_amount",
+      "pipeline_case_count"
+     ],
+     "slot": "measures"
+    }
+   ],
+   "capability": "pipeline",
+   "change_form": "metric_delta",
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "pipeline_amount",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "movement",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "relative_pair",
+    "grain": "monthly",
+    "labels": [
+     "October",
+     "November"
+    ],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
+  "pipeline_evolution_011": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "No measure was named, so I read the pipeline as its amount rather than its case count.",
+     "options": [
+      "pipeline_amount",
+      "pipeline_case_count"
+     ],
+     "slot": "measures"
+    },
+    {
+     "blocking": false,
+     "note": "I read October and November as two reporting periods to show side by side, not as expected completion months.",
+     "options": [],
+     "slot": "time"
+    }
+   ],
+   "capability": "pipeline",
+   "change_form": "level_comparison",
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [
+    "pipeline_stage"
+   ],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "pipeline_amount",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "breakdown",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "explicit_period",
+    "grain": "monthly",
+    "labels": [
+     "October",
+     "November"
+    ],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
+  "pipeline_evolution_012": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "October and November read as two reporting periods compared as levels.",
+     "options": [],
+     "slot": "time"
+    }
+   ],
+   "capability": "pipeline",
+   "change_form": "level_comparison",
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "pipeline_amount",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "compare",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "relative_pair",
+    "grain": "monthly",
+    "labels": [
+     "October",
+     "November"
+    ],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
+  "pipeline_evolution_013": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "No measure named; read as pipeline amount per the amount default.",
+     "options": [
+      "pipeline_amount",
+      "pipeline_case_count"
+     ],
+     "slot": "measures"
+    }
+   ],
+   "capability": "pipeline",
+   "change_form": "level_comparison",
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "pipeline_amount",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "compare",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "relative_pair",
+    "grain": null,
+    "labels": [
+     "latest",
+     "prior"
+    ],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  },
+  "pipeline_evolution_014": {
+   "ambiguity": [
+    {
+     "blocking": false,
+     "note": "No measure was named, so growth is read as the pipeline amount rather than the case count.",
+     "options": [
+      "pipeline_amount",
+      "pipeline_case_count"
+     ],
+     "slot": "measures"
+    }
+   ],
+   "capability": "pipeline",
+   "change_form": "metric_delta",
+   "comparison": {
+    "kind": "none",
+    "left": null,
+    "right": null
+   },
+   "dimensions": [],
+   "evidence": [],
+   "filters": [],
+   "geography": {
+    "basis": null,
+    "group_by": false,
+    "level": null,
+    "requested": false,
+    "values": []
+   },
+   "measures": [
+    {
+     "concept": "pipeline_amount",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "operation": "movement",
+   "outputs": [],
+   "population": {
+    "base": "pipeline",
+    "lens": "all",
+    "seasoning": "any",
+    "source_reference": null
+   },
+   "ranking": null,
+   "schema_version": "candidate_intent/1.0",
+   "target": null,
+   "time": {
+    "form": "relative_pair",
+    "grain": "monthly",
+    "labels": [
+     "October",
+     "November"
+    ],
+    "periods_ahead": null,
+    "periods_back": null
+   }
+  }
+ },
+ "what_this_is": "The candidate intents Claude Opus 5.5 recorded on the 2026-10-02 sign-off run (e9602062, read back by run 37008933483), for the readings design \u00a740 is about and two controls. Model output only: no figure, no row. The question text is not kept."
+}

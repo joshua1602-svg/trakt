@@ -168,8 +168,14 @@ class TestHistoricalModel(unittest.TestCase):
         offer = m["historicalCompletionRateByStage"]["OFFER"]
         self.assertEqual(offer["observed"], 14)
         self.assertEqual(offer["completed"], 10)
-        self.assertAlmostEqual(offer["rate"], round(10 / 14, 4), places=4)
-        self.assertTrue(offer["sufficient"])
+        # D27: the 4 still at Offer are waiting, not failures — every Offer
+        # seen to leave completed — and 10 completions are fewer than the
+        # run-off model measures a rate on, so the rate is provisional.
+        self.assertEqual(offer["rate"],
+                         m["runoff"]["stages"]["OFFER"]["completionFromEntry"])
+        self.assertAlmostEqual(offer["rate"], 1.0, places=4)
+        self.assertFalse(offer["sufficient"])
+        # The forecast's fallback weighting keeps its own rule (unchanged).
         self.assertEqual(m["stage_rates"]["OFFER"], round(10 / 14, 4))
 
     def test_window_is_chronological(self):
@@ -177,37 +183,51 @@ class TestHistoricalModel(unittest.TestCase):
         self.assertEqual(m["historicalCompletionRateWindow"]["fromDate"], "2025-10-01")
         self.assertEqual(m["historicalCompletionRateWindow"]["toDate"], "2025-11-01")
 
-    def test_insufficient_history_falls_back_to_config(self):
+    def test_insufficient_history_trusts_no_rate(self):
         m = build_historical_completion_model(self.entries, min_observations=50)
         self.assertFalse(m["available"])
-        self.assertEqual(m["stage_rates"], {})  # nothing trusted -> prep uses config
+        # Nothing trusted -> nothing weighted: no configured rate stands in (D21).
+        self.assertEqual(m["stage_rates"], {})
 
-    def test_prep_uses_historical_then_config(self):
-        m = build_historical_completion_model(self.entries, min_observations=12)
+    def test_prep_weights_only_by_measured_history(self):
+        """D21 (owner decision 2026-09-30): the OFFER cases are weighted by
+        what this book's history measured — their stage's run-off, its window
+        measured too — and never by the configured 0.75. A settled case is
+        excluded from weighting and names the stage that excluded it."""
+        m = build_historical_completion_model(self.entries, min_observations=12,
+                                              runoff_settings={"min_events": 1})
         df = pd.read_csv(self.tmp / "M2L_KFI_2025_11_01.csv")
         prep, rep = prepare_pipeline_mi_dataset(df, as_of_date="2025-11-01",
                                                 historical_model=m)
         srcs = set(prep["completion_probability_source"])
-        # The invariant this test protects: an empirical rate beats the
-        # configured one wherever history is sufficient.
-        self.assertIn("historical_stage_rate", srcs)   # OFFER cases
-        # OFFER rows carry the empirical rate, not the configured 0.75.
-        offer = prep[prep["pipeline_stage"] == "OFFER"]
-        self.assertTrue((offer["completion_probability"].round(4) == round(10 / 14, 4)).all())
-        # This assertion used to read `assertIn("configured_stage_rate", srcs)`
-        # with the comment "COMPLETED via config 1.0" — i.e. it asserted the
-        # defect: a settled case weighted at certainty and added to the forward
-        # forecast. The governed config lists COMPLETED under exclude_stages, so
-        # such a row is now excluded from weighting and names the stage that
-        # excluded it. The config-fallback tier itself is still covered, by
-        # test_pipeline_prep_vectorisation.
+        self.assertLessEqual(srcs, {"historical_runoff", "historical_stage_rate",
+                                    "excluded_completed"})
         self.assertIn("excluded_completed", srcs)
         self.assertTrue(prep.loc[prep["pipeline_stage"] == "COMPLETED",
                                  "completion_probability"].isna().all())
-        # Every remaining weighted row in this fixture has sufficient history,
-        # so the basis is purely empirical rather than mixed. The old "mixed"
-        # was mixed only BECAUSE of the settled rows.
+        offer = prep[prep["pipeline_stage"] == "OFFER"]
+        self.assertTrue(offer["completion_probability"].notna().all())
+        self.assertNotIn(0.75, set(offer["completion_probability"]))
         self.assertEqual(rep["completion_probability_basis"], "historical_observed")
+        self.assertTrue(rep["weighting_complete"])
+
+    def test_an_unmeasured_window_leaves_the_stage_undetermined(self):
+        """D21 for validity windows: ten completions are fewer than the
+        run-off's twelve events, so OFFER's window is not measured — its cases
+        are neither weighted nor lapsed, and the weighted total is not stated,
+        although OFFER's completion RATE is measured."""
+        m = build_historical_completion_model(self.entries, min_observations=12)
+        self.assertEqual(m["runoff"]["stages"]["OFFER"]["windowBasis"],
+                         "insufficient_history")
+        self.assertIsNone(m["runoff"]["stages"]["OFFER"]["windowDays"])
+        df = pd.read_csv(self.tmp / "M2L_KFI_2025_11_01.csv")
+        prep, rep = prepare_pipeline_mi_dataset(df, as_of_date="2025-11-01",
+                                                historical_model=m)
+        offer = prep[prep["pipeline_stage"] == "OFFER"]
+        self.assertTrue((offer["completion_probability_source"]
+                         == "insufficient_history_offer_window").all())
+        self.assertIsNone(rep["weighted_expected_funded_amount"])
+        self.assertIn("validity window for OFFER", rep["weighting_incomplete_reason"])
 
 
 # --------------------------------------------------------------------------- #
@@ -217,7 +237,12 @@ class TestForecastDisclosure(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         warnings.simplefilter("ignore")
-        cls.pdf, cls.prep = prepare_pipeline_mi_dataset(pd.read_csv(_OCT), source_file=_OCT.name)
+        # D21: weighted by the fixture book's own history, measured at
+        # test-book scale (it is far below the production thresholds).
+        from tests.measured_history import measured_history
+        cls.pdf, cls.prep = prepare_pipeline_mi_dataset(
+            pd.read_csv(_OCT), source_file=_OCT.name,
+            historical_model=measured_history(str(_OCT.parents[2])))
         funded = pd.DataFrame({"loan_identifier": range(73),
                                "current_outstanding_balance": [100000.0] * 73})
         snap = pc.compute_pipeline_snapshot(cls.pdf, cls.prep, _SEMANTICS,
@@ -251,7 +276,7 @@ class TestForecastDisclosure(unittest.TestCase):
         self.assertAlmostEqual(self.b["excludedFromWeightingAmount"]
                                + self.b["activeGrossPipelineAmount"],
                                self.b["grossPipelineAmount"], places=2)
-        self.assertEqual(self.b["completionProbabilityBasis"], "stage_config")
+        self.assertEqual(self.b["completionProbabilityBasis"], "historical_observed")
 
     def test_blended_conversion_present(self):
         self.assertIsNotNone(self.b["blendedWeightedConversion"])

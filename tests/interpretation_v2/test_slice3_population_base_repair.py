@@ -297,7 +297,9 @@ def test_the_gate_sits_above_the_runtime_dispatch():
 
     from mi_agent import plan_serving_canary as canary
 
-    source = inspect.getsource(canary._attempt)
+    # The dispatch is `_serve_plan` — every plan, and every part of a
+    # composed one, passes through it (`plan_composition`).
+    source = inspect.getsource(canary._serve_plan)
     gate = source.index("check_population_base")
     assert gate < source.index("temporal.claims(plan)"), (
         "the temporal runtime is dispatched before the population is proven")

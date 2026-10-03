@@ -211,6 +211,15 @@ class Storage:
                 out.append(join_uri(prefix_uri, rel))
         return out
 
+    @_observed("list_etags")
+    def list_etags(self, prefix_uri: str) -> Dict[str, Optional[str]]:
+        """Every file under ``prefix_uri`` with its change-token, in ONE listing.
+
+        The same token :meth:`etag` returns, for all of them at once — so a
+        caller revalidating N files asks storage once, not N times."""
+        return {uri: self.etag.__wrapped__(self, uri)
+                for uri in self.list.__wrapped__(self, prefix_uri)}
+
     @_observed("etag")
     def etag(self, uri: str) -> Optional[str]:
         """A cheap change-token for ``uri`` (no full read): filesystem uses
@@ -304,6 +313,18 @@ class BlobStorage(Storage):
         cc = self._svc().get_container_client(container)
         return [f"{BLOB_SCHEME}{container}/{b.name}"
                 for b in cc.list_blobs(name_starts_with=key)]
+
+    @_observed("list_etags")
+    def list_etags(self, prefix_uri: str) -> Dict[str, Optional[str]]:
+        """Every blob under ``prefix_uri`` with its ETag, from ONE listing: the
+        List Blobs response carries each blob's properties, so the ETags a
+        per-blob HEAD would return come back with the names."""
+        container, key = split_blob_uri(prefix_uri)
+        cc = self._svc().get_container_client(container)
+        return {f"{BLOB_SCHEME}{container}/{b.name}":
+                    (getattr(b, "etag", None)
+                     or str(getattr(b, "last_modified", "")) or None)
+                for b in cc.list_blobs(name_starts_with=key)}
 
     @_observed("etag")
     def etag(self, uri: str) -> Optional[str]:
