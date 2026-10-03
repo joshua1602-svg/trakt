@@ -753,3 +753,15 @@ intents added beside the baseline's.
                 now 91c550c4 on claude-opus-5-5, view 2affd8d9…; Claude Opus 5
                 kept as `previous`. Next: `run_production_bank.sh <principal>
                 conversations`, scored with score_conversations.py
+    2026-10-03  #515 merged to main (809a0dd0, owner: "Merge and deploy");
+                21:46 UTC main deployed to trakt-mi-api (run 37156151913,
+                success): the Query Agent, Opus 5.5 as the baseline, reader
+                1.1.0 and the held-out conversations, with main's Copilot, deck
+                and limit work. Next: sign-off and conversations on it
+    2026-10-03  Built, not deployed (design §41): follow-ups in the dashboard
+                (the continuation round-trip; the browser's rewriting only
+                where the server holds no memory) and slow questions (a mirrored
+                extract's identity is its ETag; the warm builds every summary,
+                loads the interpreter, and repeats on new data; summaries and
+                the history model persist per build); deploy-mi-api.yml refuses
+                any ref but main

@@ -2919,3 +2919,68 @@ rest, so it is the baseline: config/mi/model_view_baseline.json records
 baseline under `previous`, and holds no candidate. The guard now accepts
 2affd8d9 alone. Next: the conversation bank (§39) on Claude Opus 5.5, which
 records the conversation reader's results beside its pinned view.
+
+## 41. Production readiness for the first client's six users (2026-10-03)
+
+Owner, 2026-10-03: "There is going to be 6 users from a single client only. We
+need to be production ready with all the capabilities we have." Scale is not
+the question at six users; whether every capability works in the product they
+use, and whether any question is slow or fails, is. Two gaps were found in the
+code and are closed here; the rest of the plan (re-measurement on the merged
+build, a concurrency test, operations) is tracked in RERUN.md.
+
+### 41.1 Follow-ups in the dashboard
+
+The service held the conversation (§38, §39) but the dashboard never sent it
+back: every message went without a memory, and the browser rewrote short
+follow-ups itself (`lib/analysisContext.ts`) before sending them — a second,
+unmeasured follow-up mechanism outside every governed check.
+
+Now the dashboard sends each message AS TYPED with the memory the last answer
+handed back (`continuation`) and its chat id (`conversationId`), keeps the
+memory that comes back (none ends it), and starts a new chat id when the chat
+is cleared, the workspace is reset, or the book or scope changes. While the
+server holds a memory, the browser's rewriting is not used: one mechanism per
+conversation. It remains only for answers that come back with no memory (the
+conversation switched off, or the legacy path). The answer states what a
+follow-up was read as; the message also records it.
+
+### 41.2 Slow questions
+
+The 2026-10-02 sign-off took 135 s on "pipeline amount evolution by week" and
+60 s on the first question after start, and the start-up warm did not prevent
+either. Three causes, each fixed at its root:
+
+    IDENTITY OF A COPY  Every pipeline cache is keyed on its source file's
+               identity, and a mirrored extract's identity was the time it was
+               copied. A new weekly extract re-downloaded the whole history,
+               each worker's first mirror overwrote the other's files, and each
+               restart copied them again — every one emptied every pipeline
+               cache. The mirror now downloads only what changed and records
+               the store's ETag beside each file; that ETag is the identity.
+    THE WARM FILLED THE WRONG THING  It prepared every extract's full frame
+               twice (with and without the model) into a 64-entry memo, kept
+               almost none, passed mirrored extracts without their as-of date
+               (a key no question reads), and built none of the per-extract
+               summaries the weekly series read. It now builds every summary
+               with the model the routes use, keeps the latest four frames, and
+               loads the interpreter and the reader (modules, vocabulary,
+               prompts, planner, compiler, SDK) — the 31 s of the first
+               question's interpret step — with no model call.
+    NOTHING OUTLIVED A PROCESS  The summaries and the history model are small
+               JSON; they are now also kept on App Service's persistent storage
+               under the deployed commit (`serving_cache`, `persist=True`), so a
+               restart or the second worker reads them back, and another build
+               never does. Concurrent requests for one key wait for one build.
+               The warm repeats whenever the data changes (one listing per
+               source every five minutes), so the first weekly question after
+               an upload does not prepare the history itself; the workers take
+               turns.
+
+`/health` reports the warm (state, passes, seconds per step). The 120 s worker
+timeout does not cut a question off — `/mi/query` runs in a worker thread —
+so the binding limit is App Service's 230 s; it is left as it is.
+
+Measured on the deployed build by the next sign-off run (the 135 s and 60 s
+questions are in it). One deploy line: `deploy-mi-api.yml` now refuses any ref
+but main.

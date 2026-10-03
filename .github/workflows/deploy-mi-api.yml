@@ -63,6 +63,18 @@ jobs:
     # the platform, and anything approaching this bound is worth looking at.
     timeout-minutes: 30
     steps:
+      # ONE DEPLOY LINE (2026-10-03). trakt-mi-api is deployed from main only.
+      # On 2026-10-02 a deploy from main replaced a branch build in the middle
+      # of a measured run, and a deploy from a branch would equally have taken
+      # main's work off the API: whichever deployed last won. Every change now
+      # reaches the API through a merged pull request. A workflow that calls
+      # this one deploys only when it runs on main too.
+      - name: Refuse a deploy from anything but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::trakt-mi-api deploys from main only; this run is on ${GITHUB_REF}. Merge the change to main and deploy from there."
+          exit 1
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
