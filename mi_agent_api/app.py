@@ -15,6 +15,7 @@ import logging
 import os
 import threading
 import re
+import time
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
@@ -188,16 +189,30 @@ def _warm_runs_limit() -> int:
         return 2
 
 
+#: Of each client's weekly extracts, how many of the LATEST keep their prepared
+#: frames warm (with and without the history model): the current snapshot and a
+#: comparison of recent extracts read a full frame; the weekly series read only
+#: each extract's summary.
+_WARM_FRAME_EXTRACTS = 4
+
+
 def _warm_pipeline_extracts(client_id: str, historical_model=None) -> None:
-    """Prepare each governed weekly pipeline extract once, serially.
+    """Build every governed weekly extract's SUMMARY with the history model, and
+    keep the latest few prepared frames warm.
 
-    These are immutable published files, and every pipeline / forecast route
-    re-reads the same set, so preparing them at startup is the single largest
-    saving available to a first interaction.
+    The weekly series (evolution, the funnel, the forecast bridge, a dated
+    comparison) read each extract's summary (``load_extract_summary``), so the
+    summaries are what a first weekly question needs; building one prepares its
+    frame on the way. Preparing EVERY frame twice instead (with and without the
+    model) filled a 64-entry memo with ~180 frames, kept almost none and built
+    no summary — the 2026-10-02 sign-off still took 135 s on "pipeline amount
+    evolution by week" well after start. Summaries are also kept on persistent
+    storage (``persist=True``), so a restart or the second worker reads them back.
 
-    ``historical_model`` MUST be the model the routes will use: the prepared
-    frame is memoised on the extract's identity AND the model's fingerprint, so
-    warming without it fills a key nothing later reads.
+    Each extract is passed as the inventory's own record, exactly as the series
+    pass it, so the warm fills the keys a question reads. ``historical_model``
+    MUST be the model the routes will use: summaries and frames are memoised on
+    the extract's identity AND the model's fingerprint.
     """
     proot = _pipeline_discovery_root()
     if not proot:
@@ -209,17 +224,38 @@ def _warm_pipeline_extracts(client_id: str, historical_model=None) -> None:
         logger.info("startup pipeline inventory skipped for %s: %s", client_id, exc)
         return
     for extract in extracts:
-        source = extract.get("source_file") or extract.get("path")
-        if not source:
-            continue
-        as_of = extract.get("pipeline_as_of_date") or extract.get("extract_date")
+        try:
+            pipeline_mod.load_extract_summary(extract, historical_model=historical_model)
+        except Exception as exc:  # noqa: BLE001 - one bad extract must not stop the warm
+            logger.info("startup pipeline summary skipped for %s: %s",
+                        extract.get("source_file"), exc)
+    for extract in extracts[-_WARM_FRAME_EXTRACTS:]:
         for model in (historical_model, None) if historical_model else (None,):
             try:
-                pipeline_mod.load_prepared_pipeline(source, as_of_date=as_of,
-                                                    historical_model=model)
-            except Exception as exc:  # noqa: BLE001 - one bad extract must not stop the warm
-                logger.info("startup pipeline warm skipped for %s: %s", source, exc)
-                break
+                pipeline_mod.load_prepared_pipeline(extract, historical_model=model)
+            except Exception as exc:  # noqa: BLE001
+                logger.info("startup pipeline warm skipped for %s: %s",
+                            extract.get("source_file"), exc)
+
+
+def _warm_interpreter() -> None:
+    """Load what the governed interpreter and the conversation reader need for
+    their first question — the modules, the governed vocabulary and catalogue,
+    both system prompts, the planner, the compiler and the model SDK — with no
+    model call. Cold, this was most of the first question's 60 s (2026-10-02:
+    31 s in interpret-and-compile, against 5 s warm)."""
+    from mi_agent import plan_shadow_wiring as wiring
+    from mi_agent.interpretation_v2 import conversation_reader, opus_interpreter
+    from mi_agent.interpretation_v2.vocabulary import load_governed_vocabulary
+    vocabulary = load_governed_vocabulary()
+    opus_interpreter.build_system_blocks(vocabulary)
+    conversation_reader.build_system_blocks(vocabulary)
+    wiring._interpreter()
+    wiring._compiler()
+    try:
+        import anthropic  # noqa: F401 - imported on the first model call otherwise
+    except ImportError:
+        pass
 
 
 def _warm_shared_preparation() -> None:
@@ -272,24 +308,135 @@ def _warm_shared_preparation() -> None:
         _warm_pipeline_extracts(client_id, model)
 
 
+#: What this worker's warm has done, for ``/health``: whether it is warm, how
+#: long each step took, and how many passes data changes have caused.
+_WARM_STATUS: Dict[str, Any] = {"state": "not_started", "passes": 0}
+
+
+def _warm_step(name: str, fn) -> None:
+    started = time.perf_counter()
+    ok = True
+    try:
+        fn()
+    except Exception as exc:  # noqa: BLE001 - warming must never block startup
+        ok = False
+        logger.info("startup %s warm skipped: %s", name, exc)
+    _WARM_STATUS.setdefault("steps", {})[name] = {
+        "seconds": round(time.perf_counter() - started, 1), "ok": ok}
+
+
 def _warm_caches() -> None:
     """Best-effort warm so the FIRST user request isn't cold. Loads the active
     dataset (populating the signature cache), parses the semantics registry
-    (populating its mtime cache) and prepares each client's latest run plus its
-    pipeline history model. Never fatal: a deploy with no data source yet still
+    (populating its mtime cache), loads the governed interpreter, and prepares
+    each client's latest runs, its pipeline history model and every weekly
+    extract's summary. Never fatal: a deploy with no data source yet still
     starts; the first request simply pays the cold cost as before."""
+    started = time.perf_counter()
+    _WARM_STATUS.update(state="warming", startedAt=time.strftime(
+        "%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    _warm_step("dataset", get_dataframe)
+    _warm_step("semantics", lambda: load_mi_semantics(semantics_path()))
+    _warm_step("interpreter", _warm_interpreter)
+    _warm_step("shared_preparation", _warm_shared_preparation)
+    _WARM_STATUS.update(
+        state="warm", passes=int(_WARM_STATUS.get("passes", 0)) + 1,
+        seconds=round(time.perf_counter() - started, 1),
+        finishedAt=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+
+
+#: Seconds between checks for new data (a new weekly extract or funded run);
+#: 0 warms once at start and never again.
+_WARM_INTERVAL_ENV = "TRAKT_MI_WARM_INTERVAL_S"
+
+
+def _warm_interval_s() -> int:
     try:
-        get_dataframe()
-    except Exception as exc:  # noqa: BLE001 - warming must never block startup
-        logger.info("startup dataset warm skipped: %s", exc)
-    try:
-        load_mi_semantics(semantics_path())
-    except Exception as exc:  # noqa: BLE001
-        logger.info("startup semantics warm skipped: %s", exc)
-    try:
-        _warm_shared_preparation()
-    except Exception as exc:  # noqa: BLE001 - a warm fault must never fail startup
-        logger.info("startup shared-preparation warm skipped: %s", exc)
+        return max(0, int(os.environ.get(_WARM_INTERVAL_ENV, "300")))
+    except (TypeError, ValueError):
+        return 300
+
+
+def _warm_signature() -> Optional[str]:
+    """A cheap fingerprint of the data the warm prepares: the dated funded
+    canonicals and the mirrored weekly extracts, by the identity of their bytes.
+    One storage listing each; nothing unchanged is prepared or downloaded."""
+    from pathlib import Path as _Path
+    from . import serving_cache as _serving_cache
+    parts: List[Any] = []
+    root = _onboarding_output_root()
+    if root and platform_blob_mod.is_blob_root(root):
+        from apps.blob_trigger_app.storage import open_storage
+        parts.append(platform_blob_mod.list_dated_platform_canonicals(root, open_storage()))
+    elif root:
+        parts.append(snapshots_mod.discover_snapshots(root))
+    proot = _pipeline_discovery_root()
+    if proot and _Path(proot).is_dir():
+        suffix = _serving_cache.ETAG_SIDECAR_SUFFIX
+        parts.append(sorted(
+            (str(f.relative_to(proot)), _serving_cache.file_identity(f))
+            for f in _Path(proot).rglob("*")
+            if f.is_file() and not f.name.startswith(".") and not f.name.endswith(suffix)))
+    return _serving_cache.fingerprint(*parts)
+
+
+class _warm_lock:
+    """The workers take turns to warm (a lock in the container's scratch
+    directory), so the second warms from what the first left on persistent
+    storage instead of preparing the same history beside it."""
+
+    def __enter__(self):
+        self._fh = None
+        try:
+            import fcntl
+            scratch = os.environ.get("MI_AGENT_SCRATCH", "/tmp/trakt/mi_platform")
+            os.makedirs(scratch, exist_ok=True)
+            self._fh = open(os.path.join(scratch, "warm.lock"), "w")
+            fcntl.flock(self._fh, fcntl.LOCK_EX)
+        except Exception:  # noqa: BLE001 - no lock means each worker warms alone
+            self._fh = None
+        return self
+
+    def __exit__(self, *_exc):
+        if self._fh is not None:
+            self._fh.close()           # closing releases the lock
+        return False
+
+
+def _warm_loop() -> None:
+    """Warm once at start, then again whenever the data changes.
+
+    A new weekly extract changes the history model, and every summary is keyed
+    on it, so the first weekly question after an upload would otherwise
+    re-prepare the whole history inside the request. Checking every
+    ``TRAKT_MI_WARM_INTERVAL_S`` (one listing per source) and re-warming on a
+    change does that work before anyone asks.
+    """
+    unset = object()
+    last: Any = unset
+    pruned = False
+    while True:
+        try:
+            with _warm_lock():
+                try:
+                    signature = _warm_signature()
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("warm data check skipped: %s", exc)
+                    signature = None
+                if last is unset or (signature is not None and signature != last):
+                    _warm_caches()
+                    last = signature
+                if not pruned:
+                    from . import serving_cache as _serving_cache
+                    _serving_cache.prune_other_builds()
+                    pruned = True
+        except Exception as exc:  # noqa: BLE001 - the loop must never die loudly
+            logger.info("warm pass failed: %s", exc)
+            _WARM_STATUS.update(state="failed", lastError=str(exc)[:200])
+        interval = _warm_interval_s()
+        if interval <= 0:
+            return
+        time.sleep(interval)
 
 
 def _start_warm() -> None:
@@ -315,7 +462,7 @@ def _start_warm() -> None:
     have triggered itself — `data_source._ACTIVE_LOCK` makes that one load
     rather than two.
     """
-    threading.Thread(target=_warm_caches, name="mi-cache-warm",
+    threading.Thread(target=_warm_loop, name="mi-cache-warm",
                      daemon=True).start()
 
 
@@ -463,6 +610,7 @@ def root() -> Dict[str, Any]:
         # certification's provenance line worthless.
         "build": _build_info(),
         "warm": data_source.is_loaded(),
+        "warmup": _WARM_STATUS.get("state"),
         "endpoints": ["/health", "/mi/catalogue", "/mi/snapshots", "/mi/snapshot",
                       "/mi/pipeline/snapshots", "/mi/pipeline/snapshot",
                       "/mi/forecast/snapshot", "/mi/workspace/view", "/mi/query"],
@@ -479,6 +627,7 @@ def health() -> Dict[str, Any]:
         "service": "mi_agent_api",
         "version": app.version,
         "build": _build_info(),
+        "warmup": dict(_WARM_STATUS),
         "dataSource": csv,
         "dataSourceKind": info.get("kind"),
         "preparationApplied": info.get("preparation_applied", False),

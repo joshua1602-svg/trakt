@@ -92,6 +92,32 @@ describe("HttpAgentClient", () => {
     expect(body.datasetContext).toBe("pipeline");
   });
 
+  it("sends the conversation memory and chat id, and reads back the next memory", async () => {
+    const reply = { ...apiBody, conversation: { kind: "follow_up", continuation: "tok-2",
+      expiresInSeconds: 300, readAs: "Show balance by broker." } };
+    const spy = vi.fn(async () => new Response(JSON.stringify(reply), { status: 200 }));
+    vi.stubGlobal("fetch", spy);
+    const res = await new HttpAgentClient("http://api").ask(
+      { ...request, question: "And by broker?", continuation: "tok-1", conversationId: "chat_1" });
+    const call = spy.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    expect(body.question).toBe("And by broker?");
+    expect(body.continuation).toBe("tok-1");
+    expect(body.conversationId).toBe("chat_1");
+    expect(res.conversation).toEqual(reply.conversation);
+  });
+
+  it("sends no memory when the chat holds none, and ignores a malformed block", async () => {
+    const spy = vi.fn(async () => new Response(
+      JSON.stringify({ ...apiBody, conversation: { continuation: 42 } }), { status: 200 }));
+    vi.stubGlobal("fetch", spy);
+    const res = await new HttpAgentClient("http://api").ask(request);
+    const call = spy.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string);
+    expect("continuation" in body).toBe(false);
+    expect(res.conversation).toBeUndefined();
+  });
+
   it("drops malformed artifacts via the type guard", async () => {
     const body = { ...apiBody, artifacts: [...apiBody.artifacts, { nope: true }] };
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })));

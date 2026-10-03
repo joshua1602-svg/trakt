@@ -52,6 +52,16 @@ interface ApiResponse {
   assumptions?: string[];
   metadata?: Record<string, unknown>;
   portfolioCoverage?: import("@/domain").PortfolioCoverage;
+  conversation?: import("@/domain").AgentConversation;
+}
+
+/** A conversation block as the server sends it (every field optional). */
+function isConversation(value: unknown): value is import("@/domain").AgentConversation {
+  if (!value || typeof value !== "object") return false;
+  const c = value as Record<string, unknown>;
+  return (c.continuation === undefined || typeof c.continuation === "string")
+    && (c.readAs === undefined || typeof c.readAs === "string")
+    && (c.kind === undefined || typeof c.kind === "string");
 }
 
 /** Best-effort coarse intent from the interpreted spec (display only).
@@ -475,6 +485,11 @@ export class HttpAgentClient implements AgentClient {
           // The governed workspace scope. A portfolio named in the question
           // overrides it backend-side; the UI never resolves it itself.
           sourcePortfolioLens: request.sourceLens,
+          // The governed conversation: the memory the last answer handed back
+          // and the chat it belongs to. Verified server-side; undefined (and so
+          // omitted) when the chat holds none.
+          continuation: request.continuation,
+          conversationId: request.conversationId,
           // Merge the top_n hint with any drill-through filters; send undefined
           // when neither is present so the contract stays additive.
           filters: ((): Record<string, unknown> | undefined => {
@@ -550,6 +565,7 @@ export class HttpAgentClient implements AgentClient {
       // Governed portfolio coverage, passed through verbatim. The UI shows what
       // the backend decided about consolidation — it never recomputes it.
       portfolioCoverage: body.portfolioCoverage,
+      conversation: isConversation(body.conversation) ? body.conversation : undefined,
       error: body.error ?? undefined,
     };
   }

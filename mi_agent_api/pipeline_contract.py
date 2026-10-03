@@ -553,12 +553,17 @@ def collect_weekly_history(root: str | os.PathLike,
 #: Prepared-pipeline and historical-model memos. Sized for the deployment's
 #: shape: one client per deployment, a handful of governed scopes, and a
 #: rolling window of weekly extracts. See mi_agent_api/serving_cache.py.
-_HISTORY_CACHE = _serving_cache.BoundedCache("history_model", max_entries=16)
+#: The history model and the per-extract summaries are small JSON and costly to
+#: build (a cold model replays every extract; a cold weekly series prepares
+#: each one), so they are also kept on persistent storage for the build: a
+#: restart or a second worker reads them back (``persist=True``).
+_HISTORY_CACHE = _serving_cache.BoundedCache("history_model", max_entries=16,
+                                             persist=True)
 _PIPELINE_PREP_CACHE = _serving_cache.BoundedCache("pipeline_prep", max_entries=64)
 #: Per-extract series totals (see load_extract_summary): a few numbers each,
 #: so sized for years of weekly extracts rather than a rolling window.
 _EXTRACT_SUMMARY_CACHE = _serving_cache.BoundedCache("pipeline_extract_summary",
-                                                     max_entries=4096)
+                                                     max_entries=4096, persist=True)
 #: Governed pipeline SOURCE DISCOVERY (see discover_pipeline_sources).
 _DISCOVERY_CACHE = _serving_cache.BoundedCache("pipeline_discovery", max_entries=16)
 
