@@ -625,18 +625,34 @@ export function useWorkspace(client: AgentClient): Workspace {
   }, []);
   const clearContext = useCallback(() => setContext(null), [setContext]);
 
+  // THE GOVERNED CONVERSATION (P0 design §38, §39). When the server holds the
+  // conversation it hands back a signed memory with each answer; the next
+  // message is sent with it, as typed, and the SERVER reads a follow-up with
+  // the question before it — the same governed path a full question takes.
+  // While it holds one, the browser's own follow-up rewriting
+  // (`resolveFollowUp`) is not used: one mechanism per conversation. The
+  // browser's rewriting remains only for answers that came back with no memory
+  // (the conversation switched off, or the legacy path). In memory only: a
+  // reload starts a new chat.
+  const conversationRef = useRef<{ id: string; continuation?: string }>({ id: uid("chat") });
+  const startNewConversation = useCallback(() => {
+    conversationRef.current = { id: uid("chat") };
+  }, []);
+
   // Declutter controls (A8). Clearing artifacts/chat is a VIEW reset only — it
   // never touches the loaded portfolio/run data or the active dataset.
   const clearArtifacts = useCallback(() => setArtifacts([]), []);
   const clearChat = useCallback(() => {
     setMessages([greeting(activePortfolio?.label ?? null, activeRun?.reporting_date ?? null)]);
     setArtifacts((prev) => prev);  // keep workspace artifacts; chat is independent
-  }, [activePortfolio?.label, activeRun?.reporting_date]);
+    startNewConversation();
+  }, [activePortfolio?.label, activeRun?.reporting_date, startNewConversation]);
   const clearAll = useCallback(() => {
     setArtifacts([]);
     setMessages([greeting(activePortfolio?.label ?? null, activeRun?.reporting_date ?? null)]);
     setContext(null);
-  }, [setContext, activePortfolio?.label, activeRun?.reporting_date]);
+    startNewConversation();
+  }, [setContext, startNewConversation, activePortfolio?.label, activeRun?.reporting_date]);
 
   // Personalise the greeting once the portfolio/run resolves — only while the
   // chat is pristine (nothing but the greeting), so history is never rewritten.
@@ -649,12 +665,16 @@ export function useWorkspace(client: AgentClient): Workspace {
   }, [activePortfolio?.label, activeRun?.reporting_date]);
 
   const lastQuestion = useRef<string | null>(null);
+  const lastContinuation = useRef<string | undefined>(undefined);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Switching portfolio / reporting run invalidates the prior analysis context.
+  // Switching portfolio / reporting run invalidates the prior analysis context,
+  // and starts a new conversation (the server refuses a memory from another
+  // book in any case; a new chat id makes the break explicit).
   useEffect(() => {
     setContext(null);
-  }, [portfolioId, selectedContextId, setContext]);
+    startNewConversation();
+  }, [portfolioId, selectedContextId, setContext, startNewConversation]);
 
   useEffect(() => {
     saveState({
@@ -680,9 +700,12 @@ export function useWorkspace(client: AgentClient): Workspace {
         contextNote?: string;
         /** Retry once with the raw question if a resolved query fails. */
         allowRawFallback?: boolean;
+        /** The conversation memory this message is sent with. */
+        continuation?: string;
       },
       pendingId: string,
     ) => {
+      const conversationId = conversationRef.current.id;
       const request: AgentRequest = {
         question: params.send,
         portfolio,
@@ -695,6 +718,8 @@ export function useWorkspace(client: AgentClient): Workspace {
         // Source-portfolio scope (the dropdown default); a portfolio named in
         // the question overrides it backend-side.
         sourceLens: selectedContextRef.current,
+        continuation: params.continuation,
+        conversationId,
       };
       const controller = new AbortController();
       abortRef.current = controller;
@@ -709,6 +734,16 @@ export function useWorkspace(client: AgentClient): Workspace {
             runQuery({ display: params.display, send: params.display, allowRawFallback: false }, pendingId);
             return;
           }
+          // Keep the memory the server handed back (none clears it: the next
+          // message is then read on its own). Only for the chat it was issued
+          // to — a reply that lands after the chat was cleared is not adopted.
+          if (conversationRef.current.id === conversationId) {
+            conversationRef.current = {
+              id: conversationId,
+              continuation: res.conversation?.continuation || undefined,
+            };
+          }
+          const readAs = res.conversation?.readAs;
           const primary = res.artifacts.find((a) => a.type === "chart" || a.type === "table");
           const suggestions = res.ok && primary ? buildSuggestedActions(res.spec, primary) : undefined;
           const stampedArtifacts = stampQuestion(res.artifacts, params.send);
@@ -753,8 +788,13 @@ export function useWorkspace(client: AgentClient): Workspace {
                         : undefined,
                     spec: res.spec,
                     confidence: res.confidence,
-                    usedContext: params.usedContext,
-                    contextNote: params.usedContext ? params.contextNote : undefined,
+                    // What carried over: the complete question the server read
+                    // a follow-up as (it is also stated in the answer), or the
+                    // browser's own rewrite where the server held no memory.
+                    usedContext: Boolean(readAs) || params.usedContext,
+                    contextNote: readAs
+                      ? `Read as “${readAs}”`
+                      : params.usedContext ? params.contextNote : undefined,
                     cacheHit: res.cacheHit,
                     // Backend-authored coverage disclosure — rendered as-is.
                     portfolioCoverage: res.portfolioCoverage,
@@ -849,9 +889,12 @@ export function useWorkspace(client: AgentClient): Workspace {
       let filters: Record<string, unknown> | undefined;
       let usedContext = false;
       let contextNote: string | undefined;
+      // The server holds the conversation: send the message as typed with its
+      // memory, and let the governed reader decide what it refers to.
+      const continuation = conversationRef.current.continuation;
       try {
         const ctx = contextRef.current;
-        if (ctx && looksLikeFollowUp(text, ctx)) {
+        if (!continuation && ctx && looksLikeFollowUp(text, ctx)) {
           const resolved = resolveFollowUp(text, ctx);
           if (resolved) {
             send = resolved.question;
@@ -879,7 +922,12 @@ export function useWorkspace(client: AgentClient): Workspace {
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, userMsg, pendingMsg]);
-      runQuery({ display: text, send, filters, usedContext, contextNote, allowRawFallback: usedContext }, pendingId);
+      lastContinuation.current = continuation;
+      runQuery(
+        { display: text, send, filters, usedContext, contextNote,
+          allowRawFallback: usedContext, continuation },
+        pendingId,
+      );
     },
     [isWorking, runQuery],
   );
@@ -897,7 +945,8 @@ export function useWorkspace(client: AgentClient): Workspace {
       ...prev,
       { id: pendingId, role: "assistant", content: "", pending: true, createdAt: new Date().toISOString() },
     ]);
-    runQuery({ display: lastQuestion.current, send: lastQuestion.current }, pendingId);
+    runQuery({ display: lastQuestion.current, send: lastQuestion.current,
+               continuation: lastContinuation.current }, pendingId);
   }, [isWorking, runQuery]);
 
   const togglePin = useCallback((id: string) => {
@@ -928,7 +977,8 @@ export function useWorkspace(client: AgentClient): Workspace {
     setMessages([greeting(activePortfolio?.label ?? "selected", activeRun?.reporting_date ?? null)]);
     setArtifacts([]);
     setContext(null);
-  }, [activePortfolio?.label, activeRun?.reporting_date, setContext]);
+    startNewConversation();
+  }, [activePortfolio?.label, activeRun?.reporting_date, setContext, startNewConversation]);
 
   return {
     portfolios,

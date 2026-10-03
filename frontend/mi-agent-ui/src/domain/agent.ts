@@ -67,6 +67,25 @@ export interface AgentRequest {
    * id ("direct_001" / "acquired_001"). Default scope; a portfolio named in the
    * question overrides it backend-side. */
   sourceLens?: string;
+  /** The governed conversation (P0 design §38, §39): the memory the agent's
+   * last answer or ask-back handed back, sent with the next message so the
+   * SERVER reads a follow-up with the question before it. Opaque, signed and
+   * bound to the user, the book and the chat; the server verifies it. */
+  continuation?: string;
+  /** The chat the message belongs to. A new id when the chat is cleared or the
+   * book changes, so an earlier conversation can never be continued. */
+  conversationId?: string;
+}
+
+/** What the governed conversation handed back with an answer. */
+export interface AgentConversation {
+  /** "follow_up" after an answer; "ask_back" when the agent asked for a detail. */
+  kind?: string;
+  /** The memory to send with the next message. */
+  continuation?: string;
+  expiresInSeconds?: number;
+  /** The complete question a follow-up was read as, in the user's own words. */
+  readAs?: string;
 }
 
 /** A selectable source-portfolio lens (Total / Direct / Acquired / cohort). */
@@ -115,6 +134,8 @@ export interface AgentResponse {
    * were excluded and why, and whether the answer is fully consolidated. The UI
    * renders these facts — it never derives them. */
   portfolioCoverage?: PortfolioCoverage;
+  /** The governed conversation, when the server holds one for this chat. */
+  conversation?: AgentConversation;
   error?: string;
 }
 
