@@ -34,6 +34,7 @@ import hashlib
 import logging
 import os
 import re
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
@@ -509,6 +510,7 @@ def _materialise_pipeline_root_uncached(root: Optional[str]) -> Optional[str]:
         base = _Path(scratch) / "pipeline_root"
         _container, key = split_blob_uri(root)
         prefix = key.rstrip("/")
+        mirrored = set()
         for d in dated:
             # Preserve the {client}/{date}/pipeline_snapshot.csv tail below the root
             # prefix so folder-date + client inference resolve on the local mirror.
@@ -516,13 +518,73 @@ def _materialise_pipeline_root_uncached(root: Optional[str]) -> Optional[str]:
             rel = ukey[len(prefix):].lstrip("/") if ukey.startswith(prefix) else \
                 f"{d['date']}/pipeline_snapshot.csv"
             dest = base / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            storage.download_file(d["uri"], dest)
+            mirrored.add(dest)
+            _mirror_one(storage, d["uri"], dest,
+                        d.get("etag") or storage.etag(d["uri"]) or "")
+        _prune_mirror(base, mirrored)
         cache.update(root=root, sig=sig, local=str(base))
         return str(base)
     except Exception as exc:  # noqa: BLE001 - never break discovery on mirror errors
         logger.warning("pipeline blob mirror failed for %s: %s", root, exc)
         return root
+
+
+def _mirror_one(storage: Any, uri: str, dest: "Path", etag: str) -> None:
+    """Mirror ONE dated snapshot, only when its bytes changed.
+
+    THE IDENTITY OF A MIRRORED FILE IS THE STORE'S ETAG, not the time it was
+    copied. Every prepared frame, extract summary and history model is cached
+    on its source file's identity, and the copy's mtime changed every time the
+    mirror ran: each new weekly extract re-downloaded the whole history, each
+    worker's first mirror overwrote the other's files, and each restart copied
+    them again — and every one of those emptied every pipeline cache (a cold
+    weekly series prepares all ~90 extracts, 135 s). The ETag is written beside
+    the file (``serving_cache.ETAG_SIDECAR_SUFFIX``) after the bytes are in
+    place and removed before they are replaced, so the identity is never paired
+    with the wrong bytes; ``serving_cache.file_identity`` reads it.
+    """
+    from . import serving_cache as _serving_cache
+    sidecar = dest.with_name(dest.name + _serving_cache.ETAG_SIDECAR_SUFFIX)
+    if etag and dest.exists():
+        try:
+            if sidecar.read_text(encoding="utf-8").strip() == etag:
+                return                       # these bytes are already here
+        except OSError:
+            pass
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        sidecar.unlink()
+    except FileNotFoundError:
+        pass
+    unique = f"{os.getpid()}.{threading.get_ident()}"
+    part = dest.with_name(f".{dest.name}.{unique}.part")
+    storage.download_file(uri, part)
+    os.replace(part, dest)
+    if etag:
+        tmp = sidecar.with_name(f".{sidecar.name}.{unique}.part")
+        tmp.write_text(etag, encoding="utf-8")
+        os.replace(tmp, sidecar)
+
+
+def _prune_mirror(base: "Path", mirrored: set) -> None:
+    """Remove mirrored snapshots the store no longer lists.
+
+    Only files this mirror wrote (they carry an ETag sidecar) are removed, so a
+    snapshot withdrawn from storage stops being read as history.
+    """
+    from . import serving_cache as _serving_cache
+    suffix = _serving_cache.ETAG_SIDECAR_SUFFIX
+    try:
+        for sidecar in base.rglob(f"*{suffix}"):
+            data = sidecar.with_name(sidecar.name[:-len(suffix)])
+            if data not in mirrored:
+                for path in (data, sidecar):
+                    try:
+                        path.unlink()
+                    except FileNotFoundError:
+                        pass
+    except OSError as exc:
+        logger.info("pipeline mirror prune skipped: %s", exc)
 
 
 def _pipeline_discovery_root() -> Optional[str]:
